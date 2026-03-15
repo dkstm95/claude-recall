@@ -1,22 +1,37 @@
-# claude-recall
+<h1 align="center">claude-recall</h1>
 
-[한국어](README.ko.md)
+<p align="center">
+  <em>Instant context recovery for parallel Claude Code sessions</em>
+</p>
+
+<p align="center">
+  <img src="https://img.shields.io/badge/version-1.12.0-blue?style=flat-square" alt="version">
+  <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="license">
+  <img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen?style=flat-square&logo=node.js&logoColor=white" alt="node">
+  <img src="https://img.shields.io/badge/Claude_Code-Plugin-blueviolet?style=flat-square" alt="Claude Code Plugin">
+</p>
+
+<p align="center">
+  <a href="README.ko.md">한국어</a>
+</p>
+
+---
 
 When you're running Claude Code in multiple terminals at once, switching tabs always brings that moment — **"What was I doing here?"**
 
 claude-recall automatically tracks the context of every Claude Code session, so you can refocus instantly when you switch.
 
 <p align="center">
-  <img src="assets/statusline-preview.svg" alt="claude-recall statusline preview" width="720">
+  <img src="assets/statusline-preview.svg" alt="claude-recall: multiple terminal tabs" width="720">
 </p>
-
-Works great with split panes too:
 
 <p align="center">
-  <img src="assets/split-panes-preview.svg" alt="claude-recall in split panes" width="800">
+  <img src="assets/split-panes-preview.svg" alt="claude-recall: split panes" width="800">
 </p>
 
-A persistent 2-line HUD above your prompt:
+### What's in the HUD
+
+A persistent 2-line summary above your prompt:
 
 | Element | Description | Source |
 |---------|-------------|--------|
@@ -55,7 +70,8 @@ A persistent 2-line HUD above your prompt:
 /setup
 ```
 
-**Restart Claude Code** after setup to activate the statusline.
+> [!IMPORTANT]
+> **Restart Claude Code** after `/setup` to activate the statusline.
 
 ## Usage
 
@@ -64,6 +80,7 @@ Everything works automatically after install. Additional commands:
 | Command | Description |
 |---------|-------------|
 | `/purpose <text>` | Manually set session purpose (overrides auto-detection) |
+| `/purpose` | Auto-suggest purpose from conversation |
 | `/list` | View all tracked sessions |
 | `/setup` | Reconfigure statusline / verify installation |
 
@@ -113,3 +130,7 @@ claude --plugin-dir /path/to/claude-recall
 ```
 
 </details>
+
+## License
+
+[MIT](LICENSE)
