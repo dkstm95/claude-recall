@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.4.0
+
+- **Reorganized HUD layout** — stable info on line 1, dynamic info on line 2
+  - Line 1: purpose + (try /purpose) + branch + model
+  - Line 2: #turn + last prompt + elapsed + context% + cost
+- Hint auto-hides when purpose space is tight
+- Simplified truncate function
+
 ## 2.3.0
 
 - `/purpose` hint threshold reduced from 10 to 5 prompts

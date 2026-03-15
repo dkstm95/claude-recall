@@ -29,30 +29,18 @@ function visibleWidth(s) {
 }
 export function truncate(text, maxCols) {
     const clean = text.replace(/[\n\t\r]/g, ' ');
-    let cols = 0;
-    let i = 0;
-    for (const ch of clean) {
-        const w = isWide(ch.codePointAt(0)) ? 2 : 1;
-        if (cols + w > maxCols - 1 && i < [...clean].length - 1) {
-            // Need truncation — check if full string fits
-            if (displayWidth(clean) <= maxCols)
-                return clean;
-            // Build truncated string
-            let result = '';
-            let rc = 0;
-            for (const c of clean) {
-                const cw = isWide(c.codePointAt(0)) ? 2 : 1;
-                if (rc + cw > maxCols - 1)
-                    break;
-                result += c;
-                rc += cw;
-            }
-            return result + '\u2026';
-        }
-        cols += w;
-        i++;
+    if (displayWidth(clean) <= maxCols)
+        return clean;
+    let result = '';
+    let rc = 0;
+    for (const c of clean) {
+        const cw = isWide(c.codePointAt(0)) ? 2 : 1;
+        if (rc + cw > maxCols - 1)
+            break;
+        result += c;
+        rc += cw;
     }
-    return clean;
+    return result + '\u2026';
 }
 export function formatElapsed(isoString) {
     const diff = Date.now() - new Date(isoString).getTime();
@@ -74,89 +62,80 @@ export function getTerminalWidth() {
 const dim = (s) => `\x1b[2m${s}\x1b[0m`;
 const cyan = (s) => `\x1b[36m${s}\x1b[0m`;
 const yellow = (s) => `\x1b[33m${s}\x1b[0m`;
-function buildRightPart(state, elapsed, builtin) {
-    const segments = [];
-    const branchPart = state.branch ? cyan(state.branch) + '  ' : '';
-    const base = branchPart + dim(elapsed);
-    segments.push({ text: base, width: visibleWidth(base) });
-    if (!builtin)
-        return segments;
-    if (builtin.model?.display_name) {
-        const s = yellow(builtin.model.display_name);
-        segments.push({ text: s, width: visibleWidth(s) });
-    }
-    if (builtin.context_window?.used_percentage != null) {
-        const s = dim(`${Math.round(builtin.context_window.used_percentage)}%`);
-        segments.push({ text: s, width: visibleWidth(s) });
-    }
-    if (builtin.cost?.total_cost_usd != null) {
-        const cost = builtin.cost.total_cost_usd;
-        const s = dim(cost < 0.01 ? '$0.00' : `$${cost.toFixed(2)}`);
-        segments.push({ text: s, width: visibleWidth(s) });
-    }
-    return segments;
-}
 const MIN_PURPOSE_COLS = 15;
-const SEPARATOR = dim(' \u2502 ');
-const SEPARATOR_WIDTH = 3;
+const MIN_PROMPT_COLS = 15;
 const PURPOSE_HINT_THRESHOLD = 5;
-export function formatHud(state, termWidth, builtin) {
-    const elapsed = formatElapsed(state.lastActivityAt || state.startedAt);
-    const prefixWidth = 3; // " ⎯ "
-    const segments = buildRightPart(state, elapsed, builtin);
-    let rightText = '';
-    let rightWidth = 0;
-    // Progressively drop rightmost segments until purpose has enough space
+function progressiveJoin(segments, budget) {
+    // Try all segments, progressively drop from the end
     for (let count = segments.length; count >= 1; count--) {
         const used = segments.slice(0, count);
-        const builtinParts = used.slice(1);
-        let text;
-        let w;
-        if (builtinParts.length > 0) {
-            const builtinText = builtinParts.map(s => s.text).join('  ');
-            const builtinW = builtinParts.reduce((sum, s) => sum + s.width, 0) + (builtinParts.length - 1) * 2;
-            text = used[0].text + SEPARATOR + builtinText;
-            w = used[0].width + SEPARATOR_WIDTH + builtinW;
-        }
-        else {
-            text = used[0].text;
-            w = used[0].width;
-        }
-        const availPurpose = termWidth - prefixWidth - w - 2;
-        if (availPurpose >= MIN_PURPOSE_COLS || count === 1) {
-            rightText = text;
-            rightWidth = w;
-            break;
+        const text = used.map(s => s.text).join('  ');
+        const w = used.reduce((sum, s) => sum + s.width, 0) + (used.length - 1) * 2;
+        if (budget - w >= MIN_PURPOSE_COLS || count === 1) {
+            return { text, width: w };
         }
     }
-    // If even branch+elapsed overflows, hide right part entirely
-    if (termWidth - prefixWidth - rightWidth - 2 < MIN_PURPOSE_COLS) {
-        rightText = '';
-        rightWidth = 0;
+    return { text: '', width: 0 };
+}
+export function formatHud(state, termWidth, builtin) {
+    const elapsed = formatElapsed(state.lastActivityAt || state.startedAt);
+    const prefixWidth = 3; // " ⎯ " or " › "
+    // === Line 1: stable info (purpose + hint + branch + model) ===
+    const line1Segments = [];
+    if (state.branch) {
+        const s = cyan(state.branch);
+        line1Segments.push({ text: s, width: visibleWidth(s) });
     }
-    // Purpose hint: show (try /purpose) when auto purpose is stale
-    const showHint = state.purposeSource === 'auto'
+    if (builtin?.model?.display_name) {
+        const s = yellow(builtin.model.display_name);
+        line1Segments.push({ text: s, width: visibleWidth(s) });
+    }
+    // Purpose hint
+    const wantsHint = state.purposeSource === 'auto'
         && state.promptCount >= PURPOSE_HINT_THRESHOLD;
+    // Calculate right side of line 1
+    const line1Right = progressiveJoin(line1Segments, termWidth - prefixWidth);
+    // Try hint, drop it if purpose would be too short
+    const HINT_WIDTH = 16;
+    const spaceForRight1 = line1Right.width > 0 ? line1Right.width + 2 : 0;
+    const availWithHint = termWidth - prefixWidth - HINT_WIDTH - spaceForRight1;
+    const showHint = wantsHint && availWithHint >= MIN_PURPOSE_COLS + 5;
     const hintText = showHint ? dim('  (try /purpose)') : '';
-    const hintWidth = showHint ? 16 : 0;
-    // Purpose line
-    const prefix1 = dim(' \u23AF ');
-    const availPurpose = termWidth - prefixWidth - hintWidth - (rightWidth > 0 ? rightWidth + 2 : 0);
+    const hintWidth = showHint ? HINT_WIDTH : 0;
+    const availPurpose = termWidth - prefixWidth - hintWidth - spaceForRight1;
     const purpose = state.purpose
         ? truncate(state.purpose, Math.max(availPurpose, MIN_PURPOSE_COLS))
         : dim('(no purpose yet)');
-    const purposeWidth = state.purpose
-        ? visibleWidth(purpose)
-        : 16;
-    const gap = Math.max(1, termWidth - prefixWidth - purposeWidth - hintWidth - rightWidth);
-    const line1 = prefix1 + purpose + hintText + ' '.repeat(gap) + rightText;
-    // Last prompt line with turn count
+    const purposeWidth = state.purpose ? visibleWidth(purpose) : 16;
+    const gap1 = Math.max(1, termWidth - prefixWidth - purposeWidth - hintWidth - line1Right.width);
+    const prefix1 = dim(' \u23AF ');
+    const line1 = prefix1 + purpose + hintText + ' '.repeat(gap1) + line1Right.text;
+    // === Line 2: dynamic info (#turn + prompt + elapsed + ctx% + cost) ===
     if (!state.lastUserPrompt)
         return line1;
-    const prefix2 = dim(' \u203A ');
+    const line2Segments = [];
+    const elapsedSeg = dim(elapsed);
+    line2Segments.push({ text: elapsedSeg, width: visibleWidth(elapsedSeg) });
+    if (builtin?.context_window?.used_percentage != null) {
+        const s = dim(`${Math.round(builtin.context_window.used_percentage)}%`);
+        line2Segments.push({ text: s, width: visibleWidth(s) });
+    }
+    if (builtin?.cost?.total_cost_usd != null) {
+        const cost = builtin.cost.total_cost_usd;
+        const s = dim(cost < 0.01 ? '$0.00' : `$${cost.toFixed(2)}`);
+        line2Segments.push({ text: s, width: visibleWidth(s) });
+    }
     const turnLabel = dim(`#${state.promptCount}  `);
     const turnWidth = `#${state.promptCount}  `.length;
-    const maxPromptCols = Math.min(termWidth - 3 - turnWidth, 80);
-    const line2 = prefix2 + turnLabel + truncate(state.lastUserPrompt, Math.max(maxPromptCols, 15));
+    // Calculate right side of line 2, progressively drop if prompt too short
+    const line2Budget = termWidth - prefixWidth - turnWidth;
+    const line2Right = progressiveJoin(line2Segments, line2Budget);
+    const spaceForRight2 = line2Right.width > 0 ? line2Right.width + 2 : 0;
+    const maxPromptCols = Math.min(line2Budget - spaceForRight2, 80);
+    const promptText = truncate(state.lastUserPrompt, Math.max(maxPromptCols, MIN_PROMPT_COLS));
+    const promptWidth = visibleWidth(promptText);
+    const gap2 = Math.max(1, termWidth - prefixWidth - turnWidth - promptWidth - line2Right.width);
+    const prefix2 = dim(' \u203A ');
+    const line2 = prefix2 + turnLabel + promptText + ' '.repeat(gap2) + line2Right.text;
     return line1 + '\n' + line2;
 }
