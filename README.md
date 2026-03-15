@@ -67,6 +67,19 @@ Everything works automatically after install. Additional commands:
 | `/list` | View all tracked sessions |
 | `/setup` | Reconfigure statusline / verify installation |
 
+## Uninstall
+
+```bash
+# 1. Remove plugin
+/plugin uninstall claude-recall@claude-recall
+
+# 2. Remove statusline from ~/.claude/settings.json
+#    Delete the "statusLine" key, then restart Claude Code
+
+# 3. (Optional) Remove session data
+rm -rf ~/.claude/claude-recall/
+```
+
 <details>
 <summary><strong>How it works</strong></summary>
 
