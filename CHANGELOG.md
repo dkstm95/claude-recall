@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.6.0
+
+- `(try /purpose)` hint now shows every 5th prompt regardless of purposeSource
+
 ## 2.5.0
 
 - `/purpose` (no args) now auto-applies the generated purpose without asking for confirmation

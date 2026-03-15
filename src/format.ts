@@ -115,8 +115,8 @@ export function formatHud(state: SessionState, termWidth: number, builtin?: Buil
   }
 
   // Purpose hint
-  const wantsHint = state.purposeSource === 'auto'
-    && state.promptCount >= PURPOSE_HINT_THRESHOLD;
+  const wantsHint = state.promptCount >= PURPOSE_HINT_THRESHOLD
+    && state.promptCount % PURPOSE_HINT_THRESHOLD === 0;
 
   // Calculate right side of line 1
   const line1Right = progressiveJoin(line1Segments, termWidth - prefixWidth);

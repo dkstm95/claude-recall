@@ -91,8 +91,8 @@ export function formatHud(state, termWidth, builtin) {
         line1Segments.push({ text: s, width: visibleWidth(s) });
     }
     // Purpose hint
-    const wantsHint = state.purposeSource === 'auto'
-        && state.promptCount >= PURPOSE_HINT_THRESHOLD;
+    const wantsHint = state.promptCount >= PURPOSE_HINT_THRESHOLD
+        && state.promptCount % PURPOSE_HINT_THRESHOLD === 0;
     // Calculate right side of line 1
     const line1Right = progressiveJoin(line1Segments, termWidth - prefixWidth);
     // Try hint, drop it if purpose would be too short
