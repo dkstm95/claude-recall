@@ -10,7 +10,7 @@
   "plugins": [
     {
       "name": "claude-recall",
-      "source": ".",
+      "source": "./",
       "description": "Session awareness HUD - tracks purpose, activity, and branch for every Claude Code session",
       "version": "1.0.0",
       "author": { "name": "seungilahn" },
