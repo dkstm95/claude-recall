@@ -99,7 +99,7 @@ function buildRightPart(state, elapsed, builtin) {
 const MIN_PURPOSE_COLS = 15;
 const SEPARATOR = dim(' \u2502 ');
 const SEPARATOR_WIDTH = 3;
-const PURPOSE_HINT_THRESHOLD = 10;
+const PURPOSE_HINT_THRESHOLD = 5;
 export function formatHud(state, termWidth, builtin) {
     const elapsed = formatElapsed(state.lastActivityAt || state.startedAt);
     const prefixWidth = 3; // " ⎯ "

@@ -123,7 +123,7 @@ function buildRightPart(state: SessionState, elapsed: string, builtin: BuiltinDa
 const MIN_PURPOSE_COLS = 15;
 const SEPARATOR = dim(' \u2502 ');
 const SEPARATOR_WIDTH = 3;
-const PURPOSE_HINT_THRESHOLD = 10;
+const PURPOSE_HINT_THRESHOLD = 5;
 
 export function formatHud(state: SessionState, termWidth: number, builtin?: BuiltinData): string {
   const elapsed = formatElapsed(state.lastActivityAt || state.startedAt);
