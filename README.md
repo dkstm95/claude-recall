@@ -68,24 +68,18 @@ Everything works automatically after install. Additional commands:
 | `/setup` | Reconfigure statusline / verify installation |
 
 <details>
-<summary><strong>Architecture</strong></summary>
+<summary><strong>How it works</strong></summary>
 
-```
-Hooks (SessionStart / UserPromptSubmit / SessionEnd)
-  → node dist/hooks/*.js
-  → atomic write to ~/.claude/claude-recall/sessions/{session-id}.json
+**Every time you type a prompt:**
+→ Session purpose, branch, and last prompt are saved automatically
 
-Statusline (<100ms)
-  → node dist/statusline.js
-  → reads state file + built-in JSON (model, cost, context%)
-  → stdout: 2-line HUD
+**Every time Claude responds:**
+→ Saved info + model/cost are combined into a 2-line HUD (under 100ms)
 
-/list command
-  → node dist/cli.js list
-  → scans state files + PID liveness check
-```
+**When you run `/list`:**
+→ All session files are scanned to show which sessions are active, stale, or completed
 
-State files are stored at `~/.claude/claude-recall/sessions/`.
+All state is stored as JSON files in `~/.claude/claude-recall/sessions/` — one file per session, separate from the plugin itself.
 
 </details>
 
