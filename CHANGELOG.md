@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.5.0
+
+- `/purpose` (no args) now auto-applies the generated purpose without asking for confirmation
+
 ## 2.4.0
 
 - **Reorganized HUD layout** — stable info on line 1, dynamic info on line 2

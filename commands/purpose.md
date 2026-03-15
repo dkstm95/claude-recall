@@ -22,8 +22,7 @@ CASE B — The value above IS empty (user just typed /purpose with nothing else)
 Do NOT ask the user to provide text. Do NOT say the input is empty. Instead, do this:
 
 1. Find the active session state file in `~/.claude/claude-recall/sessions/`.
-2. Show the current purpose from the state file.
-3. Read the current conversation transcript. Look in `~/.claude/projects/` for the most recent `.jsonl` file matching the current working directory.
-4. Based on the conversation, suggest a concise purpose (under 60 characters, same language as the conversation).
-5. Ask: "Suggested purpose: `<your suggestion>` — apply this?"
-6. If yes → update state file with `purposeSource: "manual"`. If no → do nothing.
+2. Read the current conversation transcript. Look in `~/.claude/projects/` for the most recent `.jsonl` file matching the current working directory.
+3. Based on the conversation, generate a concise purpose (under 60 characters, same language as the conversation).
+4. Update the state file: set `purpose` to the generated text, `purposeSource` to `"manual"`, `purposeSetAt` to current ISO timestamp.
+5. Reply: "Purpose set to: `<generated text>`"
