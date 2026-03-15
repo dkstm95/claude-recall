@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.0.0-blue?style=flat-square" alt="version">
+  <img src="https://img.shields.io/badge/version-2.2.0-blue?style=flat-square" alt="version">
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="license">
   <img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen?style=flat-square&logo=node.js&logoColor=white" alt="node">
   <img src="https://img.shields.io/badge/Claude_Code-Plugin-blueviolet?style=flat-square" alt="Claude Code Plugin">
@@ -33,23 +33,26 @@ claude-recall automatically tracks the context of every Claude Code session, so 
 
 A persistent 2-line summary above your prompt:
 
-| Element | Description | Source |
-|---------|-------------|--------|
-| **purpose** | What this session is about — updates with each prompt, or set manually with `/purpose` | claude-recall |
-| **branch** | Current git branch | claude-recall |
-| **elapsed** | Time since last activity | claude-recall |
-| **model** | Active Claude model (e.g. Opus 4.6) | Claude Code built-in |
-| **context%** | Context window usage | Claude Code built-in |
-| **cost** | Cumulative session cost | Claude Code built-in |
-| **last prompt** | The last prompt you typed (line 2) | claude-recall |
-| **last action** | What Claude last did — e.g. `Edit: src/auth.ts` (line 2, right side) | claude-recall |
+| Element | Location | Description | Source |
+|---------|----------|-------------|--------|
+| **purpose** | Line 1, left | What this session is about — auto-detected from first prompt, or set with `/purpose` | claude-recall |
+| **branch** | Line 1, right | Current git branch | claude-recall |
+| **elapsed** | Line 1, right | Time since last activity | claude-recall |
+| **model** | Line 1, right | Active Claude model (e.g. Opus 4.6) | Claude Code built-in |
+| **context%** | Line 1, right | Context window usage | Claude Code built-in |
+| **cost** | Line 1, right | Cumulative session cost | Claude Code built-in |
+| **turn** | Line 2, left | Current prompt number (`#12`) | claude-recall |
+| **last prompt** | Line 2 | The last prompt you typed | claude-recall |
+
+> [!TIP]
+> After 10+ prompts, a `(try /purpose)` hint appears next to the purpose. Running `/purpose` lets Claude analyze your conversation and suggest a more accurate purpose.
 
 ## Features
 
 - **Automatic tracking** — Just install. Session start, prompts, and session end are recorded automatically
-- **Dynamic purpose** — Purpose evolves with each prompt to reflect your current focus
-- **Action tracking** — Shows Claude's last action (file edits, commands) alongside your last prompt
-- **Context divergence warning** — Alerts you when a prompt seems unrelated, recommending a new session
+- **Auto-purpose** — Detects session purpose from your first prompt
+- **Smart purpose update** — Run `/purpose` anytime to get an AI-generated purpose summary from your conversation
+- **Turn counter** — Shows which prompt you're on (`#1`, `#12`, `#50`)
 - **Built-in metrics** — Shows model, context%, and cost from Claude Code alongside session info
 - **Session overview** — `/list` shows all sessions in one table
 - **Auto-cleanup** — Completed sessions older than 7 days are automatically removed
@@ -105,14 +108,13 @@ rm -rf ~/.claude/claude-recall/
 <summary><strong>How it works</strong></summary>
 
 **Every time you type a prompt:**
-→ Session purpose, branch, and last prompt are saved automatically
-→ If the prompt seems unrelated to the session, you'll get a warning
-
-**Every time Claude uses a tool (Write, Edit, Bash):**
-→ The action is recorded and shown on the statusline
+→ Session purpose, branch, turn count, and last prompt are saved automatically
 
 **Every time Claude responds:**
 → Saved info + model/cost are combined into a 2-line HUD (under 100ms)
+
+**When you run `/purpose`:**
+→ Claude analyzes the conversation and suggests a concise purpose summary
 
 **When you run `/list`:**
 → All session files are scanned to show which sessions are active, stale, or completed

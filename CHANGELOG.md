@@ -1,12 +1,26 @@
 # Changelog
 
+## 2.2.0
+
+- **Simplified HUD layout** — cleaner 2-line design
+  - Line 1: purpose + (try /purpose) hint + branch + elapsed + builtin metrics
+  - Line 2: `#turn` count + last prompt
+- **Turn counter** — shows current prompt number (`#1`, `#12`) on line 2
+- **`/purpose` hint** — `(try /purpose)` appears after 10+ prompts when purpose is still auto-detected
+- Reverted purpose to first-prompt-only (dynamic update caused redundancy with last prompt)
+- Removed PostToolUse hook and action tracking (unnecessary overhead)
+- Removed keyword-based divergence detection (unreliable for non-English)
+
+> **Upgrading from 1.x:** Run `/setup` once after updating to reconfigure the statusline launcher.
+
+## 2.1.0
+
+- `/setup` now creates a launcher script that auto-resolves the latest plugin version
+- No need to re-run `/setup` after plugin updates
+
 ## 2.0.0
 
-- **Dynamic purpose** — purpose now updates on every prompt to reflect current focus (no longer frozen at first prompt)
-- **Context divergence warning** — alerts when a prompt seems unrelated to the session, recommending a new session
-- **Action tracking** — PostToolUse hook captures Claude's last action (Write, Edit, Bash) and displays it on statusline line 2
 - **Auto-cleanup** — completed sessions older than 7 days are automatically removed on session start
-- New state fields: `lastAction`, `recentKeywords`
 
 ## 1.13.0
 
