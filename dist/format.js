@@ -148,7 +148,13 @@ export function formatHud(state, termWidth, builtin) {
     if (!state.lastUserPrompt)
         return line1;
     const prefix2 = dim(' \u203A ');
-    const maxPromptCols = Math.min(termWidth - 3, 80);
-    const line2 = prefix2 + truncate(state.lastUserPrompt, maxPromptCols);
+    const actionSuffix = state.lastAction
+        ? dim('  \u2502 ') + dim(state.lastAction)
+        : '';
+    const actionWidth = state.lastAction
+        ? 3 + displayWidth(state.lastAction)
+        : 0;
+    const maxPromptCols = Math.min(termWidth - 3 - actionWidth, 80);
+    const line2 = prefix2 + truncate(state.lastUserPrompt, Math.max(maxPromptCols, 15)) + actionSuffix;
     return line1 + '\n' + line2;
 }

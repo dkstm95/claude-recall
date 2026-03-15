@@ -1,5 +1,5 @@
 import { readStdin } from '../stdin.js';
-import { readState, writeState } from '../state.js';
+import { readState, writeState, cleanupOldSessions } from '../state.js';
 import { execSync } from 'node:child_process';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -50,6 +50,8 @@ async function main() {
     const source = input.source ?? 'startup';
     const model = input.model ?? '';
     const now = new Date().toISOString();
+    // Clean up completed sessions older than 7 days
+    cleanupOldSessions();
     const existing = readState(sessionId);
     if (source === 'startup' || !existing) {
         // New session

@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync, renameSync, readdirSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync, renameSync, readdirSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 
@@ -17,6 +17,8 @@ export interface SessionState {
   lastActivityAt: string;
   startedAt: string;
   model: string;
+  lastAction?: string;
+  recentKeywords?: string[];
 }
 
 export function getStateDir(): string {
@@ -59,4 +61,32 @@ export function listStates(): SessionState[] {
     }
   }
   return states;
+}
+
+const CLEANUP_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+export function cleanupOldSessions(): void {
+  const dir = getStateDir();
+  const now = Date.now();
+  let files: string[];
+  try {
+    files = readdirSync(dir);
+  } catch {
+    return;
+  }
+  for (const f of files) {
+    if (!f.endsWith('.json') || f.includes('.tmp.')) continue;
+    try {
+      const raw = readFileSync(join(dir, f), 'utf-8');
+      const state = JSON.parse(raw) as SessionState;
+      if (state.status === 'completed') {
+        const age = now - new Date(state.lastActivityAt).getTime();
+        if (age > CLEANUP_MAX_AGE_MS) {
+          unlinkSync(join(dir, f));
+        }
+      }
+    } catch {
+      // skip
+    }
+  }
 }
