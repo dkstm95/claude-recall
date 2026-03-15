@@ -17,19 +17,22 @@ function isPidAlive(pid: number): boolean {
 function listCommand(): void {
   const states = listStates();
 
-  if (states.length === 0) {
+  // Filter out sessions with no prompts
+  const filtered = states.filter(s => s.promptCount > 0);
+
+  if (filtered.length === 0) {
     console.log('No sessions found.');
     return;
   }
 
   // Sort by startedAt descending
-  states.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
+  filtered.sort((a, b) => new Date(b.startedAt).getTime() - new Date(a.startedAt).getTime());
 
   // Header
   const header = ` ${'PURPOSE'.padEnd(34)} ${'BRANCH'.padEnd(14)} ${'#'.padStart(2)}  ${'STATUS'.padEnd(11)} ELAPSED`;
   console.log(dim(header));
 
-  for (const s of states) {
+  for (const s of filtered) {
     let status: string;
     let statusLabel: string;
     if (s.status === 'completed') {

@@ -3,12 +3,10 @@ description: "Show all tracked Claude Code sessions"
 allowed-tools: [Bash]
 ---
 
-You are showing the user a list of all tracked Claude Code sessions.
-
-Run this command and display the output to the user:
+Run this command and show the output as-is. Do not reformat, summarize, or add commentary:
 
 ```bash
 node "${CLAUDE_PLUGIN_ROOT}/dist/cli.js" list
 ```
 
-If no sessions are found, tell the user that no sessions have been tracked yet and that sessions will appear after they start using Claude Code with the plugin installed.
+If the output says "No sessions found.", just relay that message.
