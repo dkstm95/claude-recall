@@ -1,5 +1,26 @@
 # Changelog
 
+## 2.0.0
+
+- **Dynamic purpose** — purpose now updates on every prompt to reflect current focus (no longer frozen at first prompt)
+- **Context divergence warning** — alerts when a prompt seems unrelated to the session, recommending a new session
+- **Action tracking** — PostToolUse hook captures Claude's last action (Write, Edit, Bash) and displays it on statusline line 2
+- **Auto-cleanup** — completed sessions older than 7 days are automatically removed on session start
+- New state fields: `lastAction`, `recentKeywords`
+
+## 1.13.0
+
+- Polish READMEs for community launch: centered hero, badges, GitHub alerts
+- Add `/purpose` (no args) to usage table
+
+## 1.12.0
+
+- Add uninstall instructions to both READMEs
+
+## 1.11.0
+
+- Add CHANGELOG.md
+
 ## 1.10.0
 
 - Add MIT License
