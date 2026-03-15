@@ -1,0 +1,6 @@
+{
+  "name": "claude-recall",
+  "version": "1.0.0",
+  "description": "Session awareness HUD - tracks purpose, activity, and branch for every Claude Code session",
+  "author": { "name": "seungilahn" }
+}

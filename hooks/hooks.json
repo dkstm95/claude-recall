@@ -1,0 +1,17 @@
+{
+  "description": "claude-recall session tracking hooks",
+  "hooks": {
+    "SessionStart": [{
+      "matcher": "*",
+      "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/hooks/session-start.js\"", "timeout": 10 }]
+    }],
+    "UserPromptSubmit": [{
+      "matcher": "*",
+      "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/hooks/prompt-submit.js\"", "timeout": 10 }]
+    }],
+    "SessionEnd": [{
+      "matcher": "*",
+      "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/hooks/session-end.js\"", "timeout": 10 }]
+    }]
+  }
+}
