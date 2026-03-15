@@ -1,0 +1,46 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="120" viewBox="0 0 720 120">
+  <defs>
+    <style>
+      .bg { fill: #1a1b26; }
+      .frame { fill: none; stroke: #3b3d52; stroke-width: 1; rx: 8; }
+      .dim { fill: #565a6e; font-family: 'Menlo', 'Consolas', 'Courier New', monospace; font-size: 13px; }
+      .text { fill: #c0caf5; font-family: 'Menlo', 'Consolas', 'Courier New', monospace; font-size: 13px; }
+      .cyan { fill: #7dcfff; font-family: 'Menlo', 'Consolas', 'Courier New', monospace; font-size: 13px; }
+      .yellow { fill: #e0af68; font-family: 'Menlo', 'Consolas', 'Courier New', monospace; font-size: 13px; }
+      .separator { fill: #3b3d52; font-family: 'Menlo', 'Consolas', 'Courier New', monospace; font-size: 13px; }
+      .prompt-bg { fill: #1e1f2e; }
+      .cursor { fill: #c0caf5; }
+    </style>
+  </defs>
+
+  <!-- Background -->
+  <rect class="bg" width="720" height="120" rx="8"/>
+  <rect class="frame" x="0.5" y="0.5" width="719" height="119"/>
+
+  <!-- Line 1: statusline -->
+  <text y="32">
+    <tspan class="dim" x="16"> ⎯ </tspan>
+    <tspan class="text">Refactor auth middleware</tspan>
+    <tspan class="cyan" x="380">feat/jwt</tspan>
+    <tspan class="dim">  23m</tspan>
+    <tspan class="separator">  │ </tspan>
+    <tspan class="yellow">Opus</tspan>
+    <tspan class="dim">  42%</tspan>
+    <tspan class="dim">  $0.37</tspan>
+  </text>
+
+  <!-- Line 2: last prompt -->
+  <text y="56">
+    <tspan class="dim" x="16"> › </tspan>
+    <tspan class="text">Add rate limiting to the login endpoint</tspan>
+  </text>
+
+  <!-- Prompt area -->
+  <rect class="prompt-bg" x="1" y="74" width="718" height="38" rx="0 0 7 7"/>
+  <line x1="1" y1="74" x2="719" y2="74" stroke="#3b3d52" stroke-width="0.5"/>
+  <text y="98">
+    <tspan class="dim" x="16"> &gt; </tspan>
+    <tspan class="text">Check if the JWT expiry is handled correctly</tspan>
+    <tspan class="cursor">▎</tspan>
+  </text>
+</svg>

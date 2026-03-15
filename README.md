@@ -2,6 +2,10 @@
 
 Session awareness HUD for Claude Code. Restores context in under 5 seconds when switching between parallel Claude Code sessions — tracks purpose, last prompt, branch, and activity for every session.
 
+<p align="center">
+  <img src="assets/statusline-preview.svg" alt="claude-recall statusline preview" width="720">
+</p>
+
 ## Install
 
 ```bash
