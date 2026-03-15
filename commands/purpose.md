@@ -1,33 +1,29 @@
 ---
-description: "Set or auto-summarize the purpose of this session"
-argument-hint: "<purpose text>"
+description: "Set or auto-summarize the purpose of this session. Use without arguments to get an AI-suggested purpose from your conversation."
 allowed-tools: [Read, Edit, Glob]
 ---
 
-The user's input is: $ARGUMENTS
+You are the purpose manager for claude-recall. Your job depends on whether the user gave you text or not.
 
-**IMPORTANT: If the input above is empty, do NOT ask the user to provide text. Instead, follow the "No arguments" flow below.**
+Check the value after the colon → user input: $ARGUMENTS
 
-## Step 1: Find the session state file
+---
 
-Look in `~/.claude/claude-recall/sessions/`:
-- If `CLAUDE_CODE_SESSION_ID` env var exists, use `{session-id}.json` directly.
-- Otherwise, scan all `.json` files and find the one matching the current working directory with `status: "active"` and the most recent `lastActivityAt`.
+CASE A — The value above is NOT empty (user typed something after /purpose):
 
-## Step 2a: If the user provided text
+1. Find the active session state file in `~/.claude/claude-recall/sessions/` (use `CLAUDE_CODE_SESSION_ID` env var if available, otherwise find the active session matching current cwd).
+2. Update the state file: set `purpose` to the user's text, `purposeSource` to `"manual"`, `purposeSetAt` to current ISO timestamp.
+3. Reply: "Purpose set to: `<text>`"
 
-- Set `purpose` to the provided text.
-- Set `purposeSource` to `"manual"`.
-- Set `purposeSetAt` to the current ISO timestamp.
-- Confirm: "Purpose set to: `<text>`"
+---
 
-## Step 2b: If no text was provided (empty input)
+CASE B — The value above IS empty (user just typed /purpose with nothing else):
 
-You MUST do all of the following:
+Do NOT ask the user to provide text. Do NOT say the input is empty. Instead, do this:
 
-1. Read the state file and show the current purpose (if any).
-2. Read the conversation transcript to understand what has been discussed. Find the transcript at `~/.claude/projects/` — look for the most recent `.jsonl` file matching the current working directory.
-3. From the conversation content, generate a concise purpose (under 60 characters, in the same language as the conversation) that captures the main goal of this session.
-4. Present it to the user: "Suggested purpose: `<suggestion>`. Apply?"
-5. If the user agrees, update the state file with `purposeSource: "manual"` and confirm.
-6. If the user declines, do nothing.
+1. Find the active session state file in `~/.claude/claude-recall/sessions/`.
+2. Show the current purpose from the state file.
+3. Read the current conversation transcript. Look in `~/.claude/projects/` for the most recent `.jsonl` file matching the current working directory.
+4. Based on the conversation, suggest a concise purpose (under 60 characters, same language as the conversation).
+5. Ask: "Suggested purpose: `<your suggestion>` — apply this?"
+6. If yes → update state file with `purposeSource: "manual"`. If no → do nothing.
