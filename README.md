@@ -16,9 +16,17 @@ Works great with split panes too:
   <img src="assets/split-panes-preview.svg" alt="claude-recall in split panes" width="800">
 </p>
 
-A persistent 2-line summary above your prompt:
-- **Line 1**: What this session is about (purpose) + branch + elapsed time + model + context usage + cost
-- **Line 2**: The last prompt you typed
+A persistent 2-line HUD above your prompt:
+
+| Element | Description | Source |
+|---------|-------------|--------|
+| **purpose** | What this session is about — auto-detected from your first prompt, or set manually with `/purpose` | claude-recall |
+| **branch** | Current git branch | claude-recall |
+| **elapsed** | Time since last activity | claude-recall |
+| **model** | Active Claude model (e.g. Opus 4.6) | Claude Code built-in |
+| **context%** | Context window usage | Claude Code built-in |
+| **cost** | Cumulative session cost | Claude Code built-in |
+| **last prompt** | The last prompt you typed (line 2) | claude-recall |
 
 ## Features
 
