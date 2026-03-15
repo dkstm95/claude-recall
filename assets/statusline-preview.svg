@@ -10,10 +10,8 @@
       .cyan { fill: #7dcfff; font-family: 'Menlo', 'Consolas', 'Courier New', monospace; font-size: 12px; }
       .yellow { fill: #e0af68; font-family: 'Menlo', 'Consolas', 'Courier New', monospace; font-size: 12px; }
       .green { fill: #9ece6a; font-family: 'Menlo', 'Consolas', 'Courier New', monospace; font-size: 12px; }
-      .separator { fill: #3b3d52; font-family: 'Menlo', 'Consolas', 'Courier New', monospace; font-size: 12px; }
       .prompt-bg { fill: #1e1f2e; }
       .cursor { fill: #c0caf5; }
-      .tab { font-family: 'Menlo', 'Consolas', 'Courier New', monospace; font-size: 11px; }
       .tab-bg { fill: #1e1f2e; }
       .tab-active-bg { fill: #2a2b3d; }
       .label { fill: #565a6e; font-family: 'SF Pro Display', 'Helvetica Neue', sans-serif; font-size: 13px; font-weight: 500; }
@@ -21,46 +19,39 @@
     </style>
   </defs>
 
-  <!-- Overall background -->
   <rect fill="#0f1018" width="760" height="370" rx="12"/>
 
-  <!-- Label -->
   <text x="380" y="24" text-anchor="middle">
     <tspan class="label">switch tabs → </tspan>
     <tspan class="label-accent">instant context</tspan>
   </text>
 
-  <!-- ==================== Session 1 (active, highlighted) ==================== -->
+  <!-- Session 1 (active) -->
   <g transform="translate(20, 40)">
-    <!-- Tab bar -->
     <rect class="tab-active-bg" x="0" y="0" width="720" height="22" rx="6 6 0 0"/>
     <text y="15">
       <tspan class="green" x="12">● </tspan>
       <tspan class="text" style="font-size:11px">Terminal 1</tspan>
       <tspan class="dim" x="120" style="font-size:11px">~/project-api</tspan>
     </text>
-
-    <!-- Terminal body -->
     <rect class="bg" x="0" y="22" width="720" height="88" rx="0 0 6 6"/>
     <rect class="frame-active" x="0" y="0" width="720" height="110" rx="6"/>
-
-    <!-- Statusline -->
+    <!-- Line 1: purpose + branch + model -->
     <text y="50">
       <tspan class="dim" x="14"> ⎯ </tspan>
       <tspan class="text">Refactor auth middleware</tspan>
-      <tspan class="cyan" x="340">feat/jwt</tspan>
-      <tspan class="dim">  23m</tspan>
-      <tspan class="separator">  │ </tspan>
-      <tspan class="yellow">Opus</tspan>
-      <tspan class="dim">  42%</tspan>
-      <tspan class="dim">  $0.37</tspan>
+      <tspan class="cyan" x="530">feat/jwt</tspan>
+      <tspan class="yellow" x="630">Opus</tspan>
     </text>
+    <!-- Line 2: #turn + prompt + elapsed + ctx% + cost -->
     <text y="70">
       <tspan class="dim" x="14"> › </tspan>
+      <tspan class="dim">#12  </tspan>
       <tspan class="text">Add rate limiting to the login endpoint</tspan>
+      <tspan class="dim" x="530">23m</tspan>
+      <tspan class="dim" x="580">42%</tspan>
+      <tspan class="dim" x="630">$0.37</tspan>
     </text>
-
-    <!-- Prompt -->
     <rect class="prompt-bg" x="1" y="84" width="718" height="25" rx="0 0 5 5"/>
     <line x1="1" y1="84" x2="719" y2="84" stroke="#3b3d52" stroke-width="0.5"/>
     <text y="101">
@@ -69,7 +60,7 @@
     </text>
   </g>
 
-  <!-- ==================== Session 2 ==================== -->
+  <!-- Session 2 -->
   <g transform="translate(20, 165)">
     <rect class="tab-bg" x="0" y="0" width="720" height="22" rx="6 6 0 0"/>
     <text y="15">
@@ -77,25 +68,22 @@
       <tspan class="dim" style="font-size:11px">Terminal 2</tspan>
       <tspan class="dim" x="120" style="font-size:11px">~/project-web</tspan>
     </text>
-
     <rect class="bg-dim" x="0" y="22" width="720" height="88" rx="0 0 6 6"/>
     <rect class="frame" x="0" y="0" width="720" height="110" rx="6"/>
-
     <text y="50">
       <tspan class="dim" x="14"> ⎯ </tspan>
       <tspan class="text">Fix payment API timeout</tspan>
-      <tspan class="cyan" x="340">fix/payment</tspan>
-      <tspan class="dim">  1h 12m</tspan>
-      <tspan class="separator">  │ </tspan>
-      <tspan class="yellow">Sonnet</tspan>
-      <tspan class="dim">  67%</tspan>
-      <tspan class="dim">  $0.85</tspan>
+      <tspan class="cyan" x="530">fix/payment</tspan>
+      <tspan class="yellow" x="650">Sonnet</tspan>
     </text>
     <text y="70">
       <tspan class="dim" x="14"> › </tspan>
+      <tspan class="dim">#8  </tspan>
       <tspan class="text">Show me the error logs from the webhook handler</tspan>
+      <tspan class="dim" x="530">1h 12m</tspan>
+      <tspan class="dim" x="600">67%</tspan>
+      <tspan class="dim" x="640">$0.85</tspan>
     </text>
-
     <rect class="prompt-bg" x="1" y="84" width="718" height="25" rx="0 0 5 5"/>
     <line x1="1" y1="84" x2="719" y2="84" stroke="#3b3d52" stroke-width="0.5"/>
     <text y="101">
@@ -104,7 +92,7 @@
     </text>
   </g>
 
-  <!-- ==================== Session 3 ==================== -->
+  <!-- Session 3 -->
   <g transform="translate(20, 290)">
     <rect class="tab-bg" x="0" y="0" width="720" height="22" rx="6 6 0 0"/>
     <text y="15">
@@ -112,23 +100,21 @@
       <tspan class="dim" style="font-size:11px">Terminal 3</tspan>
       <tspan class="dim" x="120" style="font-size:11px">~/project-api</tspan>
     </text>
-
     <rect class="bg-dim" x="0" y="22" width="720" height="55" rx="0 0 6 6"/>
     <rect class="frame" x="0" y="0" width="720" height="77" rx="6"/>
-
     <text y="50">
       <tspan class="dim" x="14"> ⎯ </tspan>
       <tspan class="text">Add unit tests for user service</tspan>
-      <tspan class="cyan" x="370">main</tspan>
-      <tspan class="dim">  8m</tspan>
-      <tspan class="separator">  │ </tspan>
-      <tspan class="yellow">Opus</tspan>
-      <tspan class="dim">  12%</tspan>
-      <tspan class="dim">  $0.09</tspan>
+      <tspan class="cyan" x="530">main</tspan>
+      <tspan class="yellow" x="600">Opus</tspan>
     </text>
     <text y="70">
       <tspan class="dim" x="14"> › </tspan>
+      <tspan class="dim">#3  </tspan>
       <tspan class="text">Write tests for the createUser and deleteUser methods</tspan>
+      <tspan class="dim" x="580">8m</tspan>
+      <tspan class="dim" x="620">12%</tspan>
+      <tspan class="dim" x="660">$0.09</tspan>
     </text>
   </g>
 </svg>

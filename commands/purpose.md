@@ -1,6 +1,6 @@
 ---
 description: "Set or auto-summarize the purpose of this session. Use without arguments to get an AI-suggested purpose from your conversation."
-allowed-tools: [Read, Edit, Glob]
+allowed-tools: [Read, Edit, Glob, Bash]
 ---
 
 You are the purpose manager for claude-recall. Your job depends on whether the user gave you text or not.

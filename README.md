@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-2.6.0-blue?style=flat-square" alt="version">
+  <img src="https://img.shields.io/badge/version-2.7.0-blue?style=flat-square" alt="version">
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="license">
   <img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen?style=flat-square&logo=node.js&logoColor=white" alt="node">
   <img src="https://img.shields.io/badge/Claude_Code-Plugin-blueviolet?style=flat-square" alt="Claude Code Plugin">
@@ -37,12 +37,12 @@ A persistent 2-line summary above your prompt:
 |---------|----------|-------------|--------|
 | **purpose** | Line 1, left | What this session is about — auto-detected from first prompt, or set with `/purpose` | claude-recall |
 | **branch** | Line 1, right | Current git branch | claude-recall |
-| **elapsed** | Line 1, right | Time since last activity | claude-recall |
-| **model** | Line 1, right | Active Claude model (e.g. Opus 4.6) | Claude Code built-in |
-| **context%** | Line 1, right | Context window usage | Claude Code built-in |
-| **cost** | Line 1, right | Cumulative session cost | Claude Code built-in |
+| **model** | Line 1, right | Active Claude model (e.g. Opus) | Claude Code built-in |
 | **turn** | Line 2, left | Current prompt number (`#12`) | claude-recall |
-| **last prompt** | Line 2 | The last prompt you typed | claude-recall |
+| **last prompt** | Line 2, left | The last prompt you typed | claude-recall |
+| **elapsed** | Line 2, right | Time since last activity | claude-recall |
+| **context%** | Line 2, right | Context window usage | Claude Code built-in |
+| **cost** | Line 2, right | Cumulative session cost | Claude Code built-in |
 
 > [!TIP]
 > After 5+ prompts, a `(try /purpose)` hint appears next to the purpose. Running `/purpose` lets Claude analyze your conversation and suggest a more accurate purpose.

@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.7.0
+
+- **Fix HUD documentation** — README tables now correctly show line 1 vs line 2 layout
+- **Update preview images** — SVGs now match v2.4.0+ layout (metrics on line 2, turn count shown)
+- Fix setup.md reference to removed post-tool-use.js
+- Add Bash to /purpose allowed-tools for transcript reading
+
 ## 2.6.0
 
 - `(try /purpose)` hint now shows every 5th prompt regardless of purposeSource
