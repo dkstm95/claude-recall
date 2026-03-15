@@ -123,6 +123,7 @@ function buildRightPart(state: SessionState, elapsed: string, builtin: BuiltinDa
 const MIN_PURPOSE_COLS = 15;
 const SEPARATOR = dim(' \u2502 ');
 const SEPARATOR_WIDTH = 3;
+const PURPOSE_HINT_THRESHOLD = 10;
 
 export function formatHud(state: SessionState, termWidth: number, builtin?: BuiltinData): string {
   const elapsed = formatElapsed(state.lastActivityAt || state.startedAt);
@@ -164,9 +165,15 @@ export function formatHud(state: SessionState, termWidth: number, builtin?: Buil
     rightWidth = 0;
   }
 
+  // Purpose hint: show (try /purpose) when auto purpose is stale
+  const showHint = state.purposeSource === 'auto'
+    && state.promptCount >= PURPOSE_HINT_THRESHOLD;
+  const hintText = showHint ? dim('  (try /purpose)') : '';
+  const hintWidth = showHint ? 16 : 0;
+
   // Purpose line
   const prefix1 = dim(' \u23AF ');
-  const availPurpose = termWidth - prefixWidth - (rightWidth > 0 ? rightWidth + 2 : 0);
+  const availPurpose = termWidth - prefixWidth - hintWidth - (rightWidth > 0 ? rightWidth + 2 : 0);
   const purpose = state.purpose
     ? truncate(state.purpose, Math.max(availPurpose, MIN_PURPOSE_COLS))
     : dim('(no purpose yet)');
@@ -174,21 +181,17 @@ export function formatHud(state: SessionState, termWidth: number, builtin?: Buil
     ? displayWidth(stripAnsi(purpose))
     : 16;
 
-  const gap = Math.max(1, termWidth - prefixWidth - purposeWidth - rightWidth);
-  const line1 = prefix1 + purpose + ' '.repeat(gap) + rightText;
+  const gap = Math.max(1, termWidth - prefixWidth - purposeWidth - hintWidth - rightWidth);
+  const line1 = prefix1 + purpose + hintText + ' '.repeat(gap) + rightText;
 
-  // Last prompt line
+  // Last prompt line with turn count
   if (!state.lastUserPrompt) return line1;
 
   const prefix2 = dim(' \u203A ');
-  const actionSuffix = state.lastAction
-    ? dim('  \u2502 ') + dim(state.lastAction)
-    : '';
-  const actionWidth = state.lastAction
-    ? 3 + displayWidth(state.lastAction)
-    : 0;
-  const maxPromptCols = Math.min(termWidth - 3 - actionWidth, 80);
-  const line2 = prefix2 + truncate(state.lastUserPrompt, Math.max(maxPromptCols, 15)) + actionSuffix;
+  const turnLabel = dim(`#${state.promptCount}  `);
+  const turnWidth = `#${state.promptCount}  `.length;
+  const maxPromptCols = Math.min(termWidth - 3 - turnWidth, 80);
+  const line2 = prefix2 + turnLabel + truncate(state.lastUserPrompt, Math.max(maxPromptCols, 15));
 
   return line1 + '\n' + line2;
 }

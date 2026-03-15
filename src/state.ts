@@ -17,8 +17,6 @@ export interface SessionState {
   lastActivityAt: string;
   startedAt: string;
   model: string;
-  lastAction?: string;
-  recentKeywords?: string[];
 }
 
 export function getStateDir(): string {

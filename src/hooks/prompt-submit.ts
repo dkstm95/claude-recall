@@ -44,25 +44,6 @@ function getBranch(cwd: string, fallback: string): string {
   }
 }
 
-function extractKeywords(text: string): string[] {
-  return text
-    .toLowerCase()
-    .replace(/[^a-z0-9가-힣\s]/g, ' ')
-    .split(/\s+/)
-    .filter(w => w.length >= 3);
-}
-
-function checkDivergence(newKeywords: string[], recentKeywords: string[]): boolean {
-  if (recentKeywords.length < 10) return false; // too few keywords to judge
-  if (newKeywords.length === 0) return false;
-
-  const recentSet = new Set(recentKeywords);
-  const overlap = newKeywords.filter(w => recentSet.has(w)).length;
-  const overlapRatio = overlap / newKeywords.length;
-
-  return overlapRatio < 0.1; // less than 10% word overlap
-}
-
 async function main(): Promise<void> {
   const raw = await readStdin();
   const input = JSON.parse(raw);
@@ -91,7 +72,6 @@ async function main(): Promise<void> {
       lastActivityAt: now,
       startedAt: now,
       model: '',
-      recentKeywords: [],
     };
   }
 
@@ -103,28 +83,20 @@ async function main(): Promise<void> {
     return;
   }
 
-  // Divergence detection (before updating state)
-  const newKeywords = extractKeywords(prompt);
-  const recentKeywords = state.recentKeywords ?? [];
-  const isDivergent = state.promptCount >= 3 && checkDivergence(newKeywords, recentKeywords);
-
   // Normal prompt
   state.promptCount++;
   state.lastUserPrompt = prompt.slice(0, 200).replace(/[\n\t\r]/g, ' ');
   state.lastUserPromptAt = now;
   state.lastActivityAt = now;
 
-  // Update recent keywords (keep last 50)
-  state.recentKeywords = [...recentKeywords, ...newKeywords].slice(-50);
-
-  // Auto-purpose: update on every prompt (unless manual)
-  if (state.purposeSource !== 'manual') {
+  // Auto-purpose on first prompt only
+  if (state.promptCount === 1 && state.purposeSource !== 'manual') {
     state.purpose = prompt.slice(0, 60).replace(/[\n\t\r]/g, ' ');
     state.purposeSource = 'auto';
     state.purposeSetAt = now;
   }
 
-  // Custom-title from transcript (overrides auto)
+  // Custom-title from transcript
   if (transcriptPath && state.purposeSource !== 'manual') {
     const customTitle = findCustomTitle(transcriptPath);
     if (customTitle) {
@@ -138,16 +110,7 @@ async function main(): Promise<void> {
   state.branch = getBranch(cwd, state.branch);
 
   writeState(sessionId, state);
-
-  // Output with divergence warning if detected
-  if (isDivergent) {
-    const output = {
-      systemMessage: 'This prompt seems unrelated to the current session context. Consider starting a new session (`claude` in another terminal) to keep each session focused on one task.',
-    };
-    process.stdout.write(JSON.stringify(output) + '\n');
-  } else {
-    process.stdout.write('{}\n');
-  }
+  process.stdout.write('{}\n');
 }
 
 main().catch(() => {
