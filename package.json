@@ -4,9 +4,8 @@
   "description": "Session awareness HUD for Claude Code",
   "type": "module",
   "scripts": {
-    "build": "tsc && node -e \"const f=require('fs'),p='dist/cli.js';if(f.existsSync(p)){const c=f.readFileSync(p,'utf8');if(!c.startsWith('#!'))f.writeFileSync(p,'#!/usr/bin/env node\\n'+c)}\" && chmod +x dist/cli.js"
+    "build": "tsc"
   },
-  "bin": { "claude-recall": "./dist/cli.js" },
   "devDependencies": {
     "typescript": "^5.5.0",
     "@types/node": "^22.0.0"

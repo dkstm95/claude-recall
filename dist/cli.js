@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 import { listStates } from './state.js';
 import { truncate, formatElapsed } from './format.js';
 const green = (s) => `\x1b[32m${s}\x1b[0m`;

@@ -19,7 +19,7 @@ A persistent 2-line summary above your prompt:
 - **Automatic tracking** — Just install. Session start, prompts, and session end are recorded automatically
 - **Auto-purpose** — Detects session purpose from your first prompt
 - **Built-in metrics** — Shows model, context%, and cost from Claude Code alongside session info
-- **Session overview** — `claude-recall list` shows all sessions in one table
+- **Session overview** — `/list` shows all sessions in one table
 
 ```
  PURPOSE                          BRANCH        #  STATUS     ELAPSED
@@ -50,7 +50,7 @@ Everything works automatically after install. Additional commands:
 | Command | Description |
 |---------|-------------|
 | `/purpose <text>` | Manually set session purpose (overrides auto-detection) |
-| `claude-recall list` | View all session statuses in terminal |
+| `/list` | View all tracked sessions |
 | `/setup` | Reconfigure statusline / verify installation |
 
 <details>
@@ -66,7 +66,7 @@ Statusline (<100ms)
   → reads state file + built-in JSON (model, cost, context%)
   → stdout: 2-line HUD
 
-CLI
+/list command
   → node dist/cli.js list
   → scans state files + PID liveness check
 ```
