@@ -178,7 +178,7 @@ export function formatHud(state: SessionState, termWidth: number, builtin?: Buil
     ? truncate(state.purpose, Math.max(availPurpose, MIN_PURPOSE_COLS))
     : dim('(no purpose yet)');
   const purposeWidth = state.purpose
-    ? displayWidth(stripAnsi(purpose))
+    ? visibleWidth(purpose)
     : 16;
 
   const gap = Math.max(1, termWidth - prefixWidth - purposeWidth - hintWidth - rightWidth);

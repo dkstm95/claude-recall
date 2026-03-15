@@ -146,7 +146,7 @@ export function formatHud(state, termWidth, builtin) {
         ? truncate(state.purpose, Math.max(availPurpose, MIN_PURPOSE_COLS))
         : dim('(no purpose yet)');
     const purposeWidth = state.purpose
-        ? displayWidth(stripAnsi(purpose))
+        ? visibleWidth(purpose)
         : 16;
     const gap = Math.max(1, termWidth - prefixWidth - purposeWidth - hintWidth - rightWidth);
     const line1 = prefix1 + purpose + hintText + ' '.repeat(gap) + rightText;

@@ -1,6 +1,5 @@
 import { readStdin } from '../stdin.js';
-import { readState, writeState } from '../state.js';
-import { execSync } from 'node:child_process';
+import { readState, writeState, getBranch } from '../state.js';
 import { openSync, statSync, readSync, closeSync } from 'node:fs';
 function findCustomTitle(transcriptPath) {
     try {
@@ -29,19 +28,6 @@ function findCustomTitle(transcriptPath) {
         // transcript not readable
     }
     return null;
-}
-function getBranch(cwd, fallback) {
-    try {
-        return execSync('git rev-parse --abbrev-ref HEAD', {
-            cwd,
-            timeout: 2000,
-            encoding: 'utf-8',
-            stdio: ['pipe', 'pipe', 'pipe'],
-        }).trim();
-    }
-    catch {
-        return fallback;
-    }
 }
 async function main() {
     const raw = await readStdin();

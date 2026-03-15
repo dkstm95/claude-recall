@@ -1,4 +1,5 @@
 import { mkdirSync, readFileSync, writeFileSync, renameSync, readdirSync, unlinkSync } from 'node:fs';
+import { execSync } from 'node:child_process';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 export function getStateDir() {
@@ -40,6 +41,19 @@ export function listStates() {
         }
     }
     return states;
+}
+export function getBranch(cwd, fallback) {
+    try {
+        return execSync('git rev-parse --abbrev-ref HEAD', {
+            cwd,
+            timeout: 2000,
+            encoding: 'utf-8',
+            stdio: ['pipe', 'pipe', 'pipe'],
+        }).trim();
+    }
+    catch {
+        return fallback;
+    }
 }
 const CLEANUP_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 export function cleanupOldSessions() {
