@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.3.0
+
+- `/purpose` hint threshold reduced from 10 to 5 prompts
+
 ## 2.2.0
 
 - **Simplified HUD layout** — cleaner 2-line design
