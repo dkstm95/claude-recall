@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.12.0-blue?style=flat-square" alt="version">
+  <img src="https://img.shields.io/badge/version-2.0.0-blue?style=flat-square" alt="version">
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="license">
   <img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen?style=flat-square&logo=node.js&logoColor=white" alt="node">
   <img src="https://img.shields.io/badge/Claude_Code-Plugin-blueviolet?style=flat-square" alt="Claude Code Plugin">
@@ -35,20 +35,24 @@ A persistent 2-line summary above your prompt:
 
 | Element | Description | Source |
 |---------|-------------|--------|
-| **purpose** | What this session is about — auto-detected from your first prompt, or set manually with `/purpose` | claude-recall |
+| **purpose** | What this session is about — updates with each prompt, or set manually with `/purpose` | claude-recall |
 | **branch** | Current git branch | claude-recall |
 | **elapsed** | Time since last activity | claude-recall |
 | **model** | Active Claude model (e.g. Opus 4.6) | Claude Code built-in |
 | **context%** | Context window usage | Claude Code built-in |
 | **cost** | Cumulative session cost | Claude Code built-in |
 | **last prompt** | The last prompt you typed (line 2) | claude-recall |
+| **last action** | What Claude last did — e.g. `Edit: src/auth.ts` (line 2, right side) | claude-recall |
 
 ## Features
 
 - **Automatic tracking** — Just install. Session start, prompts, and session end are recorded automatically
-- **Auto-purpose** — Detects session purpose from your first prompt
+- **Dynamic purpose** — Purpose evolves with each prompt to reflect your current focus
+- **Action tracking** — Shows Claude's last action (file edits, commands) alongside your last prompt
+- **Context divergence warning** — Alerts you when a prompt seems unrelated, recommending a new session
 - **Built-in metrics** — Shows model, context%, and cost from Claude Code alongside session info
 - **Session overview** — `/list` shows all sessions in one table
+- **Auto-cleanup** — Completed sessions older than 7 days are automatically removed
 
 ```
  PURPOSE                          BRANCH        #  STATUS     ELAPSED
@@ -102,12 +106,19 @@ rm -rf ~/.claude/claude-recall/
 
 **Every time you type a prompt:**
 → Session purpose, branch, and last prompt are saved automatically
+→ If the prompt seems unrelated to the session, you'll get a warning
+
+**Every time Claude uses a tool (Write, Edit, Bash):**
+→ The action is recorded and shown on the statusline
 
 **Every time Claude responds:**
 → Saved info + model/cost are combined into a 2-line HUD (under 100ms)
 
 **When you run `/list`:**
 → All session files are scanned to show which sessions are active, stale, or completed
+
+**On session start:**
+→ Completed sessions older than 7 days are automatically cleaned up
 
 All state is stored as JSON files in `~/.claude/claude-recall/sessions/` — one file per session, separate from the plugin itself.
 
