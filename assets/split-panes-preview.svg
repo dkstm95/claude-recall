@@ -1,0 +1,156 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="440" viewBox="0 0 800 440">
+  <defs>
+    <style>
+      .bg { fill: #1a1b26; }
+      .bg-dim { fill: #16171f; }
+      .outer-bg { fill: #0f1018; }
+      .divider { stroke: #2a2b3d; stroke-width: 2; }
+      .dim { fill: #565a6e; font-family: 'Menlo', 'Consolas', 'Courier New', monospace; font-size: 11px; }
+      .text { fill: #c0caf5; font-family: 'Menlo', 'Consolas', 'Courier New', monospace; font-size: 11px; }
+      .cyan { fill: #7dcfff; font-family: 'Menlo', 'Consolas', 'Courier New', monospace; font-size: 11px; }
+      .yellow { fill: #e0af68; font-family: 'Menlo', 'Consolas', 'Courier New', monospace; font-size: 11px; }
+      .green { fill: #9ece6a; font-family: 'Menlo', 'Consolas', 'Courier New', monospace; font-size: 11px; }
+      .separator { fill: #3b3d52; font-family: 'Menlo', 'Consolas', 'Courier New', monospace; font-size: 11px; }
+      .prompt-bg { fill: #1e1f2e; }
+      .cursor { fill: #c0caf5; }
+      .title-bar { fill: #1e1f2e; }
+      .title-text { fill: #565a6e; font-family: 'SF Pro Display', 'Helvetica Neue', sans-serif; font-size: 12px; }
+      .label { fill: #565a6e; font-family: 'SF Pro Display', 'Helvetica Neue', sans-serif; font-size: 13px; font-weight: 500; }
+      .label-accent { fill: #7dcfff; font-family: 'SF Pro Display', 'Helvetica Neue', sans-serif; font-size: 13px; font-weight: 600; }
+      .pane-label { fill: #3b3d52; font-family: 'SF Pro Display', 'Helvetica Neue', sans-serif; font-size: 10px; }
+      .active-indicator { fill: none; stroke: #7dcfff; stroke-width: 1.5; }
+    </style>
+  </defs>
+
+  <!-- Overall background -->
+  <rect class="outer-bg" width="800" height="440" rx="12"/>
+
+  <!-- Window title bar -->
+  <rect class="title-bar" x="0" y="0" width="800" height="32" rx="12 12 0 0"/>
+  <!-- Traffic lights -->
+  <circle cx="20" cy="16" r="5.5" fill="#ff5f57"/>
+  <circle cx="38" cy="16" r="5.5" fill="#febc2e"/>
+  <circle cx="56" cy="16" r="5.5" fill="#28c840"/>
+  <text x="400" y="20" text-anchor="middle" class="title-text">Terminal — 4 panes</text>
+
+  <!-- Divider lines -->
+  <line class="divider" x1="400" y1="32" x2="400" y2="440"/>
+  <line class="divider" x1="0" y1="236" x2="800" y2="236"/>
+
+  <!-- ==================== Pane 1: Top-left (active) ==================== -->
+  <g transform="translate(2, 34)">
+    <rect class="bg" width="396" height="200"/>
+    <rect class="active-indicator" x="0" y="0" width="396" height="200"/>
+
+    <!-- Pane path -->
+    <text x="8" y="16" class="pane-label">~/api</text>
+
+    <!-- Content area (some response text) -->
+    <text class="dim" x="12" y="40">Here's the updated auth middleware with</text>
+    <text class="dim" x="12" y="55">JWT token validation...</text>
+
+    <!-- Statusline -->
+    <text y="148">
+      <tspan class="dim" x="10"> ⎯ </tspan>
+      <tspan class="text">Refactor auth middleware</tspan>
+      <tspan class="cyan" x="260">feat/jwt</tspan>
+      <tspan class="dim">  23m</tspan>
+    </text>
+    <text y="164">
+      <tspan class="dim" x="10"> › </tspan>
+      <tspan class="text">Add rate limiting to login</tspan>
+    </text>
+
+    <!-- Prompt -->
+    <rect class="prompt-bg" x="0" y="176" width="396" height="24"/>
+    <line x1="0" y1="176" x2="396" y2="176" stroke="#3b3d52" stroke-width="0.5"/>
+    <text y="192">
+      <tspan class="dim" x="10"> &gt; </tspan>
+      <tspan class="cursor">▎</tspan>
+    </text>
+  </g>
+
+  <!-- ==================== Pane 2: Top-right ==================== -->
+  <g transform="translate(402, 34)">
+    <rect class="bg-dim" width="396" height="200"/>
+
+    <text x="8" y="16" class="pane-label">~/web</text>
+
+    <text class="dim" x="12" y="40">The timeout was caused by missing</text>
+    <text class="dim" x="12" y="55">retry logic in the webhook handler.</text>
+
+    <text y="148">
+      <tspan class="dim" x="10"> ⎯ </tspan>
+      <tspan class="text">Fix payment API timeout</tspan>
+      <tspan class="cyan" x="260">fix/payment</tspan>
+      <tspan class="dim">  1h 12m</tspan>
+    </text>
+    <text y="164">
+      <tspan class="dim" x="10"> › </tspan>
+      <tspan class="text">Show me the error logs</tspan>
+    </text>
+
+    <rect class="prompt-bg" x="0" y="176" width="396" height="24"/>
+    <line x1="0" y1="176" x2="396" y2="176" stroke="#3b3d52" stroke-width="0.5"/>
+    <text y="192">
+      <tspan class="dim" x="10"> &gt; </tspan>
+      <tspan class="cursor">▎</tspan>
+    </text>
+  </g>
+
+  <!-- ==================== Pane 3: Bottom-left ==================== -->
+  <g transform="translate(2, 238)">
+    <rect class="bg-dim" width="396" height="196"/>
+
+    <text x="8" y="16" class="pane-label">~/api</text>
+
+    <text class="dim" x="12" y="40">Created test file:</text>
+    <text class="dim" x="12" y="55">src/tests/user-service.test.ts</text>
+
+    <text y="144">
+      <tspan class="dim" x="10"> ⎯ </tspan>
+      <tspan class="text">Add user service tests</tspan>
+      <tspan class="cyan" x="260">main</tspan>
+      <tspan class="dim">  8m</tspan>
+    </text>
+    <text y="160">
+      <tspan class="dim" x="10"> › </tspan>
+      <tspan class="text">Write tests for createUser</tspan>
+    </text>
+
+    <rect class="prompt-bg" x="0" y="172" width="396" height="24"/>
+    <line x1="0" y1="172" x2="396" y2="172" stroke="#3b3d52" stroke-width="0.5"/>
+    <text y="188">
+      <tspan class="dim" x="10"> &gt; </tspan>
+      <tspan class="cursor">▎</tspan>
+    </text>
+  </g>
+
+  <!-- ==================== Pane 4: Bottom-right ==================== -->
+  <g transform="translate(402, 238)">
+    <rect class="bg-dim" width="396" height="196"/>
+
+    <text x="8" y="16" class="pane-label">~/docs</text>
+
+    <text class="dim" x="12" y="40">Updated API documentation for the</text>
+    <text class="dim" x="12" y="55">new authentication endpoints.</text>
+
+    <text y="144">
+      <tspan class="dim" x="10"> ⎯ </tspan>
+      <tspan class="text">Update API docs</tspan>
+      <tspan class="cyan" x="260">docs/api-v2</tspan>
+      <tspan class="dim">  45m</tspan>
+    </text>
+    <text y="160">
+      <tspan class="dim" x="10"> › </tspan>
+      <tspan class="text">Add examples for OAuth flow</tspan>
+    </text>
+
+    <rect class="prompt-bg" x="0" y="172" width="396" height="24"/>
+    <line x1="0" y1="172" x2="396" y2="172" stroke="#3b3d52" stroke-width="0.5"/>
+    <text y="188">
+      <tspan class="dim" x="10"> &gt; </tspan>
+      <tspan class="cursor">▎</tspan>
+    </text>
+  </g>
+</svg>

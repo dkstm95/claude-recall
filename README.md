@@ -10,6 +10,12 @@ claude-recall automatically tracks the context of every Claude Code session, so 
   <img src="assets/statusline-preview.svg" alt="claude-recall statusline preview" width="720">
 </p>
 
+Works great with split panes too:
+
+<p align="center">
+  <img src="assets/split-panes-preview.svg" alt="claude-recall in split panes" width="800">
+</p>
+
 A persistent 2-line summary above your prompt:
 - **Line 1**: What this session is about (purpose) + branch + elapsed time + model + context usage + cost
 - **Line 2**: The last prompt you typed
