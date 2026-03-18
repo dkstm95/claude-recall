@@ -60,8 +60,12 @@ export function getTerminalWidth() {
     return 80;
 }
 const dim = (s) => `\x1b[2m${s}\x1b[0m`;
+const bold = (s) => `\x1b[1m${s}\x1b[0m`;
+const boldCyan = (s) => `\x1b[1;36m${s}\x1b[0m`;
 const cyan = (s) => `\x1b[36m${s}\x1b[0m`;
 const yellow = (s) => `\x1b[33m${s}\x1b[0m`;
+const green = (s) => `\x1b[32m${s}\x1b[0m`;
+const red = (s) => `\x1b[31m${s}\x1b[0m`;
 const MIN_PURPOSE_COLS = 15;
 const MIN_PROMPT_COLS = 15;
 const PURPOSE_HINT_THRESHOLD = 5;
@@ -79,7 +83,7 @@ function progressiveJoin(segments, budget) {
 }
 export function formatHud(state, termWidth, builtin) {
     const elapsed = formatElapsed(state.lastActivityAt || state.startedAt);
-    const prefixWidth = 3; // " ⎯ " or " › "
+    const prefixWidth = 3; // " ▍ "
     // === Line 1: stable info (purpose + hint + branch + model) ===
     const line1Segments = [];
     if (state.branch) {
@@ -104,11 +108,11 @@ export function formatHud(state, termWidth, builtin) {
     const hintWidth = showHint ? HINT_WIDTH : 0;
     const availPurpose = termWidth - prefixWidth - hintWidth - spaceForRight1;
     const purpose = state.purpose
-        ? truncate(state.purpose, Math.max(availPurpose, MIN_PURPOSE_COLS))
+        ? boldCyan(truncate(state.purpose, Math.max(availPurpose, MIN_PURPOSE_COLS)))
         : dim('(no purpose yet)');
     const purposeWidth = state.purpose ? visibleWidth(purpose) : 16;
     const gap1 = Math.max(1, termWidth - prefixWidth - purposeWidth - hintWidth - line1Right.width);
-    const prefix1 = dim(' \u23AF ');
+    const prefix1 = ' \u258D ';
     const line1 = prefix1 + purpose + hintText + ' '.repeat(gap1) + line1Right.text;
     // === Line 2: dynamic info (#turn + prompt + elapsed + ctx% + cost) ===
     if (!state.lastUserPrompt)
@@ -117,7 +121,9 @@ export function formatHud(state, termWidth, builtin) {
     const elapsedSeg = dim(elapsed);
     line2Segments.push({ text: elapsedSeg, width: visibleWidth(elapsedSeg) });
     if (builtin?.context_window?.used_percentage != null) {
-        const s = dim(`${Math.round(builtin.context_window.used_percentage)}%`);
+        const pct = Math.round(builtin.context_window.used_percentage);
+        const label = `${pct}%`;
+        const s = pct >= 90 ? red(label) : pct >= 70 ? yellow(label) : green(label);
         line2Segments.push({ text: s, width: visibleWidth(s) });
     }
     if (builtin?.cost?.total_cost_usd != null) {
@@ -132,10 +138,10 @@ export function formatHud(state, termWidth, builtin) {
     const line2Right = progressiveJoin(line2Segments, line2Budget);
     const spaceForRight2 = line2Right.width > 0 ? line2Right.width + 2 : 0;
     const maxPromptCols = Math.min(line2Budget - spaceForRight2, 80);
-    const promptText = truncate(state.lastUserPrompt, Math.max(maxPromptCols, MIN_PROMPT_COLS));
+    const promptText = bold(truncate(state.lastUserPrompt, Math.max(maxPromptCols, MIN_PROMPT_COLS)));
     const promptWidth = visibleWidth(promptText);
     const gap2 = Math.max(1, termWidth - prefixWidth - turnWidth - promptWidth - line2Right.width);
-    const prefix2 = dim(' \u203A ');
+    const prefix2 = ' \u258D ';
     const line2 = prefix2 + turnLabel + promptText + ' '.repeat(gap2) + line2Right.text;
     return line1 + '\n' + line2;
 }

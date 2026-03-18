@@ -1,5 +1,13 @@
 # Changelog
 
+## 2.8.0
+
+- **HUD visual enhancement** — improved readability across diverse terminal themes
+  - Accent bar prefix (`▍`) replaces dim `⎯` and `›` for consistent visual anchor
+  - Purpose text now **cyan+bold**, prompt text now **bold** — clear visual hierarchy
+  - Context % is color-coded: green (<70%), yellow (70-89%), red (≥90%)
+  - New ANSI helpers: `bold`, `boldCyan`, `green`, `red` (combined SGR codes, no nesting issues)
+
 ## 2.7.0
 
 - **Fix HUD documentation** — README tables now correctly show line 1 vs line 2 layout
