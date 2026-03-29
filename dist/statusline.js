@@ -1,6 +1,7 @@
 import { readStdin } from './stdin.js';
 import { readState } from './state.js';
 import { formatHud, getTerminalWidth } from './format.js';
+import { readConfig } from './config.js';
 async function main() {
     const raw = await readStdin();
     let input;
@@ -20,7 +21,8 @@ async function main() {
         cost: input.cost,
         context_window: input.context_window,
     };
-    const hud = formatHud(state, getTerminalWidth(), builtin);
+    const config = readConfig();
+    const hud = formatHud(state, getTerminalWidth(), builtin, config);
     process.stdout.write(hud + '\n');
 }
 main().catch(() => process.exit(0));

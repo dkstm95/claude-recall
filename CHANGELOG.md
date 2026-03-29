@@ -1,5 +1,12 @@
 # Changelog
 
+## 3.1.0
+
+- **HUD slot customization** — configure which elements appear in each line via `~/.claude/claude-recall/config.json`
+  - `line1`: choose from `purpose`, `branch`, `model`
+  - `line2`: choose from `turn`, `prompt`, `elapsed`, `context`, `cost`
+- **Color themes** — three presets via `"theme"` in config: `default` (cyan/bold), `minimal` (subdued, no color), `vivid` (bright/high contrast)
+
 ## 3.0.0
 
 - **Context crisis warning** — when context usage ≥ 90%, Line 2 shows red `⚠ try /continue` instead of cost

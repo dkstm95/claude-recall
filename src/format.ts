@@ -1,4 +1,6 @@
 import type { SessionState } from './state.js';
+import type { HudConfig } from './config.js';
+import { getThemeColors } from './config.js';
 
 export interface BuiltinData {
   model?: { display_name?: string };
@@ -119,20 +121,23 @@ function progressiveJoin(segments: Segment[], budget: number): { text: string; w
   return { text: '', width: 0 };
 }
 
-export function formatHud(state: SessionState, termWidth: number, builtin?: BuiltinData): string {
+export function formatHud(state: SessionState, termWidth: number, builtin?: BuiltinData, config?: HudConfig): string {
+  const l1 = config?.line1 ?? ['purpose', 'branch', 'model'];
+  const l2 = config?.line2 ?? ['turn', 'prompt', 'elapsed', 'context', 'cost'];
+  const tc = getThemeColors(config?.theme ?? 'default');
   const elapsed = formatElapsed(state.lastActivityAt || state.startedAt);
   const prefixWidth = 3; // " ▍ "
 
   // === Line 1: stable info (purpose + hint + branch + model) ===
   const line1Segments: Segment[] = [];
 
-  if (state.branch) {
-    const s = cyan(state.branch);
+  if (l1.includes('branch') && state.branch) {
+    const s = tc.branch(state.branch);
     line1Segments.push({ text: s, width: visibleWidth(s) });
   }
 
-  if (builtin?.model?.display_name) {
-    const s = yellow(builtin.model.display_name);
+  if (l1.includes('model') && builtin?.model?.display_name) {
+    const s = tc.model(builtin.model.display_name);
     line1Segments.push({ text: s, width: visibleWidth(s) });
   }
 
@@ -148,14 +153,21 @@ export function formatHud(state: SessionState, termWidth: number, builtin?: Buil
   const spaceForRight1 = line1Right.width > 0 ? line1Right.width + 2 : 0;
   const availWithHint = termWidth - prefixWidth - HINT_WIDTH - spaceForRight1;
   const showHint = wantsHint && availWithHint >= MIN_PURPOSE_COLS + 5;
-  const hintText = showHint ? dim('  (try /purpose)') : '';
+  const hintText = showHint ? tc.dim('  (try /purpose)') : '';
   const hintWidth = showHint ? HINT_WIDTH : 0;
 
   const availPurpose = termWidth - prefixWidth - hintWidth - spaceForRight1;
-  const purpose = state.purpose
-    ? boldCyan(truncate(state.purpose, Math.max(availPurpose, MIN_PURPOSE_COLS)))
-    : dim('(no purpose yet)');
-  const purposeWidth = state.purpose ? visibleWidth(purpose) : 16;
+  let purpose: string;
+  let purposeWidth: number;
+  if (l1.includes('purpose')) {
+    purpose = state.purpose
+      ? tc.purpose(truncate(state.purpose, Math.max(availPurpose, MIN_PURPOSE_COLS)))
+      : tc.dim('(no purpose yet)');
+    purposeWidth = state.purpose ? visibleWidth(purpose) : 16;
+  } else {
+    purpose = '';
+    purposeWidth = 0;
+  }
 
   const gap1 = Math.max(1, termWidth - prefixWidth - purposeWidth - hintWidth - line1Right.width);
   const accent = sessionColor(state.cwd, state.branch);
@@ -167,41 +179,48 @@ export function formatHud(state: SessionState, termWidth: number, builtin?: Buil
 
   const line2Segments: Segment[] = [];
 
-  const elapsedSeg = dim(elapsed);
-  line2Segments.push({ text: elapsedSeg, width: visibleWidth(elapsedSeg) });
+  if (l2.includes('elapsed')) {
+    const elapsedSeg = tc.dim(elapsed);
+    line2Segments.push({ text: elapsedSeg, width: visibleWidth(elapsedSeg) });
+  }
 
-  if (builtin?.context_window?.used_percentage != null) {
+  if (l2.includes('context') && builtin?.context_window?.used_percentage != null) {
     const pct = Math.round(builtin.context_window.used_percentage);
     if (pct >= 90) {
-      const warn = red(`${pct}% \u26A0 try /continue`);
+      const warn = tc.red(`${pct}% \u26A0 try /continue`);
       line2Segments.push({ text: warn, width: `${pct}% \u26A0 try /continue`.length });
     } else {
       const label = `${pct}%`;
-      const s = pct >= 70 ? yellow(label) : green(label);
+      const s = pct >= 70 ? tc.yellow(label) : tc.green(label);
       line2Segments.push({ text: s, width: visibleWidth(s) });
-      if (builtin?.cost?.total_cost_usd != null) {
+      if (l2.includes('cost') && builtin?.cost?.total_cost_usd != null) {
         const cost = builtin.cost.total_cost_usd;
-        const s2 = dim(cost < 0.01 ? '$0.00' : `$${cost.toFixed(2)}`);
+        const s2 = tc.dim(cost < 0.01 ? '$0.00' : `$${cost.toFixed(2)}`);
         line2Segments.push({ text: s2, width: visibleWidth(s2) });
       }
     }
-  } else if (builtin?.cost?.total_cost_usd != null) {
+  } else if (l2.includes('cost') && builtin?.cost?.total_cost_usd != null) {
     const cost = builtin.cost.total_cost_usd;
-    const s = dim(cost < 0.01 ? '$0.00' : `$${cost.toFixed(2)}`);
+    const s = tc.dim(cost < 0.01 ? '$0.00' : `$${cost.toFixed(2)}`);
     line2Segments.push({ text: s, width: visibleWidth(s) });
   }
 
-  const turnLabel = dim(`#${state.promptCount}  `);
-  const turnWidth = `#${state.promptCount}  `.length;
+  const hasTurn = l2.includes('turn');
+  const turnLabel = hasTurn ? tc.dim(`#${state.promptCount}  `) : '';
+  const turnWidth = hasTurn ? `#${state.promptCount}  `.length : 0;
 
   // Calculate right side of line 2, progressively drop if prompt too short
   const line2Budget = termWidth - prefixWidth - turnWidth;
   const line2Right = progressiveJoin(line2Segments, line2Budget);
   const spaceForRight2 = line2Right.width > 0 ? line2Right.width + 2 : 0;
 
-  const maxPromptCols = Math.min(line2Budget - spaceForRight2, 80);
-  const promptText = bold(truncate(state.lastUserPrompt, Math.max(maxPromptCols, MIN_PROMPT_COLS)));
-  const promptWidth = visibleWidth(promptText);
+  let promptText = '';
+  let promptWidth = 0;
+  if (l2.includes('prompt')) {
+    const maxPromptCols = Math.min(line2Budget - spaceForRight2, 80);
+    promptText = tc.prompt(truncate(state.lastUserPrompt, Math.max(maxPromptCols, MIN_PROMPT_COLS)));
+    promptWidth = visibleWidth(promptText);
+  }
 
   const gap2 = Math.max(1, termWidth - prefixWidth - turnWidth - promptWidth - line2Right.width);
   const prefix2 = ' ' + accent('\u258D') + ' ';

@@ -1,6 +1,7 @@
 import { readStdin } from './stdin.js';
 import { readState } from './state.js';
 import { formatHud, getTerminalWidth, type BuiltinData } from './format.js';
+import { readConfig } from './config.js';
 
 interface StatuslineInput {
   session_id?: string;
@@ -29,7 +30,8 @@ async function main(): Promise<void> {
     context_window: input.context_window,
   };
 
-  const hud = formatHud(state, getTerminalWidth(), builtin);
+  const config = readConfig();
+  const hud = formatHud(state, getTerminalWidth(), builtin, config);
   process.stdout.write(hud + '\n');
 }
 
