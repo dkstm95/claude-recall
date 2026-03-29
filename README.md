@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-3.2.1-blue?style=flat-square" alt="version">
+  <img src="https://img.shields.io/badge/version-3.2.2-blue?style=flat-square" alt="version">
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="license">
   <img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen?style=flat-square&logo=node.js&logoColor=white" alt="node">
   <img src="https://img.shields.io/badge/Claude_Code-Plugin-blueviolet?style=flat-square" alt="Claude Code Plugin">
@@ -29,12 +29,13 @@ claude-recall automatically tracks the context of every Claude Code session, so 
   <img src="assets/split-panes-preview.svg" alt="claude-recall: split panes" width="800">
 </p>
 
-### What's in the HUD
+## What's in the HUD
 
 A persistent 2-line summary above your prompt:
 
 | Element | Location | Description | Source |
 |---------|----------|-------------|--------|
+| **accent bar** | Line 1-2, left | Session-specific color bar (`▍`) — deterministic color from project dir + branch | claude-recall |
 | **purpose** | Line 1, left | What this session is about — auto-detected from first prompt, or set with `/purpose` | claude-recall |
 | **branch** | Line 1, right | Current git branch | claude-recall |
 | **model** | Line 1, right | Active Claude model (e.g. Opus) | Claude Code built-in |
@@ -65,6 +66,8 @@ A persistent 2-line summary above your prompt:
 - **Session overview** — `/list` shows all sessions in one table
 - **Session export** — `/export` saves session metadata as Markdown
 - **Auto-cleanup** — Completed sessions older than 7 days are automatically removed
+
+Use `/list` to see all sessions at once:
 
 ```
  PURPOSE                          BRANCH        #  STATUS     ELAPSED
@@ -145,13 +148,22 @@ rm -rf ~/.claude/claude-recall/
 **When you run `/purpose`:**
 → Claude analyzes the conversation and suggests a concise purpose summary
 
+**When you run `/continue`:**
+→ Claude summarizes the session and generates a handoff block you can paste into a new session
+
+**When you run `/export`:**
+→ Session metadata is saved as a Markdown file in the current directory
+
 **When you run `/list`:**
 → All session files are scanned to show which sessions are active, stale, or completed
+
+**Session accent colors:**
+→ Each session gets a unique color bar (`▍`) based on your project directory + branch, so you can identify sessions by color before reading any text
 
 **On session start:**
 → Completed sessions older than 7 days are automatically cleaned up
 
-All state is stored as JSON files in `~/.claude/claude-recall/sessions/` — one file per session, separate from the plugin itself.
+All state is stored as JSON files in `~/.claude/claude-recall/sessions/` — one file per session, separate from the plugin itself. HUD layout and themes are configurable via `~/.claude/claude-recall/config.json`.
 
 </details>
 

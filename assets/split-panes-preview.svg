@@ -6,8 +6,14 @@
       .divider { stroke: #2a2b3d; stroke-width: 2; }
       .dim { fill: #565a6e; font-family: 'Menlo', 'Consolas', 'Courier New', monospace; font-size: 11px; }
       .text { fill: #c0caf5; font-family: 'Menlo', 'Consolas', 'Courier New', monospace; font-size: 11px; }
+      .text-bold { fill: #c0caf5; font-family: 'Menlo', 'Consolas', 'Courier New', monospace; font-size: 11px; font-weight: bold; }
       .cyan { fill: #7dcfff; font-family: 'Menlo', 'Consolas', 'Courier New', monospace; font-size: 11px; }
+      .cyan-bold { fill: #7dcfff; font-family: 'Menlo', 'Consolas', 'Courier New', monospace; font-size: 11px; font-weight: bold; }
       .yellow { fill: #e0af68; font-family: 'Menlo', 'Consolas', 'Courier New', monospace; font-size: 11px; }
+      .green { fill: #9ece6a; font-family: 'Menlo', 'Consolas', 'Courier New', monospace; font-size: 11px; }
+      .red { fill: #f7768e; font-family: 'Menlo', 'Consolas', 'Courier New', monospace; font-size: 11px; }
+      .magenta { fill: #bb9af7; font-family: 'Menlo', 'Consolas', 'Courier New', monospace; font-size: 11px; }
+      .blue { fill: #7aa2f7; font-family: 'Menlo', 'Consolas', 'Courier New', monospace; font-size: 11px; }
       .prompt-bg { fill: #1e1f2e; }
       .cursor { fill: #c0caf5; }
       .title-bar { fill: #1e1f2e; }
@@ -29,25 +35,26 @@
   <line class="divider" x1="400" y1="32" x2="400" y2="440"/>
   <line class="divider" x1="0" y1="236" x2="800" y2="236"/>
 
-  <!-- Pane 1: Top-left (active) -->
+  <!-- Pane 1: Top-left (active) — accent: cyan -->
   <g transform="translate(2, 34)">
     <rect class="bg" width="396" height="200"/>
     <rect class="active-indicator" x="0" y="0" width="396" height="200"/>
     <text x="8" y="16" class="pane-label">~/api</text>
     <text class="dim" x="12" y="40">Here's the updated auth middleware with</text>
     <text class="dim" x="12" y="55">JWT token validation...</text>
-    <!-- Line 1: purpose + branch -->
+    <!-- Line 1 -->
     <text y="148">
-      <tspan class="dim" x="10"> ⎯ </tspan>
-      <tspan class="text">Refactor auth middleware</tspan>
+      <tspan class="cyan" x="10"> ▍ </tspan>
+      <tspan class="cyan-bold">Refactor auth middleware</tspan>
       <tspan class="cyan" x="300">feat/jwt</tspan>
     </text>
-    <!-- Line 2: #turn + prompt + elapsed -->
+    <!-- Line 2 -->
     <text y="164">
-      <tspan class="dim" x="10"> › </tspan>
+      <tspan class="cyan" x="10"> ▍ </tspan>
       <tspan class="dim">#12  </tspan>
-      <tspan class="text">Add rate limiting to login</tspan>
-      <tspan class="dim" x="340">23m</tspan>
+      <tspan class="text-bold">Add rate limiting to login</tspan>
+      <tspan class="dim" x="310">23m</tspan>
+      <tspan class="green" x="350">42%</tspan>
     </text>
     <rect class="prompt-bg" x="0" y="176" width="396" height="24"/>
     <line x1="0" y1="176" x2="396" y2="176" stroke="#3b3d52" stroke-width="0.5"/>
@@ -57,22 +64,23 @@
     </text>
   </g>
 
-  <!-- Pane 2: Top-right -->
+  <!-- Pane 2: Top-right — accent: magenta -->
   <g transform="translate(402, 34)">
     <rect class="bg-dim" width="396" height="200"/>
     <text x="8" y="16" class="pane-label">~/web</text>
     <text class="dim" x="12" y="40">The timeout was caused by missing</text>
     <text class="dim" x="12" y="55">retry logic in the webhook handler.</text>
     <text y="148">
-      <tspan class="dim" x="10"> ⎯ </tspan>
-      <tspan class="text">Fix payment API timeout</tspan>
+      <tspan class="magenta" x="10"> ▍ </tspan>
+      <tspan class="cyan-bold">Fix payment API timeout</tspan>
       <tspan class="cyan" x="280">fix/payment</tspan>
     </text>
     <text y="164">
-      <tspan class="dim" x="10"> › </tspan>
+      <tspan class="magenta" x="10"> ▍ </tspan>
       <tspan class="dim">#8  </tspan>
-      <tspan class="text">Show me the error logs</tspan>
-      <tspan class="dim" x="320">1h 12m</tspan>
+      <tspan class="text-bold">Show me the error logs</tspan>
+      <tspan class="dim" x="290">1h 12m</tspan>
+      <tspan class="yellow" x="345">78%</tspan>
     </text>
     <rect class="prompt-bg" x="0" y="176" width="396" height="24"/>
     <line x1="0" y1="176" x2="396" y2="176" stroke="#3b3d52" stroke-width="0.5"/>
@@ -82,22 +90,23 @@
     </text>
   </g>
 
-  <!-- Pane 3: Bottom-left -->
+  <!-- Pane 3: Bottom-left — accent: green -->
   <g transform="translate(2, 238)">
     <rect class="bg-dim" width="396" height="196"/>
     <text x="8" y="16" class="pane-label">~/api</text>
     <text class="dim" x="12" y="40">Created test file:</text>
     <text class="dim" x="12" y="55">src/tests/user-service.test.ts</text>
     <text y="144">
-      <tspan class="dim" x="10"> ⎯ </tspan>
-      <tspan class="text">Add user service tests</tspan>
+      <tspan class="green" x="10"> ▍ </tspan>
+      <tspan class="cyan-bold">Add user service tests</tspan>
       <tspan class="cyan" x="300">main</tspan>
     </text>
     <text y="160">
-      <tspan class="dim" x="10"> › </tspan>
+      <tspan class="green" x="10"> ▍ </tspan>
       <tspan class="dim">#3  </tspan>
-      <tspan class="text">Write tests for createUser</tspan>
-      <tspan class="dim" x="340">8m</tspan>
+      <tspan class="text-bold">Write tests for createUser</tspan>
+      <tspan class="dim" x="310">8m</tspan>
+      <tspan class="green" x="345">12%</tspan>
     </text>
     <rect class="prompt-bg" x="0" y="172" width="396" height="24"/>
     <line x1="0" y1="172" x2="396" y2="172" stroke="#3b3d52" stroke-width="0.5"/>
@@ -107,22 +116,23 @@
     </text>
   </g>
 
-  <!-- Pane 4: Bottom-right -->
+  <!-- Pane 4: Bottom-right — accent: blue, context 92% warning -->
   <g transform="translate(402, 238)">
     <rect class="bg-dim" width="396" height="196"/>
     <text x="8" y="16" class="pane-label">~/docs</text>
     <text class="dim" x="12" y="40">Updated API documentation for the</text>
     <text class="dim" x="12" y="55">new authentication endpoints.</text>
     <text y="144">
-      <tspan class="dim" x="10"> ⎯ </tspan>
-      <tspan class="text">Update API docs</tspan>
+      <tspan class="blue" x="10"> ▍ </tspan>
+      <tspan class="cyan-bold">Update API docs</tspan>
       <tspan class="cyan" x="280">docs/api-v2</tspan>
     </text>
     <text y="160">
-      <tspan class="dim" x="10"> › </tspan>
-      <tspan class="dim">#5  </tspan>
-      <tspan class="text">Add examples for OAuth flow</tspan>
-      <tspan class="dim" x="340">45m</tspan>
+      <tspan class="blue" x="10"> ▍ </tspan>
+      <tspan class="dim">#45  </tspan>
+      <tspan class="text-bold">Add examples for OAuth flow</tspan>
+      <tspan class="dim" x="290">3h 10m</tspan>
+      <tspan class="red" x="345">92% ⚠ /continue</tspan>
     </text>
     <rect class="prompt-bg" x="0" y="172" width="396" height="24"/>
     <line x1="0" y1="172" x2="396" y2="172" stroke="#3b3d52" stroke-width="0.5"/>

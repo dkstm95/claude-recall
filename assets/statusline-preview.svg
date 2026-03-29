@@ -7,9 +7,13 @@
       .frame-active { fill: none; stroke: #7dcfff; stroke-width: 1.5; }
       .dim { fill: #565a6e; font-family: 'Menlo', 'Consolas', 'Courier New', monospace; font-size: 12px; }
       .text { fill: #c0caf5; font-family: 'Menlo', 'Consolas', 'Courier New', monospace; font-size: 12px; }
+      .text-bold { fill: #c0caf5; font-family: 'Menlo', 'Consolas', 'Courier New', monospace; font-size: 12px; font-weight: bold; }
       .cyan { fill: #7dcfff; font-family: 'Menlo', 'Consolas', 'Courier New', monospace; font-size: 12px; }
+      .cyan-bold { fill: #7dcfff; font-family: 'Menlo', 'Consolas', 'Courier New', monospace; font-size: 12px; font-weight: bold; }
       .yellow { fill: #e0af68; font-family: 'Menlo', 'Consolas', 'Courier New', monospace; font-size: 12px; }
       .green { fill: #9ece6a; font-family: 'Menlo', 'Consolas', 'Courier New', monospace; font-size: 12px; }
+      .red { fill: #f7768e; font-family: 'Menlo', 'Consolas', 'Courier New', monospace; font-size: 12px; }
+      .magenta { fill: #bb9af7; font-family: 'Menlo', 'Consolas', 'Courier New', monospace; font-size: 12px; }
       .prompt-bg { fill: #1e1f2e; }
       .cursor { fill: #c0caf5; }
       .tab-bg { fill: #1e1f2e; }
@@ -26,7 +30,7 @@
     <tspan class="label-accent">instant context</tspan>
   </text>
 
-  <!-- Session 1 (active) -->
+  <!-- Session 1 (active) — accent: cyan -->
   <g transform="translate(20, 40)">
     <rect class="tab-active-bg" x="0" y="0" width="720" height="22" rx="6 6 0 0"/>
     <text y="15">
@@ -36,20 +40,20 @@
     </text>
     <rect class="bg" x="0" y="22" width="720" height="88" rx="0 0 6 6"/>
     <rect class="frame-active" x="0" y="0" width="720" height="110" rx="6"/>
-    <!-- Line 1: purpose + branch + model -->
+    <!-- Line 1: accent + purpose + branch + model -->
     <text y="50">
-      <tspan class="dim" x="14"> ⎯ </tspan>
-      <tspan class="text">Refactor auth middleware</tspan>
+      <tspan class="cyan" x="14"> ▍ </tspan>
+      <tspan class="cyan-bold">Refactor auth middleware</tspan>
       <tspan class="cyan" x="530">feat/jwt</tspan>
       <tspan class="yellow" x="630">Opus</tspan>
     </text>
-    <!-- Line 2: #turn + prompt + elapsed + ctx% + cost -->
+    <!-- Line 2: accent + #turn + prompt + elapsed + ctx% + cost -->
     <text y="70">
-      <tspan class="dim" x="14"> › </tspan>
+      <tspan class="cyan" x="14"> ▍ </tspan>
       <tspan class="dim">#12  </tspan>
-      <tspan class="text">Add rate limiting to the login endpoint</tspan>
+      <tspan class="text-bold">Add rate limiting to the login endpoint</tspan>
       <tspan class="dim" x="530">23m</tspan>
-      <tspan class="dim" x="580">42%</tspan>
+      <tspan class="green" x="580">42%</tspan>
       <tspan class="dim" x="630">$0.37</tspan>
     </text>
     <rect class="prompt-bg" x="1" y="84" width="718" height="25" rx="0 0 5 5"/>
@@ -60,7 +64,7 @@
     </text>
   </g>
 
-  <!-- Session 2 -->
+  <!-- Session 2 — accent: magenta, context 78% (yellow) -->
   <g transform="translate(20, 165)">
     <rect class="tab-bg" x="0" y="0" width="720" height="22" rx="6 6 0 0"/>
     <text y="15">
@@ -71,18 +75,18 @@
     <rect class="bg-dim" x="0" y="22" width="720" height="88" rx="0 0 6 6"/>
     <rect class="frame" x="0" y="0" width="720" height="110" rx="6"/>
     <text y="50">
-      <tspan class="dim" x="14"> ⎯ </tspan>
-      <tspan class="text">Fix payment API timeout</tspan>
+      <tspan class="magenta" x="14"> ▍ </tspan>
+      <tspan class="cyan-bold">Fix payment API timeout</tspan>
       <tspan class="cyan" x="530">fix/payment</tspan>
       <tspan class="yellow" x="650">Sonnet</tspan>
     </text>
     <text y="70">
-      <tspan class="dim" x="14"> › </tspan>
+      <tspan class="magenta" x="14"> ▍ </tspan>
       <tspan class="dim">#8  </tspan>
-      <tspan class="text">Show me the error logs from the webhook handler</tspan>
+      <tspan class="text-bold">Show me the error logs from the webhook</tspan>
       <tspan class="dim" x="530">1h 12m</tspan>
-      <tspan class="dim" x="600">67%</tspan>
-      <tspan class="dim" x="640">$0.85</tspan>
+      <tspan class="yellow" x="600">78%</tspan>
+      <tspan class="dim" x="645">$0.85</tspan>
     </text>
     <rect class="prompt-bg" x="1" y="84" width="718" height="25" rx="0 0 5 5"/>
     <line x1="1" y1="84" x2="719" y2="84" stroke="#3b3d52" stroke-width="0.5"/>
@@ -92,7 +96,7 @@
     </text>
   </g>
 
-  <!-- Session 3 -->
+  <!-- Session 3 — accent: green, context 92% (red warning) -->
   <g transform="translate(20, 290)">
     <rect class="tab-bg" x="0" y="0" width="720" height="22" rx="6 6 0 0"/>
     <text y="15">
@@ -103,18 +107,17 @@
     <rect class="bg-dim" x="0" y="22" width="720" height="55" rx="0 0 6 6"/>
     <rect class="frame" x="0" y="0" width="720" height="77" rx="6"/>
     <text y="50">
-      <tspan class="dim" x="14"> ⎯ </tspan>
-      <tspan class="text">Add unit tests for user service</tspan>
+      <tspan class="green" x="14"> ▍ </tspan>
+      <tspan class="cyan-bold">Add unit tests for user service</tspan>
       <tspan class="cyan" x="530">main</tspan>
       <tspan class="yellow" x="600">Opus</tspan>
     </text>
     <text y="70">
-      <tspan class="dim" x="14"> › </tspan>
-      <tspan class="dim">#3  </tspan>
-      <tspan class="text">Write tests for the createUser and deleteUser methods</tspan>
-      <tspan class="dim" x="580">8m</tspan>
-      <tspan class="dim" x="620">12%</tspan>
-      <tspan class="dim" x="660">$0.09</tspan>
+      <tspan class="green" x="14"> ▍ </tspan>
+      <tspan class="dim">#47  </tspan>
+      <tspan class="text-bold">Write tests for deleteUser method</tspan>
+      <tspan class="dim" x="530">2h 5m</tspan>
+      <tspan class="red" x="590">92% ⚠ try /continue</tspan>
     </text>
   </g>
 </svg>
