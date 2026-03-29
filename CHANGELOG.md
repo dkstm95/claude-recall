@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.2.0
+
+- **`/continue` command** — generates a session handoff summary for seamless context transfer to a new session when context is running out
+- **`/export` command** — exports session metadata as a Markdown file for documentation and review
+
 ## 3.1.0
 
 - **HUD slot customization** — configure which elements appear in each line via `~/.claude/claude-recall/config.json`
