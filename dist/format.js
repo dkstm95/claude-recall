@@ -66,6 +66,22 @@ const cyan = (s) => `\x1b[36m${s}\x1b[0m`;
 const yellow = (s) => `\x1b[33m${s}\x1b[0m`;
 const green = (s) => `\x1b[32m${s}\x1b[0m`;
 const red = (s) => `\x1b[31m${s}\x1b[0m`;
+const ACCENT_COLORS = [
+    (s) => `\x1b[36m${s}\x1b[0m`, // cyan
+    (s) => `\x1b[35m${s}\x1b[0m`, // magenta
+    (s) => `\x1b[34m${s}\x1b[0m`, // blue
+    (s) => `\x1b[33m${s}\x1b[0m`, // yellow
+    (s) => `\x1b[32m${s}\x1b[0m`, // green
+    (s) => `\x1b[31m${s}\x1b[0m`, // red
+];
+function sessionColor(cwd, branch) {
+    const key = `${cwd}:${branch}`;
+    let hash = 0;
+    for (let i = 0; i < key.length; i++) {
+        hash = ((hash << 5) - hash + key.charCodeAt(i)) | 0;
+    }
+    return ACCENT_COLORS[Math.abs(hash) % ACCENT_COLORS.length];
+}
 const MIN_PURPOSE_COLS = 15;
 const MIN_PROMPT_COLS = 15;
 const PURPOSE_HINT_THRESHOLD = 5;
@@ -112,7 +128,8 @@ export function formatHud(state, termWidth, builtin) {
         : dim('(no purpose yet)');
     const purposeWidth = state.purpose ? visibleWidth(purpose) : 16;
     const gap1 = Math.max(1, termWidth - prefixWidth - purposeWidth - hintWidth - line1Right.width);
-    const prefix1 = ' \u258D ';
+    const accent = sessionColor(state.cwd, state.branch);
+    const prefix1 = ' ' + accent('\u258D') + ' ';
     const line1 = prefix1 + purpose + hintText + ' '.repeat(gap1) + line1Right.text;
     // === Line 2: dynamic info (#turn + prompt + elapsed + ctx% + cost) ===
     if (!state.lastUserPrompt)
@@ -122,11 +139,22 @@ export function formatHud(state, termWidth, builtin) {
     line2Segments.push({ text: elapsedSeg, width: visibleWidth(elapsedSeg) });
     if (builtin?.context_window?.used_percentage != null) {
         const pct = Math.round(builtin.context_window.used_percentage);
-        const label = `${pct}%`;
-        const s = pct >= 90 ? red(label) : pct >= 70 ? yellow(label) : green(label);
-        line2Segments.push({ text: s, width: visibleWidth(s) });
+        if (pct >= 90) {
+            const warn = red(`${pct}% \u26A0 try /continue`);
+            line2Segments.push({ text: warn, width: `${pct}% \u26A0 try /continue`.length });
+        }
+        else {
+            const label = `${pct}%`;
+            const s = pct >= 70 ? yellow(label) : green(label);
+            line2Segments.push({ text: s, width: visibleWidth(s) });
+            if (builtin?.cost?.total_cost_usd != null) {
+                const cost = builtin.cost.total_cost_usd;
+                const s2 = dim(cost < 0.01 ? '$0.00' : `$${cost.toFixed(2)}`);
+                line2Segments.push({ text: s2, width: visibleWidth(s2) });
+            }
+        }
     }
-    if (builtin?.cost?.total_cost_usd != null) {
+    else if (builtin?.cost?.total_cost_usd != null) {
         const cost = builtin.cost.total_cost_usd;
         const s = dim(cost < 0.01 ? '$0.00' : `$${cost.toFixed(2)}`);
         line2Segments.push({ text: s, width: visibleWidth(s) });
@@ -141,7 +169,7 @@ export function formatHud(state, termWidth, builtin) {
     const promptText = bold(truncate(state.lastUserPrompt, Math.max(maxPromptCols, MIN_PROMPT_COLS)));
     const promptWidth = visibleWidth(promptText);
     const gap2 = Math.max(1, termWidth - prefixWidth - turnWidth - promptWidth - line2Right.width);
-    const prefix2 = ' \u258D ';
+    const prefix2 = ' ' + accent('\u258D') + ' ';
     const line2 = prefix2 + turnLabel + promptText + ' '.repeat(gap2) + line2Right.text;
     return line1 + '\n' + line2;
 }

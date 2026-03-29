@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.0.0
+
+- **Context crisis warning** — when context usage ≥ 90%, Line 2 shows red `⚠ try /continue` instead of cost
+- **Session accent colors** — each session gets a deterministic accent color based on project directory + branch, enabling instant visual identification when switching sessions
+
 ## 2.9.0
 
 - **Hook robustness** — all hooks now gracefully handle malformed stdin (output `{}` instead of crashing)
