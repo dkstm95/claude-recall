@@ -1,6 +1,6 @@
 # claude-recall
 
-Claude Code plugin (v3.2.2) that provides a session awareness HUD (Heads-Up Display).
+Claude Code plugin (v3.3.0) that provides a session awareness HUD (Heads-Up Display).
 Tracks purpose, activity, git branch, and prompt count for every parallel Claude Code session.
 
 - **Author**: seungilahn

@@ -83,11 +83,17 @@ async function main(): Promise<void> {
   state.lastUserPromptAt = now;
   state.lastActivityAt = now;
 
-  // Auto-purpose on first prompt only
-  if (state.promptCount === 1 && state.purposeSource !== 'manual') {
-    state.purpose = prompt.slice(0, 60).replace(/[\n\t\r]/g, ' ');
-    state.purposeSource = 'auto';
-    state.purposeSetAt = now;
+  // Auto-purpose: set on first prompt, refine at prompt #3 if current is longer
+  if (state.purposeSource !== 'manual') {
+    const candidate = prompt.slice(0, 60).replace(/[\n\t\r]/g, ' ');
+    if (state.promptCount === 1) {
+      state.purpose = candidate;
+      state.purposeSource = 'auto';
+      state.purposeSetAt = now;
+    } else if (state.promptCount === 3 && state.purposeSource === 'auto' && candidate.length > state.purpose.length) {
+      state.purpose = candidate;
+      state.purposeSetAt = now;
+    }
   }
 
   // Custom-title from transcript

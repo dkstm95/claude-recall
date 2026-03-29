@@ -114,9 +114,9 @@ export function formatHud(state, termWidth, builtin, config) {
         const s = tc.model(builtin.model.display_name);
         line1Segments.push({ text: s, width: visibleWidth(s) });
     }
-    // Purpose hint
+    // Purpose hint: persistent after threshold when still auto-detected
     const wantsHint = state.promptCount >= PURPOSE_HINT_THRESHOLD
-        && state.promptCount % PURPOSE_HINT_THRESHOLD === 0;
+        && state.purposeSource === 'auto';
     // Calculate right side of line 1
     const line1Right = progressiveJoin(line1Segments, termWidth - prefixWidth);
     // Try hint, drop it if purpose would be too short

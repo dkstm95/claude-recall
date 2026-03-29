@@ -38,6 +38,8 @@ function listCommand(): void {
   const header = ` ${'PURPOSE'.padEnd(34)} ${'BRANCH'.padEnd(14)} ${'#'.padStart(2)}  ${'STATUS'.padEnd(11)} ELAPSED`;
   console.log(dim(header));
 
+  let staleCount = 0;
+
   for (const s of filtered) {
     let status: string;
     let statusLabel: string;
@@ -50,6 +52,7 @@ function listCommand(): void {
     } else {
       status = 'stale';
       statusLabel = yellow(status);
+      staleCount++;
     }
 
     const purpose = padDisplay(truncate(s.purpose || '(no purpose)', 34), 34);
@@ -59,6 +62,12 @@ function listCommand(): void {
 
     const statusPadded = statusLabel + ' '.repeat(Math.max(0, 11 - status.length));
     console.log(` ${purpose} ${branch} ${count}  ${statusPadded} ${elapsed}`);
+  }
+
+  if (staleCount > 0) {
+    console.log('');
+    console.log(dim(`  ${staleCount} stale session${staleCount > 1 ? 's' : ''} — from crashed or closed Claude Code instances.`));
+    console.log(dim(`  They will be auto-cleaned 7 days after completion.`));
   }
 }
 

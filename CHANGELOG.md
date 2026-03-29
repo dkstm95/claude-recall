@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.3.0
+
+- **Smart purpose refinement** — at prompt #3, auto-purpose is updated if the current prompt is more descriptive (longer) than the first prompt
+- **Fix purpose hint flickering** — `(try /purpose)` hint now shows persistently after 5+ prompts when purpose is auto-detected, instead of flickering on/off at every 5th prompt
+- **Stale session tip** — `/list` now shows a summary when stale sessions are detected, explaining they will be auto-cleaned
+
 ## 3.2.2
 
 - **Update preview images** — SVGs now reflect v3.x HUD: accent bars (`▍`), session-specific colors, bold purpose, color-coded context%, `⚠ try /continue` warning
