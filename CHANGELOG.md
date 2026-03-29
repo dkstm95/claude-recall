@@ -1,5 +1,11 @@
 # Changelog
 
+## 3.2.1
+
+- **Documentation update** — README.md/README.ko.md now document all v3.x features: accent colors, context warning, config/themes, /continue, /export
+- **Positioning refinement** — marketplace description emphasizes "multi-session awareness" as the unique value proposition
+- **CLAUDE.md sync** — architecture docs updated with new files (config.ts, continue.md, export.md) and patterns
+
 ## 3.2.0
 
 - **`/continue` command** — generates a session handoff summary for seamless context transfer to a new session when context is running out

@@ -4,17 +4,17 @@
     "name": "seungilahn"
   },
   "metadata": {
-    "description": "Session awareness HUD for Claude Code",
-    "version": "3.2.0"
+    "description": "Multi-session awareness HUD for Claude Code — know what every session is doing at a glance",
+    "version": "3.2.1"
   },
   "plugins": [
     {
       "name": "claude-recall",
       "source": "./",
-      "description": "Session awareness HUD - tracks purpose, activity, and branch for every Claude Code session",
-      "version": "3.2.0",
+      "description": "Multi-session awareness HUD — instant context recovery when switching between parallel Claude Code sessions. Tracks purpose, branch, prompts, and context usage with customizable themes.",
+      "version": "3.2.1",
       "author": { "name": "seungilahn" },
-      "keywords": ["statusline", "session", "hud", "context", "productivity"],
+      "keywords": ["statusline", "session", "hud", "context", "productivity", "multi-session", "parallel", "theme", "purpose"],
       "category": "productivity"
     }
   ]

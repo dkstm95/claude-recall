@@ -1,6 +1,6 @@
 # claude-recall
 
-Claude Code plugin (v3.2.0) that provides a session awareness HUD (Heads-Up Display).
+Claude Code plugin (v3.2.1) that provides a session awareness HUD (Heads-Up Display).
 Tracks purpose, activity, git branch, and prompt count for every parallel Claude Code session.
 
 - **Author**: seungilahn
@@ -28,10 +28,13 @@ npm install          # Install dev dependencies (typescript, @types/node)
 commands/                 # Slash commands (markdown with frontmatter)
   list.md                 #   /list — show all tracked sessions
   purpose.md              #   /purpose [text] — set or auto-suggest session purpose
+  continue.md             #   /continue — generate session handoff summary
+  export.md               #   /export — export session metadata as Markdown
   setup.md                #   /setup — configure statusline & launcher script
 hooks/
   hooks.json              # Hook registration (SessionStart, UserPromptSubmit, SessionEnd)
 src/                      # TypeScript source
+  config.ts               #   HudConfig interface, theme colors, config file reader
   state.ts                #   SessionState interface, read/write JSON, cleanup, git branch
   format.ts               #   2-line HUD formatter, CJK double-width support, progressive truncation
   statusline.ts           #   Entry point: stdin JSON -> formatHud() -> stdout
@@ -54,6 +57,8 @@ Statusline render  -> statusline.ts     -> reads session JSON + stdin metrics ->
 SessionEnd event   -> session-end.ts    -> marks status='completed'
 /list command      -> cli.ts            -> reads all session files, checks PID alive, displays table
 /purpose command   -> purpose.md        -> manual set or AI-generated from transcript
+/continue command  -> continue.md       -> generates session handoff summary for new session
+/export command    -> export.md         -> exports session metadata as Markdown file
 ```
 
 ## Session State Schema
@@ -79,13 +84,15 @@ Line 1 (stable):   ▍ [purpose] (try /purpose) [branch] [model]
 Line 2 (dynamic):  ▍ [#turn last_prompt] [elapsed] [context%] [$cost]
 ```
 
-- Accent bar prefix (`▍`) provides consistent visual anchor
-- Purpose: cyan+bold, prompt: bold — clear visual hierarchy
+- Accent bar prefix (`▍`) with session-specific color (deterministic hash of cwd+branch)
+- Purpose: cyan+bold, prompt: bold — clear visual hierarchy (customizable via theme)
 - Context %: green (<70%), yellow (70-89%), red (≥90%)
+- Context ≥ 90%: cost replaced by red `⚠ try /continue` warning
 - Line 2 only appears after the first prompt
 - `/purpose` hint shows after 5+ prompts when purposeSource is 'auto'
 - Progressive truncation: right-side elements drop on narrow terminals
 - Minimum widths: purpose >= 15 cols, prompt >= 15 cols
+- Configurable via `~/.claude/claude-recall/config.json` (line1/line2 slots, theme)
 
 ## Key Patterns
 
@@ -95,7 +102,10 @@ Line 2 (dynamic):  ▍ [#turn last_prompt] [elapsed] [context%] [$cost]
 - **Slash command filtering**: prompt-submit.ts ignores prompts starting with `/`
 - **PID-based status**: cli.ts uses `process.kill(pid, 0)` to detect active vs stale sessions
 - **Lazy cleanup**: Old completed sessions (>7 days) cleaned on SessionStart, not continuously
-- **Custom-title detection**: prompt-submit.ts scans transcript for `custom-title` JSON entries
+- **Custom-title detection**: prompt-submit.ts scans transcript for `custom-title` JSON entries (max 100 lines)
+- **Git call optimization**: branch detection runs every 10 prompts, not every prompt
+- **Theme system**: ThemeColors interface abstracts all color calls; 3 presets (default, minimal, vivid)
+- **Config-driven HUD**: line1/line2 element arrays control which segments render
 
 ## Coding Conventions
 

@@ -1,6 +1,6 @@
 {
   "name": "claude-recall",
-  "version": "3.2.0",
-  "description": "Session awareness HUD - tracks purpose, activity, and branch for every Claude Code session",
+  "version": "3.2.1",
+  "description": "Multi-session awareness HUD — instant context recovery when switching between parallel Claude Code sessions",
   "author": { "name": "seungilahn" }
 }
