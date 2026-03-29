@@ -14,7 +14,7 @@ function isWide(code) {
         (code >= 0x30000 && code <= 0x3fffd) // CJK Ext G+
     );
 }
-function displayWidth(str) {
+export function displayWidth(str) {
     let w = 0;
     for (const ch of str) {
         w += isWide(ch.codePointAt(0)) ? 2 : 1;

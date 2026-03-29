@@ -5,14 +5,14 @@
   },
   "metadata": {
     "description": "Session awareness HUD for Claude Code",
-    "version": "2.8.0"
+    "version": "2.9.0"
   },
   "plugins": [
     {
       "name": "claude-recall",
       "source": "./",
       "description": "Session awareness HUD - tracks purpose, activity, and branch for every Claude Code session",
-      "version": "2.8.0",
+      "version": "2.9.0",
       "author": { "name": "seungilahn" },
       "keywords": ["statusline", "session", "hud", "context", "productivity"],
       "category": "productivity"

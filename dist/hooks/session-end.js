@@ -2,7 +2,14 @@ import { readStdin } from '../stdin.js';
 import { readState, writeState } from '../state.js';
 async function main() {
     const raw = await readStdin();
-    const input = JSON.parse(raw);
+    let input;
+    try {
+        input = JSON.parse(raw);
+    }
+    catch {
+        process.stdout.write('{}\n');
+        return;
+    }
     const sessionId = input.session_id;
     const now = new Date().toISOString();
     const state = readState(sessionId);

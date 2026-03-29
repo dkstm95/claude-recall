@@ -12,7 +12,9 @@ function findCustomTitle(transcriptPath: string): string | null {
     closeSync(fd);
 
     const lines = buf.toString('utf-8').split('\n').reverse();
-    for (const line of lines) {
+    const maxScan = Math.min(lines.length, 100);
+    for (let i = 0; i < maxScan; i++) {
+      const line = lines[i];
       if (line.includes('custom-title')) {
         try {
           const parsed = JSON.parse(line);
@@ -32,12 +34,18 @@ function findCustomTitle(transcriptPath: string): string | null {
 
 async function main(): Promise<void> {
   const raw = await readStdin();
-  const input = JSON.parse(raw);
+  let input: Record<string, unknown>;
+  try {
+    input = JSON.parse(raw);
+  } catch {
+    process.stdout.write('{}\n');
+    return;
+  }
 
-  const sessionId: string = input.session_id;
-  const prompt: string = input.user_prompt ?? input.prompt ?? '';
-  const cwd: string = input.cwd ?? process.cwd();
-  const transcriptPath: string = input.transcript_path ?? '';
+  const sessionId = input.session_id as string;
+  const prompt = ((input.user_prompt ?? input.prompt ?? '') as string);
+  const cwd = ((input.cwd ?? process.cwd()) as string);
+  const transcriptPath = ((input.transcript_path ?? '') as string);
 
   const now = new Date().toISOString();
   let state = readState(sessionId);
@@ -92,8 +100,10 @@ async function main(): Promise<void> {
     }
   }
 
-  // Branch
-  state.branch = getBranch(cwd, state.branch);
+  // Refresh branch every 10 prompts (git call is expensive)
+  if (state.promptCount % 10 === 1 || !state.branch) {
+    state.branch = getBranch(cwd, state.branch);
+  }
 
   writeState(sessionId, state);
   process.stdout.write('{}\n');

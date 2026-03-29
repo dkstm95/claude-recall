@@ -30,11 +30,18 @@ function findPid(sessionId) {
 }
 async function main() {
     const raw = await readStdin();
-    const input = JSON.parse(raw);
+    let input;
+    try {
+        input = JSON.parse(raw);
+    }
+    catch {
+        process.stdout.write('{}\n');
+        return;
+    }
     const sessionId = input.session_id;
-    const cwd = input.cwd ?? process.cwd();
-    const source = input.source ?? 'startup';
-    const model = input.model ?? '';
+    const cwd = (input.cwd ?? process.cwd());
+    const source = (input.source ?? 'startup');
+    const model = (input.model ?? '');
     const now = new Date().toISOString();
     // Clean up completed sessions older than 7 days
     cleanupOldSessions();

@@ -3,9 +3,15 @@ import { readState, writeState } from '../state.js';
 
 async function main(): Promise<void> {
   const raw = await readStdin();
-  const input = JSON.parse(raw);
+  let input: Record<string, unknown>;
+  try {
+    input = JSON.parse(raw);
+  } catch {
+    process.stdout.write('{}\n');
+    return;
+  }
 
-  const sessionId: string = input.session_id;
+  const sessionId = input.session_id as string;
   const now = new Date().toISOString();
 
   const state = readState(sessionId);

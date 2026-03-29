@@ -29,12 +29,18 @@ function findPid(sessionId: string): number {
 
 async function main(): Promise<void> {
   const raw = await readStdin();
-  const input = JSON.parse(raw);
+  let input: Record<string, unknown>;
+  try {
+    input = JSON.parse(raw);
+  } catch {
+    process.stdout.write('{}\n');
+    return;
+  }
 
-  const sessionId: string = input.session_id;
-  const cwd: string = input.cwd ?? process.cwd();
-  const source: string = input.source ?? 'startup';
-  const model: string = input.model ?? '';
+  const sessionId = input.session_id as string;
+  const cwd = (input.cwd ?? process.cwd()) as string;
+  const source = (input.source ?? 'startup') as string;
+  const model = (input.model ?? '') as string;
   const now = new Date().toISOString();
 
   // Clean up completed sessions older than 7 days

@@ -1,8 +1,13 @@
 import { listStates } from './state.js';
-import { truncate, formatElapsed } from './format.js';
+import { truncate, formatElapsed, displayWidth } from './format.js';
 const green = (s) => `\x1b[32m${s}\x1b[0m`;
 const yellow = (s) => `\x1b[33m${s}\x1b[0m`;
 const dim = (s) => `\x1b[2m${s}\x1b[0m`;
+function padDisplay(text, targetWidth) {
+    const currentWidth = displayWidth(text);
+    const pad = Math.max(0, targetWidth - currentWidth);
+    return text + ' '.repeat(pad);
+}
 function isPidAlive(pid) {
     try {
         process.kill(pid, 0);
@@ -40,11 +45,12 @@ function listCommand() {
             status = 'stale';
             statusLabel = yellow(status);
         }
-        const purpose = truncate(s.purpose || '(no purpose)', 34).padEnd(34);
-        const branch = truncate(s.branch || '-', 14).padEnd(14);
+        const purpose = padDisplay(truncate(s.purpose || '(no purpose)', 34), 34);
+        const branch = padDisplay(truncate(s.branch || '-', 14), 14);
         const count = String(s.promptCount).padStart(2);
         const elapsed = formatElapsed(s.startedAt);
-        console.log(` ${purpose} ${branch} ${count}  ${statusLabel.padEnd(11 + (statusLabel.length - status.length))} ${elapsed}`);
+        const statusPadded = statusLabel + ' '.repeat(Math.max(0, 11 - status.length));
+        console.log(` ${purpose} ${branch} ${count}  ${statusPadded} ${elapsed}`);
     }
 }
 function usage() {

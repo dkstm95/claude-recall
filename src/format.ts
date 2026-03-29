@@ -24,7 +24,7 @@ function isWide(code: number): boolean {
   );
 }
 
-function displayWidth(str: string): number {
+export function displayWidth(str: string): number {
   let w = 0;
   for (const ch of str) {
     w += isWide(ch.codePointAt(0)!) ? 2 : 1;

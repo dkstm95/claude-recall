@@ -1,5 +1,14 @@
 # Changelog
 
+## 2.9.0
+
+- **Hook robustness** — all hooks now gracefully handle malformed stdin (output `{}` instead of crashing)
+- **Fix CJK column alignment** — `/list` table columns now align correctly with CJK characters
+- **Optimize git calls** — branch detection runs every 10 prompts instead of every prompt
+- **Fix cleanup NaN** — sessions with invalid timestamps are now properly cleaned up
+- **Non-git directory handling** — branch display clears when switching to non-git directories
+- **Custom title scan limit** — transcript scan capped at 100 lines for safety
+
 ## 2.8.0
 
 - **HUD visual enhancement** — improved readability across diverse terminal themes

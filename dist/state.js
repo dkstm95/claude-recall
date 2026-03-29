@@ -51,7 +51,12 @@ export function getBranch(cwd, fallback) {
             stdio: ['pipe', 'pipe', 'pipe'],
         }).trim();
     }
-    catch {
+    catch (err) {
+        // If not a git repo, return empty (don't persist stale branch)
+        const message = err instanceof Error ? err.message : '';
+        if (message.includes('not a git repository'))
+            return '';
+        // For other errors (timeout, permissions), keep fallback
         return fallback;
     }
 }
@@ -73,8 +78,8 @@ export function cleanupOldSessions() {
             const raw = readFileSync(join(dir, f), 'utf-8');
             const state = JSON.parse(raw);
             if (state.status === 'completed') {
-                const age = now - new Date(state.lastActivityAt).getTime();
-                if (age > CLEANUP_MAX_AGE_MS) {
+                const ts = new Date(state.lastActivityAt || state.startedAt).getTime();
+                if (isNaN(ts) || now - ts > CLEANUP_MAX_AGE_MS) {
                     unlinkSync(join(dir, f));
                 }
             }
