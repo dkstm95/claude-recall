@@ -6,8 +6,8 @@ const DEFAULT_CONFIG = {
     line2: ['turn', 'prompt', 'elapsed', 'context', 'cost'],
     theme: 'default',
 };
-const VALID_LINE1 = ['purpose', 'branch', 'model'];
-const VALID_LINE2 = ['turn', 'prompt', 'elapsed', 'context', 'cost'];
+const VALID_LINE1 = ['purpose', 'branch', 'model', 'worktree'];
+const VALID_LINE2 = ['turn', 'prompt', 'elapsed', 'context', 'cost', 'rate_limits'];
 const VALID_THEMES = ['default', 'minimal', 'vivid'];
 export function getThemeColors(theme) {
     switch (theme) {
@@ -16,6 +16,7 @@ export function getThemeColors(theme) {
                 purpose: (s) => `\x1b[1m${s}\x1b[0m`, // bold only
                 branch: (s) => `\x1b[2m${s}\x1b[0m`, // dim
                 model: (s) => `\x1b[2m${s}\x1b[0m`, // dim
+                worktree: (s) => `\x1b[2m${s}\x1b[0m`, // dim
                 prompt: (s) => s, // plain
                 dim: (s) => `\x1b[2m${s}\x1b[0m`,
                 green: (s) => `\x1b[2m${s}\x1b[0m`, // dim (no color)
@@ -27,6 +28,7 @@ export function getThemeColors(theme) {
                 purpose: (s) => `\x1b[1;96m${s}\x1b[0m`, // bold bright cyan
                 branch: (s) => `\x1b[96m${s}\x1b[0m`, // bright cyan
                 model: (s) => `\x1b[93m${s}\x1b[0m`, // bright yellow
+                worktree: (s) => `\x1b[95m${s}\x1b[0m`, // bright magenta
                 prompt: (s) => `\x1b[1;97m${s}\x1b[0m`, // bold bright white
                 dim: (s) => `\x1b[90m${s}\x1b[0m`, // bright black
                 green: (s) => `\x1b[92m${s}\x1b[0m`, // bright green
@@ -38,6 +40,7 @@ export function getThemeColors(theme) {
                 purpose: (s) => `\x1b[1;36m${s}\x1b[0m`, // bold cyan
                 branch: (s) => `\x1b[36m${s}\x1b[0m`, // cyan
                 model: (s) => `\x1b[33m${s}\x1b[0m`, // yellow
+                worktree: (s) => `\x1b[35m${s}\x1b[0m`, // magenta
                 prompt: (s) => `\x1b[1m${s}\x1b[0m`, // bold
                 dim: (s) => `\x1b[2m${s}\x1b[0m`,
                 green: (s) => `\x1b[32m${s}\x1b[0m`,

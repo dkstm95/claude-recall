@@ -1,6 +1,6 @@
 {
   "name": "claude-recall",
-  "version": "3.3.0",
+  "version": "4.0.0",
   "description": "Multi-session awareness HUD — instant context recovery when switching between parallel Claude Code sessions",
   "author": { "name": "seungilahn" }
 }

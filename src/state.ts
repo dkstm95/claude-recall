@@ -5,19 +5,13 @@ import { homedir } from 'node:os';
 
 export interface SessionState {
   sessionId: string;
-  pid: number;
   purpose: string;
   purposeSource: 'auto' | 'manual' | 'rename';
-  purposeSetAt: string;
   branch: string;
   cwd: string;
-  status: 'active' | 'completed';
   promptCount: number;
   lastUserPrompt: string;
-  lastUserPromptAt: string;
   lastActivityAt: string;
-  startedAt: string;
-  model: string;
 }
 
 export function getStateDir(): string {
@@ -44,22 +38,6 @@ export function writeState(sessionId: string, state: SessionState): void {
   const tmp = `${target}.tmp.${process.pid}`;
   writeFileSync(tmp, JSON.stringify(state, null, 2) + '\n', 'utf-8');
   renameSync(tmp, target);
-}
-
-export function listStates(): SessionState[] {
-  const dir = getStateDir();
-  const files = readdirSync(dir);
-  const states: SessionState[] = [];
-  for (const f of files) {
-    if (!f.endsWith('.json') || f.includes('.tmp.')) continue;
-    try {
-      const raw = readFileSync(join(dir, f), 'utf-8');
-      states.push(JSON.parse(raw) as SessionState);
-    } catch {
-      // skip corrupt files
-    }
-  }
-  return states;
 }
 
 export function getBranch(cwd: string, fallback: string): string {
@@ -95,11 +73,9 @@ export function cleanupOldSessions(): void {
     try {
       const raw = readFileSync(join(dir, f), 'utf-8');
       const state = JSON.parse(raw) as SessionState;
-      if (state.status === 'completed') {
-        const ts = new Date(state.lastActivityAt || state.startedAt).getTime();
-        if (isNaN(ts) || now - ts > CLEANUP_MAX_AGE_MS) {
-          unlinkSync(join(dir, f));
-        }
+      const ts = new Date(state.lastActivityAt).getTime();
+      if (isNaN(ts) || now - ts > CLEANUP_MAX_AGE_MS) {
+        unlinkSync(join(dir, f));
       }
     } catch {
       // skip

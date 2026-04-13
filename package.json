@@ -1,6 +1,6 @@
 {
   "name": "claude-recall",
-  "version": "3.3.0",
+  "version": "4.0.0",
   "description": "Session awareness HUD for Claude Code",
   "type": "module",
   "scripts": {

@@ -25,23 +25,6 @@ export function writeState(sessionId, state) {
     writeFileSync(tmp, JSON.stringify(state, null, 2) + '\n', 'utf-8');
     renameSync(tmp, target);
 }
-export function listStates() {
-    const dir = getStateDir();
-    const files = readdirSync(dir);
-    const states = [];
-    for (const f of files) {
-        if (!f.endsWith('.json') || f.includes('.tmp.'))
-            continue;
-        try {
-            const raw = readFileSync(join(dir, f), 'utf-8');
-            states.push(JSON.parse(raw));
-        }
-        catch {
-            // skip corrupt files
-        }
-    }
-    return states;
-}
 export function getBranch(cwd, fallback) {
     try {
         return execSync('git rev-parse --abbrev-ref HEAD', {
@@ -77,11 +60,9 @@ export function cleanupOldSessions() {
         try {
             const raw = readFileSync(join(dir, f), 'utf-8');
             const state = JSON.parse(raw);
-            if (state.status === 'completed') {
-                const ts = new Date(state.lastActivityAt || state.startedAt).getTime();
-                if (isNaN(ts) || now - ts > CLEANUP_MAX_AGE_MS) {
-                    unlinkSync(join(dir, f));
-                }
+            const ts = new Date(state.lastActivityAt).getTime();
+            if (isNaN(ts) || now - ts > CLEANUP_MAX_AGE_MS) {
+                unlinkSync(join(dir, f));
             }
         }
         catch {

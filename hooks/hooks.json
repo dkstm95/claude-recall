@@ -8,10 +8,6 @@
     "UserPromptSubmit": [{
       "matcher": "*",
       "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/hooks/prompt-submit.js\"", "timeout": 10 }]
-    }],
-    "SessionEnd": [{
-      "matcher": "*",
-      "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/hooks/session-end.js\"", "timeout": 10 }]
     }]
   }
 }

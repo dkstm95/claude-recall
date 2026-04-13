@@ -26,24 +26,21 @@ npm install          # Install dev dependencies (typescript, @types/node)
   plugin.json             #   Name, version, description, author
   marketplace.json        #   Marketplace listing metadata
 commands/                 # Slash commands (markdown with frontmatter)
-  list.md                 #   /list — show all tracked sessions
   purpose.md              #   /purpose [text] — set or auto-suggest session purpose
   continue.md             #   /continue — generate session handoff summary
   export.md               #   /export — export session metadata as Markdown
   setup.md                #   /setup — configure statusline & launcher script
 hooks/
-  hooks.json              # Hook registration (SessionStart, UserPromptSubmit, SessionEnd)
+  hooks.json              # Hook registration (SessionStart, UserPromptSubmit)
 src/                      # TypeScript source
   config.ts               #   HudConfig interface, theme colors, config file reader
   state.ts                #   SessionState interface, read/write JSON, cleanup, git branch
   format.ts               #   2-line HUD formatter, CJK double-width support, progressive truncation
   statusline.ts           #   Entry point: stdin JSON -> formatHud() -> stdout
-  cli.ts                  #   /list implementation: table display with PID-alive detection
   stdin.ts                #   Async stdin reader utility
   hooks/
     session-start.ts      #   Initialize/resume session, cleanup old sessions (>7d)
     prompt-submit.ts      #   Track prompts, auto-purpose on 1st prompt, update branch
-    session-end.ts        #   Mark session completed
 dist/                     # Compiled JS (committed, do NOT edit directly)
 assets/                   # SVG preview images for marketplace
 ```
@@ -54,8 +51,6 @@ assets/                   # SVG preview images for marketplace
 SessionStart event -> session-start.ts -> creates/updates ~/.claude/claude-recall/sessions/{id}.json
 UserPromptSubmit   -> prompt-submit.ts  -> increments promptCount, auto-purpose, updates branch
 Statusline render  -> statusline.ts     -> reads session JSON + stdin metrics -> 2-line HUD output
-SessionEnd event   -> session-end.ts    -> marks status='completed'
-/list command      -> cli.ts            -> reads all session files, checks PID alive, displays table
 /purpose command   -> purpose.md        -> manual set or AI-generated from transcript
 /continue command  -> continue.md       -> generates session handoff summary for new session
 /export command    -> export.md         -> exports session metadata as Markdown file
@@ -68,20 +63,19 @@ Key fields in `~/.claude/claude-recall/sessions/{sessionId}.json`:
 | Field | Type | Description |
 |-------|------|-------------|
 | sessionId | string | Unique session ID |
-| pid | number | Claude Code process ID |
 | purpose | string | Session description (max 60 chars for auto) |
 | purposeSource | 'auto' \| 'manual' \| 'rename' | How purpose was set |
 | branch | string | Current git branch |
-| status | 'active' \| 'completed' | Session lifecycle state |
+| cwd | string | Working directory at session start |
 | promptCount | number | Total user prompts (excludes slash commands) |
 | lastUserPrompt | string | Last prompt text (first 200 chars) |
-| model | string | Claude model display name |
+| lastActivityAt | string | ISO timestamp of last activity (drives 7-day cleanup) |
 
 ## HUD Layout
 
 ```
-Line 1 (stable):   ▍ [purpose] (try /purpose) [branch] [model]
-Line 2 (dynamic):  ▍ [#turn last_prompt] [elapsed] [context%] [$cost]
+Line 1 (stable):   ▍ [purpose] (try /purpose|/continue) [worktree] [branch] [model]
+Line 2 (dynamic):  ▍ [#turn last_prompt] [elapsed] [context%] [$cost] [rate_limits]
 ```
 
 - Accent bar prefix (`▍`) with session-specific color (deterministic hash of cwd+branch)
@@ -89,7 +83,11 @@ Line 2 (dynamic):  ▍ [#turn last_prompt] [elapsed] [context%] [$cost]
 - Context %: green (<70%), yellow (70-89%), red (≥90%)
 - Context ≥ 90%: cost replaced by red `⚠ try /continue` warning
 - Line 2 only appears after the first prompt
-- `/purpose` hint shows after 5+ prompts when purposeSource is 'auto'
+- `/purpose` hint shows after 5+ prompts when purposeSource is 'auto'; takes priority
+- `/continue` hint shows on Line 1 when context is 70-89% (yields to `/purpose` hint and to the ≥90% warning)
+- `worktree` slot renders `⎇ <basename>` from stdin `workspace.git_worktree` — opt-in via config
+- `rate_limits` slot renders `5h:NN%` from stdin `rate_limits.five_hour`, suppressed <50, yellow 50-79, red ≥80 — opt-in via config
+- Elapsed source: stdin `cost.total_duration_ms` when present, else `state.lastActivityAt`
 - Progressive truncation: right-side elements drop on narrow terminals
 - Minimum widths: purpose >= 15 cols, prompt >= 15 cols
 - Configurable via `~/.claude/claude-recall/config.json` (line1/line2 slots, theme)
@@ -100,9 +98,10 @@ Line 2 (dynamic):  ▍ [#turn last_prompt] [elapsed] [context%] [$cost]
 - **Graceful degradation**: Hooks always output `{}` even on error; statusline exits silently on missing data
 - **CJK-aware**: `displayWidth()` and `isWide()` in format.ts handle double-width characters
 - **Slash command filtering**: prompt-submit.ts ignores prompts starting with `/`
-- **PID-based status**: cli.ts uses `process.kill(pid, 0)` to detect active vs stale sessions
-- **Lazy cleanup**: Old completed sessions (>7 days) cleaned on SessionStart, not continuously
-- **Custom-title detection**: prompt-submit.ts scans transcript for `custom-title` JSON entries (max 100 lines)
+- **Lazy cleanup**: Sessions idle for >7 days (by `lastActivityAt`) are cleaned on SessionStart, not continuously
+- **Rename detection**: statusline.ts reads `input.session_name` (from `/rename` or `--name`) and atomically updates `state.purpose` with `purposeSource='rename'` when it differs; never overwrites `manual` purposes
+- **Stdin-first elapsed**: statusline prefers `cost.total_duration_ms` from stdin over self-tracked timestamps
+- **Legacy field tolerance**: state.ts declares only 8 canonical fields; old JSON files with removed fields (`pid`, `status`, `startedAt`, `model`, `purposeSetAt`, `lastUserPromptAt`) still parse — extras are silently dropped on rewrite
 - **Git call optimization**: branch detection runs every 10 prompts, not every prompt
 - **Theme system**: ThemeColors interface abstracts all color calls; 3 presets (default, minimal, vivid)
 - **Config-driven HUD**: line1/line2 element arrays control which segments render

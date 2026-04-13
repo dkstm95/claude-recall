@@ -4,8 +4,10 @@ import { getThemeColors } from './config.js';
 
 export interface BuiltinData {
   model?: { display_name?: string };
-  cost?: { total_cost_usd?: number };
+  cost?: { total_cost_usd?: number; total_duration_ms?: number };
   context_window?: { used_percentage?: number };
+  workspace?: { git_worktree?: string };
+  rate_limits?: { five_hour?: { used_percentage?: number } };
 }
 
 // CJK characters occupy 2 columns in terminal
@@ -56,15 +58,24 @@ export function truncate(text: string, maxCols: number): string {
   return result + '\u2026';
 }
 
-export function formatElapsed(isoString: string): string {
-  const diff = Date.now() - new Date(isoString).getTime();
-  const mins = Math.floor(diff / 60000);
+function formatDurationMs(ms: number): string {
+  if (isNaN(ms) || ms < 0) return '0m';
+  const mins = Math.floor(ms / 60000);
   const hours = Math.floor(mins / 60);
   const days = Math.floor(hours / 24);
 
   if (days > 0) return `${days}d ${hours % 24}h`;
   if (hours > 0) return `${hours}h ${mins % 60}m`;
   return `${mins}m`;
+}
+
+export function formatElapsed(isoString: string): string {
+  if (!isoString) return '0m';
+  return formatDurationMs(Date.now() - new Date(isoString).getTime());
+}
+
+export function formatElapsedMs(ms: number): string {
+  return formatDurationMs(ms);
 }
 
 export function getTerminalWidth(): number {
@@ -121,15 +132,28 @@ function progressiveJoin(segments: Segment[], budget: number): { text: string; w
   return { text: '', width: 0 };
 }
 
+function basenameOf(p: string): string {
+  const parts = p.split(/[\\/]+/).filter(Boolean);
+  return parts.length > 0 ? parts[parts.length - 1] : p;
+}
+
 export function formatHud(state: SessionState, termWidth: number, builtin?: BuiltinData, config?: HudConfig): string {
   const l1 = config?.line1 ?? ['purpose', 'branch', 'model'];
   const l2 = config?.line2 ?? ['turn', 'prompt', 'elapsed', 'context', 'cost'];
   const tc = getThemeColors(config?.theme ?? 'default');
-  const elapsed = formatElapsed(state.lastActivityAt || state.startedAt);
+  const elapsed = builtin?.cost?.total_duration_ms != null
+    ? formatElapsedMs(builtin.cost.total_duration_ms)
+    : formatElapsed(state.lastActivityAt);
   const prefixWidth = 3; // " ▍ "
 
-  // === Line 1: stable info (purpose + hint + branch + model) ===
+  // === Line 1: stable info (purpose + hint + worktree + branch + model) ===
   const line1Segments: Segment[] = [];
+
+  if (l1.includes('worktree') && builtin?.workspace?.git_worktree) {
+    const name = basenameOf(builtin.workspace.git_worktree);
+    const s = tc.worktree('\u2387 ' + name);
+    line1Segments.push({ text: s, width: visibleWidth(s) });
+  }
 
   if (l1.includes('branch') && state.branch) {
     const s = tc.branch(state.branch);
@@ -142,8 +166,15 @@ export function formatHud(state: SessionState, termWidth: number, builtin?: Buil
   }
 
   // Purpose hint: persistent after threshold when still auto-detected
-  const wantsHint = state.promptCount >= PURPOSE_HINT_THRESHOLD
+  const wantsPurposeHint = state.promptCount >= PURPOSE_HINT_THRESHOLD
     && state.purposeSource === 'auto';
+
+  // Continue hint: context in 70-89% band (90%+ is owned by the line2 warning)
+  const ctxPct = builtin?.context_window?.used_percentage;
+  const wantsContinueHint = !wantsPurposeHint
+    && ctxPct != null
+    && ctxPct >= 70
+    && ctxPct < 90;
 
   // Calculate right side of line 1
   const line1Right = progressiveJoin(line1Segments, termWidth - prefixWidth);
@@ -152,9 +183,14 @@ export function formatHud(state: SessionState, termWidth: number, builtin?: Buil
   const HINT_WIDTH = 16;
   const spaceForRight1 = line1Right.width > 0 ? line1Right.width + 2 : 0;
   const availWithHint = termWidth - prefixWidth - HINT_WIDTH - spaceForRight1;
-  const showHint = wantsHint && availWithHint >= MIN_PURPOSE_COLS + 5;
-  const hintText = showHint ? tc.dim('  (try /purpose)') : '';
-  const hintWidth = showHint ? HINT_WIDTH : 0;
+  const showPurposeHint = wantsPurposeHint && availWithHint >= MIN_PURPOSE_COLS + 5;
+  const showContinueHint = !showPurposeHint && wantsContinueHint && availWithHint >= MIN_PURPOSE_COLS + 5;
+  const hintText = showPurposeHint
+    ? tc.dim('  (try /purpose)')
+    : showContinueHint
+      ? tc.dim('  (try /continue)')
+      : '';
+  const hintWidth = showPurposeHint || showContinueHint ? HINT_WIDTH : 0;
 
   const availPurpose = termWidth - prefixWidth - hintWidth - spaceForRight1;
   let purpose: string;
@@ -203,6 +239,15 @@ export function formatHud(state: SessionState, termWidth: number, builtin?: Buil
     const cost = builtin.cost.total_cost_usd;
     const s = tc.dim(cost < 0.01 ? '$0.00' : `$${cost.toFixed(2)}`);
     line2Segments.push({ text: s, width: visibleWidth(s) });
+  }
+
+  if (l2.includes('rate_limits') && builtin?.rate_limits?.five_hour?.used_percentage != null) {
+    const pct = Math.round(builtin.rate_limits.five_hour.used_percentage);
+    if (pct >= 50) {
+      const label = `5h:${pct}%`;
+      const s = pct >= 80 ? tc.red(label) : tc.yellow(label);
+      line2Segments.push({ text: s, width: visibleWidth(s) });
+    }
   }
 
   const hasTurn = l2.includes('turn');

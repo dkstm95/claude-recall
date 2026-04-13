@@ -1,5 +1,5 @@
 import { readStdin } from './stdin.js';
-import { readState } from './state.js';
+import { readState, writeState } from './state.js';
 import { formatHud, getTerminalWidth } from './format.js';
 import { readConfig } from './config.js';
 async function main() {
@@ -16,10 +16,21 @@ async function main() {
     const state = readState(input.session_id);
     if (!state)
         process.exit(0);
+    // Sync rename: when Claude Code's session_name (from --name or /rename) differs
+    // from our tracked purpose, adopt it. Manual purposes are never overwritten.
+    if (input.session_name &&
+        state.purposeSource !== 'manual' &&
+        state.purpose !== input.session_name) {
+        state.purpose = input.session_name;
+        state.purposeSource = 'rename';
+        writeState(input.session_id, state);
+    }
     const builtin = {
         model: input.model,
         cost: input.cost,
         context_window: input.context_window,
+        workspace: input.workspace,
+        rate_limits: input.rate_limits,
     };
     const config = readConfig();
     const hud = formatHud(state, getTerminalWidth(), builtin, config);

@@ -30,17 +30,20 @@ Follow these steps:
    {
      "statusLine": {
        "type": "command",
-       "command": "bash ~/.claude/claude-recall/statusline-launcher.sh"
+       "command": "bash ~/.claude/claude-recall/statusline-launcher.sh",
+       "padding": 1,
+       "refreshInterval": 30
      }
    }
    ```
    Preserve all existing settings — only add/update the `statusLine` key.
+   - `padding: 1` adds one column of horizontal breathing room around the HUD.
+   - `refreshInterval: 30` re-runs the statusline every 30 seconds so the Line 2 elapsed clock stays accurate while the main session is idle. Set to `0` or remove the field to disable idle refreshes.
 
 5. Verify that these files exist (relative to plugin root found in step 2):
    - `hooks/hooks.json`
    - `dist/statusline.js`
    - `dist/hooks/session-start.js`
    - `dist/hooks/prompt-submit.js`
-   - `dist/hooks/session-end.js`
 
 6. Report what was configured and tell the user to **restart Claude Code** for the statusline to take effect. Mention that future plugin updates will be picked up automatically without running `/setup` again.
