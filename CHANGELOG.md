@@ -1,5 +1,55 @@
 # Changelog
 
+## 6.0.0
+
+### Breaking changes
+
+- **`/purpose` command removed entirely.** Session focus is now managed autonomously by a Claude Haiku subprocess. Users no longer type anything to manage focus.
+- **Field rename: `purpose` → `focus`.** The schema field reflects the evolving, AI-refined nature of the label (vs the older "user-declared goal" framing). Legacy state files are migrated in-place on next read; no user action needed.
+- **`purposeSource` field removed.** With `session_name` sync gone and auto/manual paths gone, the pin-state enum lost its reason to exist.
+- **`session_name` ↔ focus sync removed.** Claude Code's `/rename` and claude-recall's `focus` are conceptually different (platform session identity vs plugin semantic summary) and are no longer coupled. Running `/rename` no longer affects focus.
+- **`line1` slot rename: `'purpose'` → `'focus'`.** Existing configs with `'purpose'` are transparently remapped — no manual edit required, but new configs should use `'focus'`.
+- **`line2` default no longer contains `cost` or `rate_limits`.** Both moved to the new `line3`. Users who kept the v5 defaults will see cost and rate limits on Line 3 instead.
+- **`getBranch()` → `getGitStatus()`.** Public helper in `src/state.ts` renamed; now returns `{ branch, dirty, ahead, behind, defaultBranch }` in one call.
+
+### Migration
+
+- **Automatic:** state files on disk with `purpose`/`purposeSource` are migrated to `focus` on next read (purpose copied to focus, both old fields dropped on next write).
+- **Automatic:** `config.json` with `"line1": ["purpose", ...]` is transparently mapped to `"focus"`.
+- **Manual:** if you relied on `/purpose`, remove it from muscle memory — focus is now managed for you. Guide focus indirectly through the content of your conversation.
+- **Opt-out via non-installation:** there is no toggle to disable the background Haiku calls. If you want zero background LLM calls, uninstall the plugin.
+
+### Added
+
+- **Autonomous focus management.** A Claude Haiku subprocess refines focus at power-of-2 turns (1, 2, 4, 8, 16, 32, ...), before context compaction, and at session end. 30s timeout, 5s debounce. Runs with `--tools ""`, `--disable-slash-commands`, `--no-session-persistence`, and `CLAUDE_RECALL_REFINING=1` env guard (prevents recursive plugin loading in the child).
+- **New hooks: `PreCompact` and `SessionEnd`** registered in `hooks/hooks.json` with 35s timeout each.
+- **Git status enrichment.** Branch now shows dirty flag (`*`) and ahead/behind counts (`↑N↓N`) vs `origin/<default>`. Default branch is auto-detected via `git symbolic-ref refs/remotes/origin/HEAD`, falling back to `main` → `master`. On the default branch itself, `↓N` still renders — you see when you haven't pulled.
+- **Line 3** (opt-out via `line3: []`) — visual bars for 5-hour and 7-day Claude.ai rate limit windows, plus cumulative session cost. Rendered only when rate_limits data is present (subscribers).
+- **`refinementError` red label on Line 1.** When a background refinement fails, Line 1's focus slot shows one of four labels — `⚠ AI timeout`, `⚠ AI rate limited`, `⚠ AI auth failed`, `⚠ AI refinement failed` — until the next successful refinement clears it.
+- **`src/refine.ts`** module with `spawnRefinement()` + `triggerFocusRefinement()` + `shouldRefine()`.
+
+### Changed
+
+- **Line 2 prompt width dramatically increased.** The 80-column hard cap on prompt text is removed; the `MIN_PROMPT_COLS` minimum is raised from 15 to 30. On an 80-col terminal, visible prompt text is roughly 3× wider than in v5.
+- **HUD is now up to 3 lines.** The default principle is "render lines that have data"; line 3 stays hidden for API-key-only sessions with no rate_limits payload.
+- **`(try /purpose)` hint removed.** With autonomous focus, the hint is no longer needed.
+- **`SessionState` schema:** +3 fields (`gitStatus`, `lastRefinedAt`, `refinementError`), -1 field (`purposeSource`), net +2. `purpose` renamed to `focus`.
+
+### Removed
+
+- `commands/purpose.md` command file (all cases A and B)
+- `(try /purpose)` Line 1 hint logic in `format.ts`
+- First-prompt auto-purpose generation in `prompt-submit.ts`
+- Prompt #3 purpose-refinement heuristic
+- `session_name` → `purpose` sync block in `statusline.ts`
+- `purposeSource: 'auto' | 'manual' | 'rename'` field
+
+### Notes
+
+- Background Haiku calls cost roughly $0.01 per long session. This is the intended behavior; there is no opt-out config.
+- Ahead/behind counts reflect your last `git fetch`. Run `git fetch` periodically to keep the `↓N` indicator honest.
+- Focus refinement language follows the transcript's language (Korean transcript → Korean focus) via a one-line system prompt directive to Haiku.
+
 ## 5.0.0
 
 ### Breaking changes

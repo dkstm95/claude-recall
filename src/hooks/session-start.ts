@@ -1,7 +1,14 @@
 import { readStdin } from '../stdin.js';
-import { readState, writeState, cleanupOldSessions, getBranch, type SessionState } from '../state.js';
+import { readState, writeState, cleanupOldSessions, getGitStatus, type SessionState } from '../state.js';
+import { isRefiningSubprocess } from '../refine.js';
 
 async function main(): Promise<void> {
+  // Prevent the subprocess from bootstrapping its own state file.
+  if (isRefiningSubprocess()) {
+    process.stdout.write('{}\n');
+    return;
+  }
+
   const raw = await readStdin();
   let input: Record<string, unknown>;
   try {
@@ -11,33 +18,35 @@ async function main(): Promise<void> {
     return;
   }
 
-  const sessionId = input.session_id as string;
-  const cwd = (input.cwd ?? process.cwd()) as string;
-  const source = (input.source ?? 'startup') as string;
+  const sessionId = input['session_id'] as string;
+  const cwd = (input['cwd'] ?? process.cwd()) as string;
+  const source = (input['source'] ?? 'startup') as string;
   const now = new Date().toISOString();
 
-  // Clean up completed sessions older than 7 days
   cleanupOldSessions();
 
   const existing = readState(sessionId);
 
   if (source === 'startup' || !existing) {
-    // New session
+    const gitStatus = getGitStatus(cwd, null);
     const state: SessionState = {
       sessionId,
-      purpose: '',
-      purposeSource: 'auto',
-      branch: getBranch(cwd, ''),
+      focus: '',
+      branch: gitStatus?.branch ?? '',
+      gitStatus,
       cwd,
       promptCount: 0,
       lastUserPrompt: '',
       lastActivityAt: now,
+      lastRefinedAt: null,
+      refinementError: null,
     };
     writeState(sessionId, state);
   } else {
-    // Existing session: update common fields
     existing.lastActivityAt = now;
-    existing.branch = getBranch(cwd, existing.branch);
+    const gitStatus = getGitStatus(cwd, existing.gitStatus);
+    existing.gitStatus = gitStatus;
+    existing.branch = gitStatus?.branch ?? existing.branch;
 
     if (source === 'clear') {
       existing.lastUserPrompt = '';

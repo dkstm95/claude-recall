@@ -1,5 +1,5 @@
-import type { SessionState } from './state.js';
-import type { HudConfig } from './config.js';
+import type { SessionState, RefinementError, GitStatus } from './state.js';
+import type { HudConfig, ThemeColors } from './config.js';
 import { getThemeColors } from './config.js';
 
 export interface BuiltinData {
@@ -7,24 +7,27 @@ export interface BuiltinData {
   cost?: { total_cost_usd?: number; total_duration_ms?: number };
   context_window?: { used_percentage?: number };
   workspace?: { git_worktree?: string };
-  rate_limits?: { five_hour?: { used_percentage?: number } };
+  rate_limits?: {
+    five_hour?: { used_percentage?: number };
+    seven_day?: { used_percentage?: number };
+  };
 }
 
-// CJK characters occupy 2 columns in terminal
+// CJK / fullwidth ranges occupy 2 terminal columns
 function isWide(code: number): boolean {
   return (
-    (code >= 0x1100 && code <= 0x115f) ||   // Hangul Jamo
-    (code >= 0x2e80 && code <= 0x303e) ||   // CJK Radicals
-    (code >= 0x3040 && code <= 0x33bf) ||   // Japanese, CJK Compatibility
-    (code >= 0x3400 && code <= 0x4dbf) ||   // CJK Unified Ext A
-    (code >= 0x4e00 && code <= 0xa4cf) ||   // CJK Unified + Yi
-    (code >= 0xac00 && code <= 0xd7af) ||   // Hangul Syllables
-    (code >= 0xf900 && code <= 0xfaff) ||   // CJK Compatibility Ideographs
-    (code >= 0xfe30 && code <= 0xfe4f) ||   // CJK Compatibility Forms
-    (code >= 0xff01 && code <= 0xff60) ||   // Fullwidth Forms
-    (code >= 0xffe0 && code <= 0xffe6) ||   // Fullwidth Signs
-    (code >= 0x20000 && code <= 0x2fffd) || // CJK Ext B+
-    (code >= 0x30000 && code <= 0x3fffd)    // CJK Ext G+
+    (code >= 0x1100 && code <= 0x115f) ||
+    (code >= 0x2e80 && code <= 0x303e) ||
+    (code >= 0x3040 && code <= 0x33bf) ||
+    (code >= 0x3400 && code <= 0x4dbf) ||
+    (code >= 0x4e00 && code <= 0xa4cf) ||
+    (code >= 0xac00 && code <= 0xd7af) ||
+    (code >= 0xf900 && code <= 0xfaff) ||
+    (code >= 0xfe30 && code <= 0xfe4f) ||
+    (code >= 0xff01 && code <= 0xff60) ||
+    (code >= 0xffe0 && code <= 0xffe6) ||
+    (code >= 0x20000 && code <= 0x2fffd) ||
+    (code >= 0x30000 && code <= 0x3fffd)
   );
 }
 
@@ -84,21 +87,13 @@ export function getTerminalWidth(): number {
   return 80;
 }
 
-const dim = (s: string) => `\x1b[2m${s}\x1b[0m`;
-const bold = (s: string) => `\x1b[1m${s}\x1b[0m`;
-const boldCyan = (s: string) => `\x1b[1;36m${s}\x1b[0m`;
-const cyan = (s: string) => `\x1b[36m${s}\x1b[0m`;
-const yellow = (s: string) => `\x1b[33m${s}\x1b[0m`;
-const green = (s: string) => `\x1b[32m${s}\x1b[0m`;
-const red = (s: string) => `\x1b[31m${s}\x1b[0m`;
-
 const ACCENT_COLORS = [
-  (s: string) => `\x1b[36m${s}\x1b[0m`,  // cyan
-  (s: string) => `\x1b[35m${s}\x1b[0m`,  // magenta
-  (s: string) => `\x1b[34m${s}\x1b[0m`,  // blue
-  (s: string) => `\x1b[33m${s}\x1b[0m`,  // yellow
-  (s: string) => `\x1b[32m${s}\x1b[0m`,  // green
-  (s: string) => `\x1b[31m${s}\x1b[0m`,  // red
+  (s: string) => `\x1b[36m${s}\x1b[0m`,
+  (s: string) => `\x1b[35m${s}\x1b[0m`,
+  (s: string) => `\x1b[34m${s}\x1b[0m`,
+  (s: string) => `\x1b[33m${s}\x1b[0m`,
+  (s: string) => `\x1b[32m${s}\x1b[0m`,
+  (s: string) => `\x1b[31m${s}\x1b[0m`,
 ];
 
 function sessionColor(cwd: string, branch: string): (s: string) => string {
@@ -115,17 +110,15 @@ interface Segment {
   width: number;
 }
 
-const MIN_PURPOSE_COLS = 15;
-const MIN_PROMPT_COLS = 15;
-const PURPOSE_HINT_THRESHOLD = 5;
+const MIN_FOCUS_COLS = 15;
+const MIN_PROMPT_COLS = 30;
 
-function progressiveJoin(segments: Segment[], budget: number): { text: string; width: number } {
-  // Try all segments, progressively drop from the end
+function progressiveJoin(segments: Segment[], budget: number, minLeft: number): { text: string; width: number } {
   for (let count = segments.length; count >= 1; count--) {
     const used = segments.slice(0, count);
-    const text = used.map(s => s.text).join('  ');
+    const text = used.map((s) => s.text).join('  ');
     const w = used.reduce((sum, s) => sum + s.width, 0) + (used.length - 1) * 2;
-    if (budget - w >= MIN_PURPOSE_COLS || count === 1) {
+    if (budget - w >= minLeft || count === 1) {
       return { text, width: w };
     }
   }
@@ -137,87 +130,140 @@ function basenameOf(p: string): string {
   return parts.length > 0 ? parts[parts.length - 1] : p;
 }
 
-export function formatHud(state: SessionState, termWidth: number, builtin?: BuiltinData, config?: HudConfig): string {
-  const l1 = config?.line1 ?? ['purpose', 'branch', 'model'];
-  const l2 = config?.line2 ?? ['turn', 'prompt', 'elapsed', 'context', 'cost'];
-  const tc = getThemeColors(config?.theme ?? 'default');
+const ERROR_LABELS: Record<RefinementError['code'], string> = {
+  timeout: '\u26A0 AI timeout',
+  rate_limit: '\u26A0 AI rate limited',
+  auth: '\u26A0 AI auth failed',
+  unknown: '\u26A0 AI refinement failed',
+};
+
+function renderGitText(gs: GitStatus, cfg: HudConfig['gitStatus']): string {
+  let text = gs.branch;
+  if (cfg.showDirty && gs.dirty) text += '*';
+  if (cfg.showAheadBehind) {
+    if (gs.ahead > 0) text += `\u2191${gs.ahead}`;
+    if (gs.behind > 0) text += `\u2193${gs.behind}`;
+  }
+  return text;
+}
+
+function renderBar(pct: number, width: number, tc: ThemeColors): string {
+  const clamped = Math.max(0, Math.min(100, pct));
+  const filled = Math.round((clamped / 100) * width);
+  const empty = width - filled;
+  const bar = '\u2588'.repeat(filled) + '\u2591'.repeat(empty);
+  const color = clamped >= 80 ? tc.red : clamped >= 50 ? tc.yellow : tc.green;
+  return color(bar);
+}
+
+function formatUsageSegment(label: string, pct: number, tc: ThemeColors): { text: string; width: number } {
+  const bar = renderBar(pct, 10, tc);
+  const pctText = `${Math.round(pct)}%`;
+  const labelColored = tc.dim(label);
+  const pctColored = pct >= 80 ? tc.red(pctText) : pct >= 50 ? tc.yellow(pctText) : tc.green(pctText);
+  const text = `${labelColored} ${bar} ${pctColored}`;
+  return { text, width: visibleWidth(text) };
+}
+
+export function formatHud(
+  state: SessionState,
+  termWidth: number,
+  builtin?: BuiltinData,
+  config?: HudConfig,
+): string {
+  const cfg = config ?? {
+    line1: ['focus', 'branch', 'model'],
+    line2: ['turn', 'prompt', 'elapsed', 'context'],
+    line3: ['rate_limits', 'seven_day', 'cost'],
+    gitStatus: { enabled: true, showDirty: true, showAheadBehind: true },
+    theme: 'default' as const,
+  };
+  const l1 = cfg.line1;
+  const l2 = cfg.line2;
+  const l3 = cfg.line3;
+  const tc = getThemeColors(cfg.theme);
   const elapsed = builtin?.cost?.total_duration_ms != null
     ? formatElapsedMs(builtin.cost.total_duration_ms)
     : formatElapsed(state.lastActivityAt);
-  const prefixWidth = 3; // " ▍ "
+  const prefixWidth = 3;
 
-  // === Line 1: stable info (purpose + hint + worktree + branch + model) ===
-  const line1Segments: Segment[] = [];
+  const accent = sessionColor(state.cwd, state.branch);
+  const prefix = ' ' + accent('\u258D') + ' ';
+
+  // =========================================================================
+  // Line 1: focus (or error label) + right side (worktree / branch / model)
+  // =========================================================================
+  const line1Right: Segment[] = [];
 
   if (l1.includes('worktree') && builtin?.workspace?.git_worktree) {
     const name = basenameOf(builtin.workspace.git_worktree);
     const s = tc.worktree('\u2387 ' + name);
-    line1Segments.push({ text: s, width: visibleWidth(s) });
+    line1Right.push({ text: s, width: visibleWidth(s) });
   }
 
-  if (l1.includes('branch') && state.branch) {
+  if (l1.includes('branch') && cfg.gitStatus.enabled && state.gitStatus && state.gitStatus.branch) {
+    const gitText = renderGitText(state.gitStatus, cfg.gitStatus);
+    const s = tc.branch(gitText);
+    line1Right.push({ text: s, width: visibleWidth(s) });
+  } else if (l1.includes('branch') && state.branch) {
     const s = tc.branch(state.branch);
-    line1Segments.push({ text: s, width: visibleWidth(s) });
+    line1Right.push({ text: s, width: visibleWidth(s) });
   }
 
   if (l1.includes('model') && builtin?.model?.display_name) {
     const s = tc.model(builtin.model.display_name);
-    line1Segments.push({ text: s, width: visibleWidth(s) });
+    line1Right.push({ text: s, width: visibleWidth(s) });
   }
 
-  // Purpose hint: persistent after threshold when still auto-detected
-  const wantsPurposeHint = state.promptCount >= PURPOSE_HINT_THRESHOLD
-    && state.purposeSource === 'auto';
+  const line1RightJoined = progressiveJoin(line1Right, termWidth - prefixWidth, MIN_FOCUS_COLS);
 
-  // Continue hint: context in 70-89% band (90%+ is owned by the line2 warning)
+  // Line 1 hint: (try /handoff) when context is 70-89% (≥90% uses L2 warning)
   const ctxPct = builtin?.context_window?.used_percentage;
-  const wantsContinueHint = !wantsPurposeHint
-    && ctxPct != null
-    && ctxPct >= 70
-    && ctxPct < 90;
-
-  // Calculate right side of line 1
-  const line1Right = progressiveJoin(line1Segments, termWidth - prefixWidth);
-
-  // Try hint, drop it if purpose would be too short
+  const wantsContinueHint = ctxPct != null && ctxPct >= 70 && ctxPct < 90;
   const HINT_WIDTH = 16;
-  const spaceForRight1 = line1Right.width > 0 ? line1Right.width + 2 : 0;
+  const spaceForRight1 = line1RightJoined.width > 0 ? line1RightJoined.width + 2 : 0;
   const availWithHint = termWidth - prefixWidth - HINT_WIDTH - spaceForRight1;
-  const showPurposeHint = wantsPurposeHint && availWithHint >= MIN_PURPOSE_COLS + 5;
-  const showContinueHint = !showPurposeHint && wantsContinueHint && availWithHint >= MIN_PURPOSE_COLS + 5;
-  const hintText = showPurposeHint
-    ? tc.dim('  (try /purpose)')
-    : showContinueHint
-      ? tc.dim('  (try /handoff)')
-      : '';
-  const hintWidth = showPurposeHint || showContinueHint ? HINT_WIDTH : 0;
+  const showContinueHint = wantsContinueHint && availWithHint >= MIN_FOCUS_COLS + 5;
+  const hintText = showContinueHint ? tc.dim('  (try /handoff)') : '';
+  const hintWidth = showContinueHint ? HINT_WIDTH : 0;
 
-  const availPurpose = termWidth - prefixWidth - hintWidth - spaceForRight1;
-  let purpose: string;
-  let purposeWidth: number;
-  if (l1.includes('purpose')) {
-    purpose = state.purpose
-      ? tc.purpose(truncate(state.purpose, Math.max(availPurpose, MIN_PURPOSE_COLS)))
-      : tc.dim('(no purpose yet)');
-    purposeWidth = state.purpose ? visibleWidth(purpose) : 16;
+  const availLeft = termWidth - prefixWidth - hintWidth - spaceForRight1;
+
+  let leftText: string;
+  let leftWidth: number;
+  if (state.refinementError) {
+    const raw = ERROR_LABELS[state.refinementError.code];
+    const colored = tc.red(raw);
+    leftText = colored;
+    leftWidth = visibleWidth(colored);
+  } else if (l1.includes('focus')) {
+    if (state.focus) {
+      const focusColored = tc.focus(truncate(state.focus, Math.max(availLeft, MIN_FOCUS_COLS)));
+      leftText = focusColored;
+      leftWidth = visibleWidth(focusColored);
+    } else {
+      const placeholder = tc.dim('(no focus yet)');
+      leftText = placeholder;
+      leftWidth = visibleWidth(placeholder);
+    }
   } else {
-    purpose = '';
-    purposeWidth = 0;
+    leftText = '';
+    leftWidth = 0;
   }
 
-  const gap1 = Math.max(1, termWidth - prefixWidth - purposeWidth - hintWidth - line1Right.width);
-  const accent = sessionColor(state.cwd, state.branch);
-  const prefix1 = ' ' + accent('\u258D') + ' ';
-  const line1 = prefix1 + purpose + hintText + ' '.repeat(gap1) + line1Right.text;
+  const gap1 = Math.max(1, termWidth - prefixWidth - leftWidth - hintWidth - line1RightJoined.width);
+  const line1 = prefix + leftText + hintText + ' '.repeat(gap1) + line1RightJoined.text;
 
-  // === Line 2: dynamic info (#turn + prompt + elapsed + ctx% + cost) ===
+  // =========================================================================
+  // Line 2: #turn + last_prompt + elapsed/ctx (right)
+  // =========================================================================
   if (!state.lastUserPrompt) return line1;
 
-  const line2Segments: Segment[] = [];
+  const line2Right: Segment[] = [];
 
   if (l2.includes('elapsed')) {
-    const elapsedSeg = tc.dim(elapsed);
-    line2Segments.push({ text: elapsedSeg, width: visibleWidth(elapsedSeg) });
+    const s = tc.dim(elapsed);
+    line2Right.push({ text: s, width: visibleWidth(s) });
   }
 
   if (l2.includes('context') && builtin?.context_window?.used_percentage != null) {
@@ -225,29 +271,11 @@ export function formatHud(state: SessionState, termWidth: number, builtin?: Buil
     if (pct >= 90) {
       const warnText = `${pct}% \u26A0 try /handoff`;
       const warn = tc.red(warnText);
-      line2Segments.push({ text: warn, width: visibleWidth(warnText) });
+      line2Right.push({ text: warn, width: visibleWidth(warnText) });
     } else {
       const label = `${pct}%`;
       const s = pct >= 70 ? tc.yellow(label) : tc.green(label);
-      line2Segments.push({ text: s, width: visibleWidth(s) });
-      if (l2.includes('cost') && builtin?.cost?.total_cost_usd != null) {
-        const cost = builtin.cost.total_cost_usd;
-        const s2 = tc.dim(cost < 0.01 ? '$0.00' : `$${cost.toFixed(2)}`);
-        line2Segments.push({ text: s2, width: visibleWidth(s2) });
-      }
-    }
-  } else if (l2.includes('cost') && builtin?.cost?.total_cost_usd != null) {
-    const cost = builtin.cost.total_cost_usd;
-    const s = tc.dim(cost < 0.01 ? '$0.00' : `$${cost.toFixed(2)}`);
-    line2Segments.push({ text: s, width: visibleWidth(s) });
-  }
-
-  if (l2.includes('rate_limits') && builtin?.rate_limits?.five_hour?.used_percentage != null) {
-    const pct = Math.round(builtin.rate_limits.five_hour.used_percentage);
-    if (pct >= 50) {
-      const label = `5h:${pct}%`;
-      const s = pct >= 80 ? tc.red(label) : tc.yellow(label);
-      line2Segments.push({ text: s, width: visibleWidth(s) });
+      line2Right.push({ text: s, width: visibleWidth(s) });
     }
   }
 
@@ -255,22 +283,48 @@ export function formatHud(state: SessionState, termWidth: number, builtin?: Buil
   const turnLabel = hasTurn ? tc.dim(`#${state.promptCount}  `) : '';
   const turnWidth = hasTurn ? `#${state.promptCount}  `.length : 0;
 
-  // Calculate right side of line 2, progressively drop if prompt too short
   const line2Budget = termWidth - prefixWidth - turnWidth;
-  const line2Right = progressiveJoin(line2Segments, line2Budget);
-  const spaceForRight2 = line2Right.width > 0 ? line2Right.width + 2 : 0;
+  const line2RightJoined = progressiveJoin(line2Right, line2Budget, MIN_PROMPT_COLS);
+  const spaceForRight2 = line2RightJoined.width > 0 ? line2RightJoined.width + 2 : 0;
 
   let promptText = '';
   let promptWidth = 0;
   if (l2.includes('prompt')) {
-    const maxPromptCols = Math.min(line2Budget - spaceForRight2, 80);
+    const maxPromptCols = line2Budget - spaceForRight2;
     promptText = tc.prompt(truncate(state.lastUserPrompt, Math.max(maxPromptCols, MIN_PROMPT_COLS)));
     promptWidth = visibleWidth(promptText);
   }
 
-  const gap2 = Math.max(1, termWidth - prefixWidth - turnWidth - promptWidth - line2Right.width);
-  const prefix2 = ' ' + accent('\u258D') + ' ';
-  const line2 = prefix2 + turnLabel + promptText + ' '.repeat(gap2) + line2Right.text;
+  const gap2 = Math.max(1, termWidth - prefixWidth - turnWidth - promptWidth - line2RightJoined.width);
+  const line2 = prefix + turnLabel + promptText + ' '.repeat(gap2) + line2RightJoined.text;
 
-  return line1 + '\n' + line2;
+  // =========================================================================
+  // Line 3 (opt-out): rate_limits bar + 7d bar + cost
+  // =========================================================================
+  const line3Segments: Segment[] = [];
+
+  if (l3.includes('rate_limits') && builtin?.rate_limits?.five_hour?.used_percentage != null) {
+    const pct = builtin.rate_limits.five_hour.used_percentage;
+    line3Segments.push(formatUsageSegment('5h', pct, tc));
+  }
+
+  if (l3.includes('seven_day') && builtin?.rate_limits?.seven_day?.used_percentage != null) {
+    const pct = builtin.rate_limits.seven_day.used_percentage;
+    line3Segments.push(formatUsageSegment('7d', pct, tc));
+  }
+
+  if (l3.includes('cost') && builtin?.cost?.total_cost_usd != null) {
+    const cost = builtin.cost.total_cost_usd;
+    const s = tc.dim(cost < 0.01 ? '$0.00' : `$${cost.toFixed(2)}`);
+    line3Segments.push({ text: s, width: visibleWidth(s) });
+  }
+
+  if (line3Segments.length === 0) {
+    return line1 + '\n' + line2;
+  }
+
+  const line3Joined = line3Segments.map((s) => s.text).join('  ');
+  const line3 = prefix + line3Joined;
+
+  return line1 + '\n' + line2 + '\n' + line3;
 }

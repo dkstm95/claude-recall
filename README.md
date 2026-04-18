@@ -1,11 +1,11 @@
 <h1 align="center">claude-recall</h1>
 
 <p align="center">
-  <em>Instant context recovery for parallel Claude Code sessions</em>
+  <em>A parallel Claude Code sessions pilot's HUD — know what every session is for, and how far along it is, at a glance</em>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-5.0.0-blue?style=flat-square" alt="version">
+  <img src="https://img.shields.io/badge/version-6.0.0-blue?style=flat-square" alt="version">
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="license">
   <img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen?style=flat-square&logo=node.js&logoColor=white" alt="node">
   <img src="https://img.shields.io/badge/Claude_Code-Plugin-blueviolet?style=flat-square" alt="Claude Code Plugin">
@@ -17,9 +17,12 @@
 
 ---
 
-When you're running Claude Code in multiple terminals at once, switching tabs always brings that moment — **"What was I doing here?"**
+When you run Claude Code in multiple terminals at once, switching tabs always brings the same moment — **"What was I doing here?"**
 
-claude-recall automatically tracks the context of every Claude Code session, so you can refocus instantly when you switch.
+claude-recall answers two questions for every session, at a glance:
+
+1. **What is this session for?** — an AI-refined focus label, auto-managed in the background
+2. **How far along is it?** — turn count, elapsed time, context usage, git status, and rate-limit bars
 
 <p align="center">
   <img src="assets/statusline-preview.svg" alt="claude-recall: multiple terminal tabs" width="720">
@@ -29,49 +32,52 @@ claude-recall automatically tracks the context of every Claude Code session, so 
   <img src="assets/split-panes-preview.svg" alt="claude-recall: split panes" width="800">
 </p>
 
+> [!IMPORTANT]
+> **Background LLM calls.** claude-recall automatically refines each session's focus by calling Claude Haiku in the background (roughly $0.01 per long session). This is the core of the plugin — there is no opt-out toggle. If you prefer zero background LLM calls, **do not install this plugin**.
+
 ## What's in the HUD
 
-A persistent 2-line summary above your prompt:
+Up to three lines above your prompt:
 
 | Element | Location | Description | Source |
 |---------|----------|-------------|--------|
-| **accent bar** | Line 1-2, left | Session-specific color bar (`▍`) — deterministic color from project dir + branch | claude-recall |
-| **purpose** | Line 1, left | What this session is about — auto-detected from first prompt, or set with `/purpose` | claude-recall |
-| **branch** | Line 1, right | Current git branch | claude-recall |
+| **accent bar** | all lines, left | Session-specific color bar (`▍`) — deterministic color from project dir + branch | claude-recall |
+| **focus** | Line 1, left | AI-refined summary of what this session is currently working on — managed autonomously | claude-recall |
+| **branch + status** | Line 1, right | `branch*↑N↓N` — dirty flag + commits ahead/behind `origin/<default>` | claude-recall |
 | **model** | Line 1, right | Active Claude model (e.g. Opus) | Claude Code built-in |
 | **turn** | Line 2, left | Current prompt number (`#12`) | claude-recall |
-| **last prompt** | Line 2, left | The last prompt you typed | claude-recall |
-| **elapsed** | Line 2, right | Time since last activity | claude-recall |
-| **context%** | Line 2, right | Context window usage — color-coded: green (<70%), yellow (70-89%), red (≥90%) | Claude Code built-in |
-| **cost** | Line 2, right | Cumulative session cost (hidden when context ≥ 90%) | Claude Code built-in |
+| **last prompt** | Line 2, left | The last prompt you typed (now with ~3× more visible width vs v5) | claude-recall |
+| **elapsed** | Line 2, right | Time since session start / last activity | claude-recall |
+| **context%** | Line 2, right | Context window usage — green (<70%), yellow (70-89%), red (≥90%) | Claude Code built-in |
+| **5h rate limit bar** | Line 3 | 5-hour usage visualized — `5h ████░░░░░░ 45%` | Claude Code built-in |
+| **7d rate limit bar** | Line 3 | 7-day usage visualized (when data available) | Claude Code built-in |
+| **cost** | Line 3, right | Cumulative session cost | Claude Code built-in |
 | **worktree** *(opt-in)* | Line 1, right | `⎇ <name>` when inside a linked git worktree | Claude Code built-in |
-| **rate_limits** *(opt-in)* | Line 2, right | `5h:NN%` Claude.ai rate limit usage (suppressed <50%) | Claude Code built-in |
+| **refinement error** | Line 1, left | Red `⚠ AI <reason>` label replaces focus when a background refinement fails | claude-recall |
 
 > [!TIP]
-> After 5+ prompts, a `(try /purpose)` hint appears next to the purpose. Running `/purpose` lets Claude analyze your conversation and suggest a more accurate purpose.
+> Line 3 renders only when rate-limits data is present (Claude subscribers). API-key-only users naturally see two lines.
 
 > [!WARNING]
-> When context usage reaches **90%+**, the cost display is replaced by a red `⚠ try /handoff` warning. Run `/handoff` to write a handoff summary to disk — you can reference it in a new session with `@<path>` to continue seamlessly.
+> When context usage reaches **90%+**, Line 2's `cost` slot becomes a red `⚠ try /handoff` warning. Run `/handoff` to write a handoff summary to disk — reference it in a new session with `@<path>` to continue seamlessly.
 
 ## Features
 
-- **Automatic tracking** — Just install. Session start, prompts, and session end are recorded automatically
-- **Auto-purpose** — Detects session purpose from your first prompt
-- **Smart purpose update** — Run `/purpose` anytime to get an AI-generated purpose summary from your conversation
-- **Session accent colors** — Each session gets a unique accent color based on its project directory + branch, so you can identify sessions at a glance before reading any text
-- **Context crisis warning** — When context usage hits 90%+, the HUD warns you with `⚠ try /handoff`
-- **`/handoff` hint** — When context reaches 70–89%, a dim `(try /handoff)` hint appears on Line 1 so you know the handoff command exists before you're in crisis
-- **Session handoff** — `/handoff` writes a structured Markdown file to `~/.claude/claude-recall/handoffs/` that survives session termination; seed a fresh session with `@<path>` to continue seamlessly
-- **Turn counter** — Shows which prompt you're on (`#1`, `#12`, `#50`)
-- **Built-in metrics** — Shows model, context%, and cost from Claude Code alongside session info
-- **Customizable HUD** — Configure which elements appear via `~/.claude/claude-recall/config.json`
-- **Color themes** — Choose from `default`, `minimal`, or `vivid` theme presets
-- **Worktree awareness** — Optional `worktree` slot shows `⎇ <name>` when you're inside a linked git worktree
-- **Rate limits** — Optional `rate_limits` slot shows your 5-hour Claude.ai usage (suppressed <50%, yellow 50–79%, red ≥80%)
-- **Auto-cleanup** — Sessions idle for more than 7 days are automatically removed
+- **Autonomous focus management** — No slash commands to run. Focus is refined in the background by a Haiku subprocess at turns 1, 2, 4, 8, 16, 32, ..., before context compaction, and at session end. Writes in the transcript's language (Korean transcript → Korean focus).
+- **Per-session accent color** — Each session gets a deterministic color bar (`▍`) from its project dir + branch, so you can identify sessions by color before reading any text.
+- **Rich git status** — Branch display always shows dirty flag + ahead/behind counts vs `origin/<default>` (auto-detects main/master). On `main` itself, `main↓3` tells you you haven't pulled in a while.
+- **Rate limit bars** — 5h / 7d Claude.ai subscription windows visualized as bars, color-coded by threshold.
+- **Wide prompt area** — The last prompt you typed now gets the bulk of Line 2's width (~3× vs v5).
+- **Context crisis warning** — At 90%+ context, a red `⚠ try /handoff` replaces the cost on Line 2.
+- **`/handoff` (secondary / emergency exit)** — When a session's context is about to run out, `/handoff` writes a structured Markdown summary to `~/.claude/claude-recall/handoffs/` that survives session termination. Seed a fresh session with `@<path>` to continue.
+- **Auto-cleanup** — Sessions idle for >7 days are removed on next SessionStart.
+- **Theme presets** — `default`, `minimal`, `vivid`.
+
+> [!NOTE]
+> **Ahead/behind counts reflect your last `git fetch`.** Run `git fetch` periodically to keep the `↓N` indicator honest.
 
 > [!IMPORTANT]
-> **Upgrading from 4.x:** `/continue` and `/export` were removed in v5.0. Both are replaced by `/handoff`, which writes a richer summary to disk instead of dumping text into the already-full chat. Relationship to Claude Code's native `/recap`: `/recap` summarizes a session you're still in; `/handoff` prepares a file to hand off to a *new* session when context is running out. They're complementary.
+> **Upgrading from 5.x:** `/purpose` is removed. Focus is now autonomous. The `purpose` state field is migrated in-place to `focus` on first read — no user action needed. See CHANGELOG.md for the full set of breaking changes.
 
 ## Install
 
@@ -87,36 +93,42 @@ A persistent 2-line summary above your prompt:
 ```
 
 > [!IMPORTANT]
-> **Restart Claude Code** after `/setup` to activate the statusline.
+> **Restart Claude Code** after `/setup` to activate the statusline and new hooks.
 
 ## Usage
 
-Everything works automatically after install. Additional commands:
+Everything works automatically after install. There are no focus-management commands.
 
 | Command | Description |
 |---------|-------------|
-| `/purpose <text>` | Manually set session purpose (overrides auto-detection) |
-| `/purpose` | Auto-suggest purpose from conversation |
 | `/handoff` | Write a handoff summary to `~/.claude/claude-recall/handoffs/`; reference it in a fresh session via `@<path>` |
 | `/setup` | Reconfigure statusline / verify installation |
 
 ## Customization
 
-Create `~/.claude/claude-recall/config.json` to customize the HUD:
+Create `~/.claude/claude-recall/config.json`:
 
 ```json
 {
-  "line1": ["purpose", "branch", "model"],
-  "line2": ["turn", "prompt", "elapsed", "context", "cost"],
+  "line1": ["focus", "branch", "model"],
+  "line2": ["turn", "prompt", "elapsed", "context"],
+  "line3": ["rate_limits", "seven_day", "cost"],
+  "gitStatus": {
+    "enabled": true,
+    "showDirty": true,
+    "showAheadBehind": true
+  },
   "theme": "default"
 }
 ```
 
-- **line1** — Choose from: `purpose`, `branch`, `model`, `worktree`
-- **line2** — Choose from: `turn`, `prompt`, `elapsed`, `context`, `cost`, `rate_limits`
+- **line1** — Choose from: `focus`, `branch`, `model`, `worktree`
+- **line2** — Choose from: `turn`, `prompt`, `elapsed`, `context`
+- **line3** — Choose from: `rate_limits`, `seven_day`, `cost`. Set `line3: []` to force a 2-line HUD.
+- **gitStatus** — Toggle dirty flag and ahead/behind independently.
 - **theme** — `default` (cyan/bold), `minimal` (subdued, no color), `vivid` (bright/high contrast)
 
-Remove any element from the arrays to hide it. No restart required — changes apply on the next statusline render.
+Legacy configs with `"line1": ["purpose", ...]` are transparently mapped to `"focus"`.
 
 ## Uninstall
 
@@ -132,27 +144,20 @@ rm -rf ~/.claude/claude-recall/
 ```
 
 <details>
-<summary><strong>How it works</strong></summary>
+<summary><strong>How focus refinement works</strong></summary>
 
-**Every time you type a prompt:**
-→ Session purpose, branch, turn count, and last prompt are saved automatically
+Triggers (OR):
+- **Power-of-2 turns** — 1, 2, 4, 8, 16, 32, 64, ... Rapid initial convergence, sparse drift checks later.
+- **PreCompact** — right before Claude Code compacts context, capture the current state.
+- **SessionEnd** — final snapshot for handoff continuity.
 
-**Every time Claude responds:**
-→ Saved info + model/cost are combined into a 2-line HUD (under 100ms)
+Each trigger spawns `claude -p --model=haiku` as a subprocess with the last 20KB of the transcript. The subprocess:
+- Disables tools (`--tools ""`), disables slash commands, disables session persistence
+- Carries `CLAUDE_RECALL_REFINING=1` in env so claude-recall's own hooks skip in the child (no recursion)
+- Emits only the focus text in the transcript's language
+- Has a 30-second timeout and 5-second debounce
 
-**When you run `/purpose`:**
-→ Claude analyzes the conversation and suggests a concise purpose summary
-
-**When you run `/handoff`:**
-→ Claude summarizes the session and writes a Markdown file to `~/.claude/claude-recall/handoffs/{date}-{slug}.md`. The chat only shows the saved path — the summary lives on disk, so it survives session termination. Seed a new session with `@<path>` to pick up where you left off.
-
-**Session accent colors:**
-→ Each session gets a unique color bar (`▍`) based on your project directory + branch, so you can identify sessions by color before reading any text
-
-**On session start:**
-→ Sessions idle for more than 7 days are automatically cleaned up
-
-All state is stored as JSON files in `~/.claude/claude-recall/sessions/` — one file per session, separate from the plugin itself. HUD layout and themes are configurable via `~/.claude/claude-recall/config.json`.
+On failure, Line 1's focus is replaced by a red label (`⚠ AI timeout`, `⚠ AI rate limited`, `⚠ AI auth failed`, or `⚠ AI refinement failed`) until the next successful refinement clears it.
 
 </details>
 
