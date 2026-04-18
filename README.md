@@ -1,7 +1,7 @@
 <h1 align="center">claude-recall</h1>
 
 <p align="center">
-  <em>A parallel Claude Code sessions pilot's HUD — know what every session is for, and how far along it is, at a glance</em>
+  <em>A statusline for parallel Claude Code sessions — know what each one is for at a glance.</em>
 </p>
 
 <p align="center">
@@ -35,7 +35,7 @@ claude-recall answers two questions for every session, at a glance:
 > [!IMPORTANT]
 > **Background LLM calls.** claude-recall automatically refines each session's focus by calling Claude Haiku in the background (roughly $0.01 per long session). This is the core of the plugin — there is no opt-out toggle. If you prefer zero background LLM calls, **do not install this plugin**.
 
-## What's in the HUD
+## What's in the statusline
 
 Up to three lines above your prompt:
 
@@ -124,7 +124,7 @@ Create `~/.claude/claude-recall/config.json`:
 
 - **line1** — Choose from: `focus`, `branch`, `model`, `worktree`
 - **line2** — Choose from: `turn`, `prompt`, `elapsed`, `context`
-- **line3** — Choose from: `rate_limits`, `seven_day`, `cost`. Set `line3: []` to force a 2-line HUD.
+- **line3** — Choose from: `rate_limits`, `seven_day`, `cost`. Set `line3: []` to force a 2-line statusline.
 - **gitStatus** — Toggle dirty flag and ahead/behind independently.
 - **theme** — `default` (cyan/bold), `minimal` (subdued, no color), `vivid` (bright/high contrast)
 

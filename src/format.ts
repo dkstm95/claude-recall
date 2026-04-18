@@ -1,5 +1,5 @@
 import type { SessionState, RefinementError, GitStatus } from './state.js';
-import type { HudConfig, ThemeColors } from './config.js';
+import type { StatuslineConfig, ThemeColors } from './config.js';
 import { getThemeColors } from './config.js';
 
 export interface BuiltinData {
@@ -137,7 +137,7 @@ const ERROR_LABELS: Record<RefinementError['code'], string> = {
   unknown: '\u26A0 AI refinement failed',
 };
 
-function renderGitText(gs: GitStatus, cfg: HudConfig['gitStatus']): string {
+function renderGitText(gs: GitStatus, cfg: StatuslineConfig['gitStatus']): string {
   let text = gs.branch;
   if (cfg.showDirty && gs.dirty) text += '*';
   if (cfg.showAheadBehind) {
@@ -165,11 +165,11 @@ function formatUsageSegment(label: string, pct: number, tc: ThemeColors): { text
   return { text, width: visibleWidth(text) };
 }
 
-export function formatHud(
+export function formatStatusline(
   state: SessionState,
   termWidth: number,
   builtin?: BuiltinData,
-  config?: HudConfig,
+  config?: StatuslineConfig,
 ): string {
   const cfg = config ?? {
     line1: ['focus', 'branch', 'model'],

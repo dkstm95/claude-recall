@@ -1,6 +1,6 @@
 import { readStdin } from './stdin.js';
 import { readState } from './state.js';
-import { formatHud, getTerminalWidth, type BuiltinData } from './format.js';
+import { formatStatusline, getTerminalWidth, type BuiltinData } from './format.js';
 import { readConfig } from './config.js';
 
 interface StatuslineInput {
@@ -38,8 +38,8 @@ async function main(): Promise<void> {
   };
 
   const config = readConfig();
-  const hud = formatHud(state, getTerminalWidth(), builtin, config);
-  process.stdout.write(hud + '\n');
+  const output = formatStatusline(state, getTerminalWidth(), builtin, config);
+  process.stdout.write(output + '\n');
 }
 
 main().catch(() => process.exit(0));

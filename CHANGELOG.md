@@ -31,7 +31,7 @@
 ### Changed
 
 - **Line 2 prompt width dramatically increased.** The 80-column hard cap on prompt text is removed; the `MIN_PROMPT_COLS` minimum is raised from 15 to 30. On an 80-col terminal, visible prompt text is roughly 3× wider than in v5.
-- **HUD is now up to 3 lines.** The default principle is "render lines that have data"; line 3 stays hidden for API-key-only sessions with no rate_limits payload.
+- **Statusline is now up to 3 lines.** The default principle is "render lines that have data"; line 3 stays hidden for API-key-only sessions with no rate_limits payload.
 - **`(try /purpose)` hint removed.** With autonomous focus, the hint is no longer needed.
 - **`SessionState` schema:** +3 fields (`gitStatus`, `lastRefinedAt`, `refinementError`), -1 field (`purposeSource`), net +2. `purpose` renamed to `focus`.
 

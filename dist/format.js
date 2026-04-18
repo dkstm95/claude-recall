@@ -135,7 +135,7 @@ function formatUsageSegment(label, pct, tc) {
     const text = `${labelColored} ${bar} ${pctColored}`;
     return { text, width: visibleWidth(text) };
 }
-export function formatHud(state, termWidth, builtin, config) {
+export function formatStatusline(state, termWidth, builtin, config) {
     const cfg = config ?? {
         line1: ['focus', 'branch', 'model'],
         line2: ['turn', 'prompt', 'elapsed', 'context'],

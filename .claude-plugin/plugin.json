@@ -1,6 +1,6 @@
 {
   "name": "claude-recall",
   "version": "6.0.0",
-  "description": "Multi-session awareness HUD — instant context recovery when switching between parallel Claude Code sessions",
+  "description": "Session awareness statusline for parallel Claude Code sessions — autonomous focus, git status, rate-limit bars",
   "author": { "name": "seungilahn" }
 }

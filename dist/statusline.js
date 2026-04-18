@@ -1,6 +1,6 @@
 import { readStdin } from './stdin.js';
 import { readState } from './state.js';
-import { formatHud, getTerminalWidth } from './format.js';
+import { formatStatusline, getTerminalWidth } from './format.js';
 import { readConfig } from './config.js';
 async function main() {
     const raw = await readStdin();
@@ -24,7 +24,7 @@ async function main() {
         rate_limits: input.rate_limits,
     };
     const config = readConfig();
-    const hud = formatHud(state, getTerminalWidth(), builtin, config);
-    process.stdout.write(hud + '\n');
+    const output = formatStatusline(state, getTerminalWidth(), builtin, config);
+    process.stdout.write(output + '\n');
 }
 main().catch(() => process.exit(0));

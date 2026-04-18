@@ -1,7 +1,7 @@
 {
   "name": "claude-recall",
   "version": "6.0.0",
-  "description": "Session awareness HUD for Claude Code",
+  "description": "Session awareness statusline for Claude Code",
   "type": "module",
   "scripts": {
     "build": "tsc"

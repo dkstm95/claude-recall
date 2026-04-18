@@ -8,7 +8,7 @@ export interface GitStatusConfig {
   showAheadBehind: boolean;
 }
 
-export interface HudConfig {
+export interface StatuslineConfig {
   line1: string[];
   line2: string[];
   line3: string[];
@@ -16,7 +16,7 @@ export interface HudConfig {
   theme: 'default' | 'minimal' | 'vivid';
 }
 
-const DEFAULT_CONFIG: HudConfig = {
+const DEFAULT_CONFIG: StatuslineConfig = {
   line1: ['focus', 'branch', 'model'],
   line2: ['turn', 'prompt', 'elapsed', 'context'],
   line3: ['rate_limits', 'seven_day', 'cost'],
@@ -106,7 +106,7 @@ function sanitizeGitStatus(raw: unknown): GitStatusConfig {
   };
 }
 
-export function readConfig(): HudConfig {
+export function readConfig(): StatuslineConfig {
   try {
     const configPath = join(homedir(), '.claude', 'claude-recall', 'config.json');
     const raw = readFileSync(configPath, 'utf-8');
@@ -117,7 +117,7 @@ export function readConfig(): HudConfig {
       line3: sanitizeLine(parsed['line3'], VALID_LINE3, DEFAULT_CONFIG.line3),
       gitStatus: sanitizeGitStatus(parsed['gitStatus']),
       theme: VALID_THEMES.includes(parsed['theme'] as string)
-        ? (parsed['theme'] as HudConfig['theme'])
+        ? (parsed['theme'] as StatuslineConfig['theme'])
         : 'default',
     };
   } catch {

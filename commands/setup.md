@@ -37,7 +37,7 @@ Follow these steps:
    }
    ```
    Preserve all existing settings — only add/update the `statusLine` key.
-   - `padding: 1` adds one column of horizontal breathing room around the HUD.
+   - `padding: 1` adds one column of horizontal breathing room around the statusline.
    - `refreshInterval: 30` re-runs the statusline every 30 seconds so the Line 2 elapsed clock stays accurate while the main session is idle. Set to `0` or remove the field to disable idle refreshes.
 
 5. Verify that these files exist (relative to plugin root found in step 2):

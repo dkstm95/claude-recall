@@ -1,6 +1,6 @@
 # claude-recall
 
-Claude Code plugin (v6.0.0) that provides a session awareness HUD (Heads-Up Display).
+Claude Code plugin (v6.0.0) that provides a session awareness statusline.
 Tracks a Haiku-refined focus label, activity, git status, and prompt count for every parallel Claude Code session.
 
 - **Author**: seungilahn
@@ -31,10 +31,10 @@ commands/                 # Slash commands (markdown with frontmatter)
 hooks/
   hooks.json              # Hook registration (SessionStart, UserPromptSubmit, PreCompact, SessionEnd)
 src/                      # TypeScript source
-  config.ts               #   HudConfig interface, theme colors, config file reader, legacy slot mapping
+  config.ts               #   StatuslineConfig interface, theme colors, config file reader, legacy slot mapping
   state.ts                #   SessionState interface, read/write JSON, cleanup, getGitStatus
-  format.ts               #   3-line HUD formatter, CJK width, bar renderer, progressive truncation
-  statusline.ts           #   Entry point: stdin JSON -> formatHud() -> stdout
+  format.ts               #   3-line statusline formatter, CJK width, bar renderer, progressive truncation
+  statusline.ts           #   Entry point: stdin JSON -> formatStatusline() -> stdout
   stdin.ts                #   Async stdin reader utility
   refine.ts               #   Haiku subprocess wrapper: spawnRefinement + triggerFocusRefinement + 5s debounce
   hooks/
@@ -53,7 +53,7 @@ SessionStart event -> session-start.ts -> creates/updates ~/.claude/claude-recal
 UserPromptSubmit   -> prompt-submit.ts  -> increments promptCount, updates git status, triggers focus refinement at 2^k turns
 PreCompact         -> pre-compact.ts    -> triggers focus refinement (natural milestone)
 SessionEnd         -> session-end.ts    -> triggers focus refinement (final snapshot)
-Statusline render  -> statusline.ts     -> reads session JSON + stdin metrics -> 1-3 line HUD output
+Statusline render  -> statusline.ts     -> reads session JSON + stdin metrics -> 1-3 line statusline output
 /handoff command   -> handoff.md        -> writes structured handoff MD file for a fresh session
 ```
 
@@ -84,7 +84,7 @@ Key fields in `~/.claude/claude-recall/sessions/{sessionId}.json`:
 
 `GitStatus` fields: `branch`, `dirty`, `ahead` (vs origin/default), `behind` (vs origin/default), `defaultBranch`.
 
-## HUD Layout
+## Statusline Layout
 
 ```
 Line 1 (stable):   ▍ [focus|error-label] (try /handoff) [worktree] [branch*↑N↓N] [model]
@@ -119,7 +119,7 @@ Line 3 (opt-out):  ▍ 5h ████░░░░░░ 45%   7d ██░░�
 - **Stdin-first elapsed**: statusline prefers `cost.total_duration_ms` from stdin over self-tracked timestamps
 - **Git call optimization**: full git status runs every 10 prompts (`% 10 === 1`), not every prompt
 - **Theme system**: `ThemeColors` interface abstracts all color calls; 3 presets (default, minimal, vivid)
-- **Config-driven HUD**: line1/line2/line3 element arrays control which segments render. Legacy `'purpose'` slot names map to `'focus'`.
+- **Config-driven statusline**: line1/line2/line3 element arrays control which segments render. Legacy `'purpose'` slot names map to `'focus'`.
 - **Focus refinement recursion guard**: `refine.ts` sets `CLAUDE_RECALL_REFINING=1` in the child env; all hooks early-return when this env var is set, preventing the spawned `claude -p` from re-triggering the plugin.
 - **Debounce on refinement**: `shouldRefine()` checks `lastRefinedAt` against a 5s window. Optimistic write of `lastRefinedAt` before the `claude -p` call narrows the concurrent-spawn race window.
 
