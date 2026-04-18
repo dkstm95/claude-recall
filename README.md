@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-4.0.0-blue?style=flat-square" alt="version">
+  <img src="https://img.shields.io/badge/version-5.0.0-blue?style=flat-square" alt="version">
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="license">
   <img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen?style=flat-square&logo=node.js&logoColor=white" alt="node">
   <img src="https://img.shields.io/badge/Claude_Code-Plugin-blueviolet?style=flat-square" alt="Claude Code Plugin">
@@ -51,7 +51,7 @@ A persistent 2-line summary above your prompt:
 > After 5+ prompts, a `(try /purpose)` hint appears next to the purpose. Running `/purpose` lets Claude analyze your conversation and suggest a more accurate purpose.
 
 > [!WARNING]
-> When context usage reaches **90%+**, the cost display is replaced by a red `⚠ try /continue` warning. Run `/continue` to generate a handoff summary you can paste into a new session.
+> When context usage reaches **90%+**, the cost display is replaced by a red `⚠ try /handoff` warning. Run `/handoff` to write a handoff summary to disk — you can reference it in a new session with `@<path>` to continue seamlessly.
 
 ## Features
 
@@ -59,17 +59,19 @@ A persistent 2-line summary above your prompt:
 - **Auto-purpose** — Detects session purpose from your first prompt
 - **Smart purpose update** — Run `/purpose` anytime to get an AI-generated purpose summary from your conversation
 - **Session accent colors** — Each session gets a unique accent color based on its project directory + branch, so you can identify sessions at a glance before reading any text
-- **Context crisis warning** — When context usage hits 90%+, the HUD warns you with `⚠ try /continue`
-- **`/continue` hint** — When context reaches 70–89%, a dim `(try /continue)` hint appears on Line 1 so you know the handoff command exists before you're in crisis
-- **Session handoff** — `/continue` generates a summary you can paste into a new session to pick up where you left off
+- **Context crisis warning** — When context usage hits 90%+, the HUD warns you with `⚠ try /handoff`
+- **`/handoff` hint** — When context reaches 70–89%, a dim `(try /handoff)` hint appears on Line 1 so you know the handoff command exists before you're in crisis
+- **Session handoff** — `/handoff` writes a structured Markdown file to `~/.claude/claude-recall/handoffs/` that survives session termination; seed a fresh session with `@<path>` to continue seamlessly
 - **Turn counter** — Shows which prompt you're on (`#1`, `#12`, `#50`)
 - **Built-in metrics** — Shows model, context%, and cost from Claude Code alongside session info
 - **Customizable HUD** — Configure which elements appear via `~/.claude/claude-recall/config.json`
 - **Color themes** — Choose from `default`, `minimal`, or `vivid` theme presets
 - **Worktree awareness** — Optional `worktree` slot shows `⎇ <name>` when you're inside a linked git worktree
 - **Rate limits** — Optional `rate_limits` slot shows your 5-hour Claude.ai usage (suppressed <50%, yellow 50–79%, red ≥80%)
-- **Session export** — `/export` saves session metadata as Markdown
 - **Auto-cleanup** — Sessions idle for more than 7 days are automatically removed
+
+> [!IMPORTANT]
+> **Upgrading from 4.x:** `/continue` and `/export` were removed in v5.0. Both are replaced by `/handoff`, which writes a richer summary to disk instead of dumping text into the already-full chat. Relationship to Claude Code's native `/recap`: `/recap` summarizes a session you're still in; `/handoff` prepares a file to hand off to a *new* session when context is running out. They're complementary.
 
 ## Install
 
@@ -95,8 +97,7 @@ Everything works automatically after install. Additional commands:
 |---------|-------------|
 | `/purpose <text>` | Manually set session purpose (overrides auto-detection) |
 | `/purpose` | Auto-suggest purpose from conversation |
-| `/continue` | Generate a session handoff summary for a new session |
-| `/export` | Export session metadata as Markdown |
+| `/handoff` | Write a handoff summary to `~/.claude/claude-recall/handoffs/`; reference it in a fresh session via `@<path>` |
 | `/setup` | Reconfigure statusline / verify installation |
 
 ## Customization
@@ -142,11 +143,8 @@ rm -rf ~/.claude/claude-recall/
 **When you run `/purpose`:**
 → Claude analyzes the conversation and suggests a concise purpose summary
 
-**When you run `/continue`:**
-→ Claude summarizes the session and generates a handoff block you can paste into a new session
-
-**When you run `/export`:**
-→ Session metadata is saved as a Markdown file in the current directory
+**When you run `/handoff`:**
+→ Claude summarizes the session and writes a Markdown file to `~/.claude/claude-recall/handoffs/{date}-{slug}.md`. The chat only shows the saved path — the summary lives on disk, so it survives session termination. Seed a new session with `@<path>` to pick up where you left off.
 
 **Session accent colors:**
 → Each session gets a unique color bar (`▍`) based on your project directory + branch, so you can identify sessions by color before reading any text

@@ -1,5 +1,6 @@
 import { mkdirSync, readFileSync, writeFileSync, renameSync, readdirSync, unlinkSync } from 'node:fs';
 import { execSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 
@@ -35,7 +36,7 @@ export function readState(sessionId: string): SessionState | null {
 
 export function writeState(sessionId: string, state: SessionState): void {
   const target = getStatePath(sessionId);
-  const tmp = `${target}.tmp.${process.pid}`;
+  const tmp = `${target}.tmp.${randomUUID()}`;
   writeFileSync(tmp, JSON.stringify(state, null, 2) + '\n', 'utf-8');
   renameSync(tmp, target);
 }
@@ -47,6 +48,7 @@ export function getBranch(cwd: string, fallback: string): string {
       timeout: 2000,
       encoding: 'utf-8',
       stdio: ['pipe', 'pipe', 'pipe'],
+      env: { ...process.env, LC_ALL: 'C' },
     }).trim();
   } catch (err: unknown) {
     // If not a git repo, return empty (don't persist stale branch)

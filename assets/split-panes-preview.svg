@@ -132,7 +132,7 @@
       <tspan class="dim">#45  </tspan>
       <tspan class="text-bold">Add examples for OAuth flow</tspan>
       <tspan class="dim" x="290">3h 10m</tspan>
-      <tspan class="red" x="345">92% ⚠ /continue</tspan>
+      <tspan class="red" x="345">92% ⚠ /handoff</tspan>
     </text>
     <rect class="prompt-bg" x="0" y="172" width="396" height="24"/>
     <line x1="0" y1="172" x2="396" y2="172" stroke="#3b3d52" stroke-width="0.5"/>

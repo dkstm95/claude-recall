@@ -49,6 +49,7 @@ async function main(): Promise<void> {
   process.stdout.write('{}\n');
 }
 
-main().catch(() => {
+main().catch((err) => {
+  process.stderr.write(`[claude-recall session-start] ${err instanceof Error ? err.message : String(err)}\n`);
   process.stdout.write('{}\n');
 });

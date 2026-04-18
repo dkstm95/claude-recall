@@ -1,5 +1,38 @@
 # Changelog
 
+## 5.0.0
+
+### Breaking changes
+
+- **`/continue` removed.** Replaced by `/handoff`. `/continue` collided with the `claude --continue` CLI flag, and its in-chat code-block output was counterproductive in the context-limit scenario it was designed for (the generated summary further inflated an already-full context and did not survive session termination).
+- **`/export` removed.** Its one real use case (persist session info to disk) is absorbed by `/handoff`, which writes a richer summary. `/export` also referenced schema fields (`startedAt`, `status`, `model`) that no longer exist in `SessionState` as of v4.0.0, producing `undefined` rows in its output.
+
+### Migration
+
+- Replace any `/continue` or `/export` usage with `/handoff`. The new command writes to `~/.claude/claude-recall/handoffs/{YYYY-MM-DD}-{slug}.md` and echoes just two lines: the saved path and a ready-to-paste `@<path>` for seeding a fresh session.
+- Relationship to Claude Code's native `/recap`: `/recap` is a resume aid for a session you're *continuing*; `/handoff` prepares a file for a session you're *replacing*. They're complementary.
+
+### Added
+
+- **`/handoff`** — generates a structured Markdown handoff (What was done / What remains / Key context) and writes it to `~/.claude/claude-recall/handoffs/`. Chat output is restricted to two lines — the saved absolute path and a `@<path>` hint — so the command does not further consume the current session's context. Files survive session termination; seed a new session with `@<path>` for instant context recovery.
+
+### Changed
+
+- HUD hints now point to `/handoff`: the 70–89% Line 1 hint `(try /handoff)` and the ≥90% Line 2 warning `⚠ try /handoff`.
+- The ≥90% warning width is now computed via `visibleWidth()` instead of `.length`, eliminating a latent miscount on terminals that render combining marks / CJK in that slot.
+
+### Fixed
+
+- **`/purpose` no longer writes a non-existent `purposeSetAt` field.** The field was removed from `SessionState` in v4.0.0 but the command still instructed Claude to set it; `state.ts` silently dropped it on the next rewrite.
+- **Atomic state writes now use a UUID tmp suffix instead of the process PID** (`src/state.ts`). The previous `${target}.tmp.${process.pid}` risked collision on PID reuse if a prior process crashed before renaming.
+- **`getBranch()` is now locale-independent.** The `execSync` call now injects `LC_ALL=C` so the "not a git repository" stderr match works regardless of the user's locale.
+- **Hooks now log errors to stderr** in addition to emitting `{}` to stdout, so failures in `session-start` and `prompt-submit` are debuggable via Claude Code's hook stderr capture instead of disappearing silently.
+
+### Notes
+
+- Handoff files may contain excerpts of your conversation. They are stored locally only, under `~/.claude/claude-recall/handoffs/`. Review or delete as appropriate.
+- `~/.claude/claude-recall/handoffs/` is created on first `/handoff` use (no pre-setup required).
+
 ## 4.0.0
 
 ### Breaking changes

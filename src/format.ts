@@ -188,7 +188,7 @@ export function formatHud(state: SessionState, termWidth: number, builtin?: Buil
   const hintText = showPurposeHint
     ? tc.dim('  (try /purpose)')
     : showContinueHint
-      ? tc.dim('  (try /continue)')
+      ? tc.dim('  (try /handoff)')
       : '';
   const hintWidth = showPurposeHint || showContinueHint ? HINT_WIDTH : 0;
 
@@ -223,8 +223,9 @@ export function formatHud(state: SessionState, termWidth: number, builtin?: Buil
   if (l2.includes('context') && builtin?.context_window?.used_percentage != null) {
     const pct = Math.round(builtin.context_window.used_percentage);
     if (pct >= 90) {
-      const warn = tc.red(`${pct}% \u26A0 try /continue`);
-      line2Segments.push({ text: warn, width: `${pct}% \u26A0 try /continue`.length });
+      const warnText = `${pct}% \u26A0 try /handoff`;
+      const warn = tc.red(warnText);
+      line2Segments.push({ text: warn, width: visibleWidth(warnText) });
     } else {
       const label = `${pct}%`;
       const s = pct >= 70 ? tc.yellow(label) : tc.green(label);

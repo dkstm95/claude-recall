@@ -56,6 +56,7 @@ async function main() {
     writeState(sessionId, state);
     process.stdout.write('{}\n');
 }
-main().catch(() => {
+main().catch((err) => {
+    process.stderr.write(`[claude-recall prompt-submit] ${err instanceof Error ? err.message : String(err)}\n`);
     process.stdout.write('{}\n');
 });

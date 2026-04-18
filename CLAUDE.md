@@ -1,6 +1,6 @@
 # claude-recall
 
-Claude Code plugin (v3.3.0) that provides a session awareness HUD (Heads-Up Display).
+Claude Code plugin (v5.0.0) that provides a session awareness HUD (Heads-Up Display).
 Tracks purpose, activity, git branch, and prompt count for every parallel Claude Code session.
 
 - **Author**: seungilahn
@@ -27,8 +27,7 @@ npm install          # Install dev dependencies (typescript, @types/node)
   marketplace.json        #   Marketplace listing metadata
 commands/                 # Slash commands (markdown with frontmatter)
   purpose.md              #   /purpose [text] — set or auto-suggest session purpose
-  continue.md             #   /continue — generate session handoff summary
-  export.md               #   /export — export session metadata as Markdown
+  handoff.md              #   /handoff — write session handoff MD to ~/.claude/claude-recall/handoffs/
   setup.md                #   /setup — configure statusline & launcher script
 hooks/
   hooks.json              # Hook registration (SessionStart, UserPromptSubmit)
@@ -52,8 +51,7 @@ SessionStart event -> session-start.ts -> creates/updates ~/.claude/claude-recal
 UserPromptSubmit   -> prompt-submit.ts  -> increments promptCount, auto-purpose, updates branch
 Statusline render  -> statusline.ts     -> reads session JSON + stdin metrics -> 2-line HUD output
 /purpose command   -> purpose.md        -> manual set or AI-generated from transcript
-/continue command  -> continue.md       -> generates session handoff summary for new session
-/export command    -> export.md         -> exports session metadata as Markdown file
+/handoff command   -> handoff.md        -> writes structured handoff MD file for a fresh session
 ```
 
 ## Session State Schema
@@ -74,17 +72,17 @@ Key fields in `~/.claude/claude-recall/sessions/{sessionId}.json`:
 ## HUD Layout
 
 ```
-Line 1 (stable):   ▍ [purpose] (try /purpose|/continue) [worktree] [branch] [model]
+Line 1 (stable):   ▍ [purpose] (try /purpose|/handoff) [worktree] [branch] [model]
 Line 2 (dynamic):  ▍ [#turn last_prompt] [elapsed] [context%] [$cost] [rate_limits]
 ```
 
 - Accent bar prefix (`▍`) with session-specific color (deterministic hash of cwd+branch)
 - Purpose: cyan+bold, prompt: bold — clear visual hierarchy (customizable via theme)
 - Context %: green (<70%), yellow (70-89%), red (≥90%)
-- Context ≥ 90%: cost replaced by red `⚠ try /continue` warning
+- Context ≥ 90%: cost replaced by red `⚠ try /handoff` warning
 - Line 2 only appears after the first prompt
 - `/purpose` hint shows after 5+ prompts when purposeSource is 'auto'; takes priority
-- `/continue` hint shows on Line 1 when context is 70-89% (yields to `/purpose` hint and to the ≥90% warning)
+- `/handoff` hint shows on Line 1 when context is 70-89% (yields to `/purpose` hint and to the ≥90% warning)
 - `worktree` slot renders `⎇ <basename>` from stdin `workspace.git_worktree` — opt-in via config
 - `rate_limits` slot renders `5h:NN%` from stdin `rate_limits.five_hour`, suppressed <50, yellow 50-79, red ≥80 — opt-in via config
 - Elapsed source: stdin `cost.total_duration_ms` when present, else `state.lastActivityAt`
