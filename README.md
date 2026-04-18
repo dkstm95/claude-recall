@@ -64,13 +64,6 @@ Plus: rich git status (dirty + ahead/behind vs `origin/<default>`), rate-limit b
 > [!IMPORTANT]
 > **Restart Claude Code** after `/setup` to activate the statusline and new hooks.
 
-<details>
-<summary><strong>Upgrading from v5.x</strong></summary>
-
-`/purpose` is removed. Focus is now autonomous. The `purpose` state field is migrated in-place to `focus` on first read — no user action needed. See [CHANGELOG.md](CHANGELOG.md) for the full set of breaking changes.
-
-</details>
-
 ## Usage
 
 Everything works automatically after install. There are no focus-management commands.
