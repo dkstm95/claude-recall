@@ -1,5 +1,14 @@
 # Changelog
 
+## 6.0.1
+
+### Fixed
+
+- **Spurious `⚠ AI refinement failed` on the very first prompt.** v6.0.0 triggered focus refinement at `promptCount=1`, which raced Claude Code's transcript JSONL flush — the worker often read an empty transcript and surfaced it as a generic `unknown` error label. Two-layer fix:
+  - **First refinement deferred to `promptCount=2`** in `prompt-submit.ts`. The first focus label now appears one turn later, but without the race.
+  - **Empty transcript is now a silent skip**, not an error, in `refine.ts` (new `RefineResult` `'skip'` variant). Applies to `PreCompact` and `SessionEnd` paths too, where an empty transcript can also legitimately occur.
+  - **Optimistic `lastRefinedAt` write is rolled back on skip** so a subsequent `PreCompact` within 5s isn't blocked by a debounce that protects a no-op.
+
 ## 6.0.0
 
 ### Breaking changes

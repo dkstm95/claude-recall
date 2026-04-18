@@ -28,8 +28,9 @@ const SYSTEM_PROMPT = [
 ].join('\n');
 
 type RefineResult =
-  | { ok: true; focus: string }
-  | { ok: false; code: RefinementError['code'] };
+  | { status: 'ok'; focus: string }
+  | { status: 'skip' }
+  | { status: 'error'; code: RefinementError['code'] };
 
 export function shouldRefine(lastRefinedAt: string | null): boolean {
   if (!lastRefinedAt) return true;
@@ -70,10 +71,11 @@ export async function spawnRefinement(
   try {
     transcript = await readTranscriptTail(transcriptPath);
   } catch {
-    return { ok: false, code: 'unknown' };
+    // Transcript file missing — treat as "no data yet" rather than a failure.
+    return { status: 'skip' };
   }
   if (!transcript.trim()) {
-    return { ok: false, code: 'unknown' };
+    return { status: 'skip' };
   }
 
   const userPrompt = [
@@ -115,15 +117,15 @@ export async function spawnRefinement(
     };
 
     const timer = setTimeout(() => {
-      finish({ ok: false, code: 'timeout' });
+      finish({ status: 'error', code: 'timeout' });
     }, TIMEOUT_MS);
 
     child.stdout.on('data', (d: Buffer) => { stdout += d.toString('utf-8'); });
     child.stderr.on('data', (d: Buffer) => { stderr += d.toString('utf-8'); });
-    child.on('error', () => finish({ ok: false, code: 'unknown' }));
+    child.on('error', () => finish({ status: 'error', code: 'unknown' }));
     child.on('exit', (exitCode) => {
       if (exitCode !== 0) {
-        finish({ ok: false, code: classifyError(exitCode, stderr) });
+        finish({ status: 'error', code: classifyError(exitCode, stderr) });
         return;
       }
       const focus = stdout
@@ -133,10 +135,10 @@ export async function spawnRefinement(
         .slice(0, FOCUS_MAX_CHARS)
         .trim();
       if (!focus) {
-        finish({ ok: false, code: 'unknown' });
+        finish({ status: 'error', code: 'unknown' });
         return;
       }
-      finish({ ok: true, focus });
+      finish({ status: 'ok', focus });
     });
   });
 }
@@ -152,6 +154,7 @@ export async function triggerFocusRefinement(
   if (!shouldRefine(state.lastRefinedAt)) return;
 
   // Optimistic write narrows the concurrent-spawn window during the subprocess call.
+  const previousRefinedAt = state.lastRefinedAt;
   state.lastRefinedAt = new Date().toISOString();
   writeState(sessionId, state);
 
@@ -161,7 +164,14 @@ export async function triggerFocusRefinement(
   const fresh = readState(sessionId);
   if (!fresh) return;
 
-  if (result.ok) {
+  if (result.status === 'skip') {
+    // Roll back the optimistic debounce write — we never actually called Haiku.
+    fresh.lastRefinedAt = previousRefinedAt;
+    writeState(sessionId, fresh);
+    return;
+  }
+
+  if (result.status === 'ok') {
     fresh.focus = result.focus;
     fresh.refinementError = null;
   } else {

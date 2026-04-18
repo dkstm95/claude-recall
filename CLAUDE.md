@@ -50,7 +50,7 @@ assets/                   # SVG preview images for marketplace
 
 ```
 SessionStart event -> session-start.ts -> creates/updates ~/.claude/claude-recall/sessions/{id}.json
-UserPromptSubmit   -> prompt-submit.ts  -> increments promptCount, updates git status, triggers focus refinement at 2^k turns
+UserPromptSubmit   -> prompt-submit.ts  -> increments promptCount, updates git status, triggers focus refinement at 2^k turns (k>=1, so 2,4,8,...)
 PreCompact         -> pre-compact.ts    -> triggers focus refinement (natural milestone)
 SessionEnd         -> session-end.ts    -> triggers focus refinement (final snapshot)
 Statusline render  -> statusline.ts     -> reads session JSON + stdin metrics -> 1-3 line statusline output
@@ -62,7 +62,7 @@ Focus refinement path:
 trigger -> refine.ts::triggerFocusRefinement (5s debounce via lastRefinedAt)
          -> spawn `claude -p --model=haiku --tools "" --no-session-persistence ...`
             with env CLAUDE_RECALL_REFINING=1 (prevents recursive plugin hook firing in child)
-         -> 30s timeout; output text -> state.focus OR refinementError
+         -> 30s timeout; output text -> state.focus OR refinementError (empty transcript = silent skip, not an error)
 ```
 
 ## Session State Schema
