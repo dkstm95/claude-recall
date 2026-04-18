@@ -25,61 +25,30 @@ claude-recall answers two questions for every session, at a glance:
 2. **How far along is it?** — turn count, elapsed time, context usage, git status, and rate-limit bars
 
 <p align="center">
-  <img src="assets/statusline-preview.svg" alt="claude-recall: multiple terminal tabs" width="720">
+  <img src="assets/statusline-preview.svg" alt="claude-recall statusline across multiple terminal tabs" width="720">
 </p>
 
+<details>
+<summary><strong>See it in a split-pane layout</strong></summary>
+
 <p align="center">
-  <img src="assets/split-panes-preview.svg" alt="claude-recall: split panes" width="800">
+  <img src="assets/split-panes-preview.svg" alt="claude-recall statusline in four tmux split panes" width="800">
 </p>
+
+</details>
+
+## Why claude-recall?
+
+- **Autonomous focus** — No commands to run. A Haiku subprocess refines each session's focus in the background, in the transcript's language.
+- **Per-session accent color** — Deterministic color bar from project dir + branch. Spot which tab is which by color, before reading any text.
+- **`/handoff` emergency exit** — When context is about to run out, writes a structured Markdown summary to disk that survives session termination. Seed a fresh session with `@<path>` to continue.
+
+Plus: rich git status (dirty + ahead/behind vs `origin/<default>`), rate-limit bars (5h / 7d), Claude Code's context / cost / model — all in up to three lines.
+
+## Install
 
 > [!IMPORTANT]
 > **Background LLM calls.** claude-recall automatically refines each session's focus by calling Claude Haiku in the background (roughly $0.01 per long session). This is the core of the plugin — there is no opt-out toggle. If you prefer zero background LLM calls, **do not install this plugin**.
-
-## What's in the statusline
-
-Up to three lines above your prompt:
-
-| Element | Location | Description | Source |
-|---------|----------|-------------|--------|
-| **accent bar** | all lines, left | Session-specific color bar (`▍`) — deterministic color from project dir + branch | claude-recall |
-| **focus** | Line 1, left | AI-refined summary of what this session is currently working on — managed autonomously | claude-recall |
-| **branch + status** | Line 1, right | `branch*↑N↓N` — dirty flag + commits ahead/behind `origin/<default>` | claude-recall |
-| **model** | Line 1, right | Active Claude model (e.g. Opus) | Claude Code built-in |
-| **turn** | Line 2, left | Current prompt number (`#12`) | claude-recall |
-| **last prompt** | Line 2, left | The last prompt you typed (now with ~3× more visible width vs v5) | claude-recall |
-| **elapsed** | Line 2, right | Time since session start / last activity | claude-recall |
-| **context%** | Line 2, right | Context window usage — green (<70%), yellow (70-89%), red (≥90%) | Claude Code built-in |
-| **5h rate limit bar** | Line 3 | 5-hour usage visualized — `5h ████░░░░░░ 45%` | Claude Code built-in |
-| **7d rate limit bar** | Line 3 | 7-day usage visualized (when data available) | Claude Code built-in |
-| **cost** | Line 3, right | Cumulative session cost | Claude Code built-in |
-| **worktree** *(opt-in)* | Line 1, right | `⎇ <name>` when inside a linked git worktree | Claude Code built-in |
-| **refinement error** | Line 1, left | Red `⚠ AI <reason>` label replaces focus when a background refinement fails | claude-recall |
-
-> [!TIP]
-> Line 3 renders only when rate-limits data is present (Claude subscribers). API-key-only users naturally see two lines.
-
-> [!WARNING]
-> When context usage reaches **90%+**, Line 2's `cost` slot becomes a red `⚠ try /handoff` warning. Run `/handoff` to write a handoff summary to disk — reference it in a new session with `@<path>` to continue seamlessly.
-
-## Features
-
-- **Autonomous focus management** — No slash commands to run. Focus is refined in the background by a Haiku subprocess at turns 1, 2, 4, 8, 16, 32, ..., before context compaction, and at session end. Writes in the transcript's language (Korean transcript → Korean focus).
-- **Per-session accent color** — Each session gets a deterministic color bar (`▍`) from its project dir + branch, so you can identify sessions by color before reading any text.
-- **Rich git status** — Branch display always shows dirty flag + ahead/behind counts vs `origin/<default>` (auto-detects main/master). On `main` itself, `main↓3` tells you you haven't pulled in a while.
-- **Rate limit bars** — 5h / 7d Claude.ai subscription windows visualized as bars, color-coded by threshold.
-- **Wide prompt area** — The last prompt you typed now gets the bulk of Line 2's width (~3× vs v5).
-- **Context crisis warning** — At 90%+ context, a red `⚠ try /handoff` replaces the cost on Line 2.
-- **`/handoff` (secondary / emergency exit)** — When a session's context is about to run out, `/handoff` writes a structured Markdown summary to `~/.claude/claude-recall/handoffs/` that survives session termination. Seed a fresh session with `@<path>` to continue.
-- **Auto-cleanup** — Sessions idle for >7 days are removed on next SessionStart.
-- **Theme presets** — `default`, `minimal`, `vivid`.
-
-> [!NOTE]
-> **Ahead/behind counts reflect your last `git fetch`.** Run `git fetch` periodically to keep the `↓N` indicator honest.
-
-> [!IMPORTANT]
-> **Upgrading from 5.x:** `/purpose` is removed. Focus is now autonomous. The `purpose` state field is migrated in-place to `focus` on first read — no user action needed. See CHANGELOG.md for the full set of breaking changes.
-
-## Install
 
 ```bash
 # 1. Add marketplace
@@ -94,6 +63,13 @@ Up to three lines above your prompt:
 
 > [!IMPORTANT]
 > **Restart Claude Code** after `/setup` to activate the statusline and new hooks.
+
+<details>
+<summary><strong>Upgrading from v5.x</strong></summary>
+
+`/purpose` is removed. Focus is now autonomous. The `purpose` state field is migrated in-place to `focus` on first read — no user action needed. See [CHANGELOG.md](CHANGELOG.md) for the full set of breaking changes.
+
+</details>
 
 ## Usage
 
@@ -130,18 +106,33 @@ Create `~/.claude/claude-recall/config.json`:
 
 Legacy configs with `"line1": ["purpose", ...]` are transparently mapped to `"focus"`.
 
-## Uninstall
+## Statusline reference
 
-```bash
-# 1. Remove plugin
-/plugin uninstall claude-recall@claude-recall
+<details>
+<summary><strong>What each element means (full table)</strong></summary>
 
-# 2. Remove statusline from ~/.claude/settings.json
-#    Delete the "statusLine" key, then restart Claude Code
+| Element | Location | Description | Source |
+|---------|----------|-------------|--------|
+| **accent bar** | all lines, left | Session-specific color bar (`▍`) — deterministic color from project dir + branch | claude-recall |
+| **focus** | Line 1, left | AI-refined summary of what this session is currently working on — managed autonomously | claude-recall |
+| **branch + status** | Line 1, right | `branch*↑N↓N` — dirty flag + commits ahead/behind `origin/<default>` | claude-recall |
+| **model** | Line 1, right | Active Claude model (e.g. Opus) | Claude Code built-in |
+| **turn** | Line 2, left | Current prompt number (`#12`) | claude-recall |
+| **last prompt** | Line 2, left | The last prompt you typed (now with ~3× more visible width vs v5) | claude-recall |
+| **elapsed** | Line 2, right | Time since session start / last activity | claude-recall |
+| **context%** | Line 2, right | Context window usage — green (<70%), yellow (70-89%), red (≥90%) | Claude Code built-in |
+| **5h rate limit bar** | Line 3 | 5-hour usage visualized — `5h ████░░░░░░ 45%` | Claude Code built-in |
+| **7d rate limit bar** | Line 3 | 7-day usage visualized (when data available) | Claude Code built-in |
+| **cost** | Line 3, right | Cumulative session cost | Claude Code built-in |
+| **worktree** *(opt-in)* | Line 1, right | `⎇ <name>` when inside a linked git worktree | Claude Code built-in |
+| **refinement error** | Line 1, left | Red `⚠ AI <reason>` label replaces focus when a background refinement fails | claude-recall |
 
-# 3. (Optional) Remove session data
-rm -rf ~/.claude/claude-recall/
-```
+Notes:
+- Line 3 renders only when rate-limits data is present (Claude subscribers). API-key-only users naturally see two lines.
+- At **90%+** context, Line 2's `cost` slot becomes a red `⚠ try /handoff` warning.
+- Ahead/behind counts reflect your last `git fetch`. Run `git fetch` periodically to keep the `↓N` indicator honest.
+
+</details>
 
 <details>
 <summary><strong>How focus refinement works</strong></summary>
@@ -160,6 +151,19 @@ Each trigger spawns `claude -p --model=haiku` as a subprocess with the last 20KB
 On failure, Line 1's focus is replaced by a red label (`⚠ AI timeout`, `⚠ AI rate limited`, `⚠ AI auth failed`, or `⚠ AI refinement failed`) until the next successful refinement clears it.
 
 </details>
+
+## Uninstall
+
+```bash
+# 1. Remove plugin
+/plugin uninstall claude-recall@claude-recall
+
+# 2. Remove statusline from ~/.claude/settings.json
+#    Delete the "statusLine" key, then restart Claude Code
+
+# 3. (Optional) Remove session data
+rm -rf ~/.claude/claude-recall/
+```
 
 <details>
 <summary><strong>Development</strong></summary>
