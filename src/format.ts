@@ -1,5 +1,3 @@
-import { openSync, closeSync } from 'node:fs';
-import { WriteStream, isatty } from 'node:tty';
 import type { SessionState, RefinementError, GitStatus } from './state.js';
 import type { StatuslineConfig, ThemeColors } from './config.js';
 import type { RateLimitsData } from './rate-limits-cache.js';
@@ -81,31 +79,16 @@ export function formatElapsedMs(ms: number): string {
   return formatDurationMs(ms);
 }
 
+// Claude Code spawns the statusline subprocess with piped stdio and no $COLUMNS,
+// so reading the real tty is fragile: process.stdout.isTTY is false, and /dev/tty
+// (even when openable) may report a width that doesn't match Claude Code's actual
+// statusline render area — inside multiplexers like cmux/tmux the outer tty can
+// be wider than the pane Claude Code draws into, which causes Claude Code to
+// ellipsis-truncate our padded lines and drop Lines 2–3. Fall back to 80 and let
+// users opt into a wider budget by setting $COLUMNS in their statusline launcher.
 export function getTerminalWidth(): number {
   const env = parseInt(process.env.COLUMNS ?? '', 10);
   if (!isNaN(env) && env > 0) return env;
-
-  // Claude Code spawns the statusline subprocess with piped stdio, so
-  // process.stdout.isTTY is false. The controlling terminal is still
-  // reachable via /dev/tty, which is inherited from the parent process tree.
-  let fd: number | undefined;
-  try {
-    fd = openSync('/dev/tty', 'r+');
-    if (isatty(fd)) {
-      const ws = new WriteStream(fd);
-      fd = undefined;
-      const cols = ws.columns;
-      ws.destroy();
-      if (cols && cols > 0) return cols;
-    }
-  } catch {
-    // /dev/tty unavailable (e.g. non-interactive CI, Windows) — fall through.
-  } finally {
-    if (fd !== undefined) {
-      try { closeSync(fd); } catch {}
-    }
-  }
-
   return 80;
 }
 
@@ -222,6 +205,68 @@ function formatUsageSegment(
   const resetPart = resetText ? ` ${tc.dim(resetText)}` : '';
   const text = `${labelColored} ${bar} ${pctColored}${resetPart}`;
   return { text, width: visibleWidth(text) };
+}
+
+function buildLine3Segments(
+  l3: readonly string[],
+  builtin: BuiltinData | undefined,
+  ctxPct: number | undefined,
+  tc: ThemeColors,
+  compactLevel: 0 | 1 | 2,
+): Segment[] {
+  const segs: Segment[] = [];
+  if (l3.includes('context') && ctxPct != null) {
+    segs.push(formatUsageSegment('ctx', ctxPct, tc, undefined, CTX_THRESHOLDS));
+  }
+  const fiveHour = builtin?.rate_limits?.five_hour;
+  if (l3.includes('rate_limits') && fiveHour?.used_percentage != null) {
+    const resetText = compactLevel < 2 && fiveHour.resets_at != null
+      ? formatFiveHourReset(fiveHour.resets_at)
+      : undefined;
+    segs.push(formatUsageSegment('5h', fiveHour.used_percentage, tc, resetText));
+  }
+  const sevenDay = builtin?.rate_limits?.seven_day;
+  // 7d's reset text ("(~M/D HH:MM)") is ~14 cols, 5h's ~10, so 7d's drops first.
+  if (l3.includes('seven_day') && sevenDay?.used_percentage != null) {
+    const resetText = compactLevel < 1 && sevenDay.resets_at != null
+      ? formatSevenDayReset(sevenDay.resets_at)
+      : undefined;
+    segs.push(formatUsageSegment('7d', sevenDay.used_percentage, tc, resetText));
+  }
+  if (l3.includes('cost') && builtin?.cost?.total_cost_usd != null) {
+    const cost = builtin.cost.total_cost_usd;
+    const s = tc.dim(cost < 0.01 ? '$0.00' : `$${cost.toFixed(2)}`);
+    segs.push({ text: s, width: visibleWidth(s) });
+  }
+  return segs;
+}
+
+function segmentsTotalWidth(segs: Segment[]): number {
+  if (segs.length === 0) return 0;
+  return segs.reduce((sum, s) => sum + s.width, 0) + (segs.length - 1) * 2;
+}
+
+function renderLine3(
+  l3: readonly string[],
+  builtin: BuiltinData | undefined,
+  ctxPct: number | undefined,
+  tc: ThemeColors,
+  budget: number,
+): string | null {
+  const fullSegs = buildLine3Segments(l3, builtin, ctxPct, tc, 0);
+  if (fullSegs.length === 0) return null;
+
+  let segs = fullSegs;
+  for (const level of [0, 1, 2] as const) {
+    segs = level === 0 ? fullSegs : buildLine3Segments(l3, builtin, ctxPct, tc, level);
+    if (segmentsTotalWidth(segs) <= budget) {
+      return segs.map((s) => s.text).join('  ');
+    }
+  }
+
+  // Even fully compacted (L2) exceeds the budget: drop segments right-to-left.
+  // progressiveJoin keeps at least one, so ctx always survives when present.
+  return progressiveJoin(segs, budget, 0).text;
 }
 
 export function formatStatusline(
@@ -358,39 +403,9 @@ export function formatStatusline(
     line2 = prefix + turnLabel + promptText + ' '.repeat(gap2) + line2RightJoined.text;
   }
 
-  // =========================================================================
-  // Line 3 (opt-out): ctx bar + 5h bar + 7d bar + cost
-  // =========================================================================
-  const line3Segments: Segment[] = [];
-
-  if (l3.includes('context') && ctxPct != null) {
-    line3Segments.push(formatUsageSegment('ctx', ctxPct, tc, undefined, CTX_THRESHOLDS));
-  }
-
-  if (l3.includes('rate_limits') && builtin?.rate_limits?.five_hour?.used_percentage != null) {
-    const pct = builtin.rate_limits.five_hour.used_percentage;
-    const resetsAt = builtin.rate_limits.five_hour.resets_at;
-    const resetText = resetsAt != null ? formatFiveHourReset(resetsAt) : undefined;
-    line3Segments.push(formatUsageSegment('5h', pct, tc, resetText));
-  }
-
-  if (l3.includes('seven_day') && builtin?.rate_limits?.seven_day?.used_percentage != null) {
-    const pct = builtin.rate_limits.seven_day.used_percentage;
-    const resetsAt = builtin.rate_limits.seven_day.resets_at;
-    const resetText = resetsAt != null ? formatSevenDayReset(resetsAt) : undefined;
-    line3Segments.push(formatUsageSegment('7d', pct, tc, resetText));
-  }
-
-  if (l3.includes('cost') && builtin?.cost?.total_cost_usd != null) {
-    const cost = builtin.cost.total_cost_usd;
-    const s = tc.dim(cost < 0.01 ? '$0.00' : `$${cost.toFixed(2)}`);
-    line3Segments.push({ text: s, width: visibleWidth(s) });
-  }
-
-  // Progressive drop for narrow terminals: drop cost first, then 7d, keeping 5h.
-  const line3 = line3Segments.length > 0
-    ? prefix + progressiveJoin(line3Segments, termWidth - prefixWidth, 0).text
-    : null;
+  // Line 3 priority: ctx > 5h > 7d > cost. See renderLine3() for the compaction ladder.
+  const line3Body = renderLine3(l3, builtin, ctxPct, tc, termWidth - prefixWidth);
+  const line3 = line3Body !== null ? prefix + line3Body : null;
 
   const parts: string[] = [line1];
   if (line2) parts.push(line2);

@@ -63,7 +63,7 @@ test('progressiveJoin: keeps at least one segment even if minLeft cannot be sati
   assert.equal(out.text, 'single');
 });
 
-test('getTerminalWidth: $COLUMNS overrides all other signals', () => {
+test('getTerminalWidth: $COLUMNS overrides the fallback', () => {
   const saved = process.env.COLUMNS;
   process.env.COLUMNS = '140';
   try {
@@ -74,15 +74,13 @@ test('getTerminalWidth: $COLUMNS overrides all other signals', () => {
   }
 });
 
-test('getTerminalWidth: rejects invalid $COLUMNS (0 / negative) and returns a positive width', () => {
+test('getTerminalWidth: rejects invalid $COLUMNS (0 / negative) and falls back to 80', () => {
   const saved = process.env.COLUMNS;
   process.env.COLUMNS = '0';
   try {
-    // COLUMNS=0 must NOT be returned verbatim; we expect either the /dev/tty
-    // width (test run in a TTY) or the 80 fallback (detached runner).
-    assert.ok(getTerminalWidth() > 0);
+    assert.equal(getTerminalWidth(), 80);
     process.env.COLUMNS = '-5';
-    assert.ok(getTerminalWidth() > 0);
+    assert.equal(getTerminalWidth(), 80);
   } finally {
     if (saved === undefined) delete process.env.COLUMNS;
     else process.env.COLUMNS = saved;

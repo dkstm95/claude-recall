@@ -88,25 +88,42 @@ Key fields in `~/.claude/claude-recall/sessions/{sessionId}.json`:
 
 ```
 Line 1 (stable):   ▍ [focus|error-label] (try /handoff) [worktree] [branch*↑N↓N] [model]
-Line 2 (dynamic):  ▍ [#turn last_prompt]                           [elapsed] [context%]
-Line 3 (opt-out):  ▍ 5h ████░░░░░░ 45%   7d ██░░░░░░░░ 20%   $0.03
+Line 2 (dynamic):  ▍ [#turn last_prompt]                                        [elapsed]
+Line 3 (opt-out):  ▍ ctx ████░░░░░░ 45%   5h ████░░░░░░ 52% (~17:00)   7d █░░░░░░░░░ 19%   $0.03
 ```
 
 - Accent bar prefix (`▍`) with session-specific color (deterministic hash of cwd+branch)
 - Focus: cyan+bold (default theme), replaced by red `⚠ AI <reason>` when `refinementError` is set
 - Prompt: bold — clear visual hierarchy (customizable via theme)
-- Context %: green (<70%), yellow (70-89%), red (≥90%)
-- Context ≥ 90%: `⚠ try /handoff` red warning in context slot
-- Line 2 only appears after the first prompt
+- Context %: green (<70%), yellow (70-89%), red (≥90%) — rendered on Line 3 as `ctx` bar since v6.1.0
+- Context ≥ 90%: `⚠ try /handoff` red warning on Line 1
+- Line 2 renders on every entry (with `(awaiting first prompt)` placeholder before the first prompt)
 - `/handoff` hint shows on Line 1 when context is 70-89% (yields to the ≥90% warning)
 - `worktree` slot renders `⎇ <basename>` from stdin `workspace.git_worktree` — opt-in via config
 - `branch` slot renders `branch[*][↑N][↓N]` — dirty flag + ahead/behind vs `origin/<default>`. 0-count arrows suppressed.
-- `line3` slot renders rate_limits bars + 7d + cost. Hidden when no rate_limits data. Opt out with `line3: []`.
+- `line3` slot renders ctx + rate_limits bars + cost. Hidden when no data. Opt out with `line3: []`.
 - Elapsed source: stdin `cost.total_duration_ms` when present, else `state.lastActivityAt`
-- Progressive truncation: right-side elements drop on narrow terminals
-- Minimum widths: focus >= 15 cols, prompt >= 30 cols (raised from 15 in v5)
-- Prompt 80-col hard cap removed — last prompt now claims most of Line 2
+- Minimum widths: focus >= 15 cols (truncated with `…`), prompt >= 30 cols (truncated with `…`)
 - Configurable via `~/.claude/claude-recall/config.json` (line1/line2/line3 slots, gitStatus toggles, theme)
+
+### Priority rules (what drops as width shrinks)
+
+Default fallback width is 80 cols (see `getTerminalWidth()`); set `$COLUMNS` in the launcher for wider budgets.
+
+**Line 1** — `focus` always renders (truncated with `…` to min 15 cols). Right-side segments follow config order left-to-right = high-to-low priority, and `progressiveJoin` drops the rightmost segments first. Default `['focus', 'branch', 'model']` means `model` drops before `branch`.
+
+**Line 2** — `#turn` always renders. `last_prompt` truncates with `…` to min 30 cols. Right-side (`elapsed`) drops first if the prompt cannot meet its minimum.
+
+**Line 3** — Priority `ctx > 5h > 7d > cost`. Before dropping whole segments, a compaction ladder shortens each one:
+
+| Level | What changes | Cols saved |
+|-------|--------------|-----------|
+| L0 | Full render (every segment with its reset text) | — |
+| L1 | Drop 7d's `(~M/D HH:MM)` reset | ~14 |
+| L2 | Drop 5h's `(~HH:MM)` reset too | ~10 more |
+| L3 | Drop whole segments right-to-left: `cost` → `7d` → `5h`; `ctx` always survives | variable |
+
+Effect at the 80-col fallback with all four segments populated: L0 is ~91 cols → L1 fits at ~77 cols → every segment stays visible, only 7d's reset text is hidden. See `renderLine3()` in `src/format.ts`.
 
 ## Key Patterns
 

@@ -129,3 +129,67 @@ test('formatStatusline: ctx hidden when line3 is empty (opt-out)', () => {
   const lines = out.split('\n');
   assert.ok(lines.every((l) => !stripAnsi(l).includes('ctx')), `ctx should be hidden when line3 is empty`);
 });
+
+// =============================================================================
+// Line 3 compaction ladder (priority: ctx > 5h > 7d > cost; reset texts drop
+// before whole segments do).
+// =============================================================================
+
+const L3_FULL_BUILTIN = {
+  model: { display_name: 'Opus 4.7' },
+  context_window: { used_percentage: 45 },
+  cost: { total_cost_usd: 0.03 },
+  rate_limits: {
+    five_hour: { used_percentage: 52, resets_at: 1776585600 },
+    seven_day: { used_percentage: 19, resets_at: 1776988800 },
+  },
+};
+
+test('formatStatusline: L3 compaction at 80 cols keeps all 4 segments, drops 7d reset first', () => {
+  const out = formatStatusline(emptyState(), 80, L3_FULL_BUILTIN, BASE_CFG);
+  const lines = out.split('\n');
+  assert.equal(lines.length, 3, `expected 3 lines at 80 cols, got ${lines.length}: ${JSON.stringify(out)}`);
+  const clean3 = stripAnsi(lines[2]);
+  assert.ok(clean3.includes('ctx'), `ctx must survive, got "${clean3}"`);
+  assert.ok(clean3.includes('5h'), `5h must survive, got "${clean3}"`);
+  assert.ok(clean3.includes('7d'), `7d must survive at 80 cols, got "${clean3}"`);
+  assert.ok(clean3.includes('$0.03'), `cost must survive at 80 cols, got "${clean3}"`);
+  // 5h's reset text (~HH:MM) keeps at L1, 7d's reset (~M/D HH:MM) drops.
+  assert.ok(clean3.includes('(~'), `5h reset text should still show at 80 cols, got "${clean3}"`);
+  assert.ok(!/\(~\d+\/\d+/.test(clean3), `7d reset text (~M/D ...) should drop at 80 cols, got "${clean3}"`);
+});
+
+test('formatStatusline: L3 compaction at 140 cols (wide) keeps every reset text', () => {
+  const out = formatStatusline(emptyState(), 140, L3_FULL_BUILTIN, BASE_CFG);
+  const clean3 = stripAnsi(out.split('\n')[2]);
+  assert.ok(/\(~\d+\/\d+/.test(clean3), `7d reset text (~M/D HH:MM) should render at 140 cols, got "${clean3}"`);
+});
+
+test('formatStatusline: L3 compaction drops cost first when segments must go', () => {
+  // All-compact L3 width (no reset texts): ctx(18) + 5h(17) + 7d(17) + cost(5) + 3×2 joins = 63.
+  // At 63 cols budget (termWidth=66) we barely fit everything; at termWidth=65 we must drop.
+  const out = formatStatusline(emptyState(), 65, L3_FULL_BUILTIN, BASE_CFG);
+  const clean3 = stripAnsi(out.split('\n')[2]);
+  assert.ok(clean3.includes('ctx'), `ctx highest priority, got "${clean3}"`);
+  assert.ok(clean3.includes('5h'), `5h should survive, got "${clean3}"`);
+  assert.ok(clean3.includes('7d'), `7d should survive when only cost needs dropping, got "${clean3}"`);
+  assert.ok(!clean3.includes('$0.03'), `cost should drop first, got "${clean3}"`);
+});
+
+test('formatStatusline: L3 compaction drops 7d next, keeps ctx + 5h', () => {
+  // After cost drop: 18 + 17 + 17 + 2×2 = 56. Need budget < 56 (termWidth < 59) to drop 7d.
+  const out = formatStatusline(emptyState(), 50, L3_FULL_BUILTIN, BASE_CFG);
+  const clean3 = stripAnsi(out.split('\n')[2]);
+  assert.ok(clean3.includes('ctx'), `ctx must survive, got "${clean3}"`);
+  assert.ok(clean3.includes('5h'), `5h keeps priority over 7d, got "${clean3}"`);
+  assert.ok(!clean3.includes('7d'), `7d should drop before 5h, got "${clean3}"`);
+  assert.ok(!clean3.includes('$0.03'), `cost still dropped, got "${clean3}"`);
+});
+
+test('formatStatusline: L3 always renders at least ctx when budget is tiny', () => {
+  const out = formatStatusline(emptyState(), 22, L3_FULL_BUILTIN, BASE_CFG);
+  const lines = out.split('\n');
+  assert.equal(lines.length, 3, `all 3 lines should render even at narrow widths, got ${lines.length}`);
+  const clean3 = stripAnsi(lines[2]);
+  assert.ok(clean3.includes('ctx'), `ctx must always render when present, got "${clean3}"`);
+});

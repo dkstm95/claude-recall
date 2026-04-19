@@ -1,5 +1,29 @@
 # Changelog
 
+## 6.1.2
+
+### Fixed
+
+- **First-entry render broken on wide terminals after v6.1.1 (`Line 1` model ellipsis-truncated, `Line 2`/`Line 3` missing).** v6.1.1 introduced `/dev/tty` detection so `getTerminalWidth()` could return the real terminal width (e.g. 178) instead of the 80-col fallback, enabling the full Line 3 (`ctx  5h  7d  $cost`) on wide terminals. In multiplexer environments (cmux, tmux) the `/dev/tty` columns inherited from the outer process tree does NOT match Claude Code's effective statusline render area — the outer tty is wider than the pane Claude Code draws into. Our code then padded Line 1 to the (too-large) reported width, and Claude Code's statusline renderer truncated the overflowing line with its own `…` (hence the `Opus 4.7 (1M cont…` cutoff in the bug report) and dropped Lines 2/3 entirely because their wrapped physical rows exhausted the statusline area budget. Reverted `getTerminalWidth()` to the simple `$COLUMNS`-or-80 path: first-entry now renders all three lines reliably.
+
+- **`7d` (and `$cost`) silently disappeared from Line 3 once a prompt was submitted.** The 80-col fallback + v6.1.0's new `ctx` bar pushed the full Line 3 to ~89 cols, so `progressiveJoin` dropped `$cost` then `7d` from the right — the same regression that motivated v6.1.1's now-reverted `/dev/tty` change. Replaced Line 3's single-pass `progressiveJoin` with a **priority-aware compaction ladder** that preserves every segment at 80 cols:
+  - **Priority:** `ctx > 5h > 7d > cost`. Reset timestamps (`(~HH:MM)`, `(~M/D HH:MM)`) are dropped before whole segments are, since they're nice-to-have context on bars users can already read.
+  - **Compaction levels:**
+    - **L0** full — all segments render with reset text.
+    - **L1** drop 7d's `(~M/D HH:MM)` (~14 cols saved).
+    - **L2** drop 5h's `(~HH:MM)` too (~10 more cols saved).
+    - **L3** drop whole segments right-to-left: `cost` → `7d` → `5h`. `ctx` always survives when present.
+  - At the default 80-col budget with every segment populated (ctx 45%, 5h 52% + reset, 7d 19% + reset, $0.03), the full content is ~88 cols. L1 compaction drops 7d's reset text and the line fits at ~74 cols — users now see `ctx  5h (~HH:MM)  7d  $cost` on every render, not just on wide terminals.
+
+### Added
+
+- **Line 1 and Line 2 priority rules documented.** Same spirit as Line 3: `focus` (left) and `last_prompt` are truncated with `…` to their minimum widths (15 / 30 cols) before right-side segments drop. Line 1 right-side drop order follows user config order (left-of-config = higher priority); default `['focus', 'branch', 'model']` means `model` drops before `branch`. Line 2 right-side default drops `elapsed` if the prompt can't fit its minimum.
+
+### Notes
+
+- Trade-off vs the v6.1.1 approach: wide-terminal users no longer get extra horizontal room for Line 3 extras — but the compaction ladder makes the full 4-segment render fit in 80 cols anyway, so only reset timestamps are ever hidden (L1). Setting `$COLUMNS` in the statusline launcher still works as an explicit opt-in for wider budgets (which would keep every reset text, L0).
+- 5 new tests in `test/statusline.test.mjs` cover the ladder at 80 / 140 / 65 / 50 / 22 cols. Total: 53 → 58.
+
 ## 6.1.1
 
 ### Fixed
