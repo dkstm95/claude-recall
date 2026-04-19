@@ -1,5 +1,21 @@
 # Changelog
 
+## 6.0.3
+
+### Added
+
+- **Refinement observability.** `RefinementError` now carries `durationMs` (how long the Haiku subprocess ran before failing) and `stderrTail` (last 500 chars of stderr, trimmed, omitted when empty). Surfaced in `~/.claude/claude-recall/sessions/<id>.json` so future timeouts can be diagnosed without re-running the scenario.
+- **Test suite.** `node --test` based unit tests for UTF-8 boundary handling in `readTranscriptTail`, CJK width / truncation in `format.ts`, and `classifyError` / `shouldRefine` behavior. Run with `npm test`. Zero new runtime or dev dependencies — tests are `.mjs` files that import the built `dist/` output.
+
+### Changed
+
+- `readTranscriptTail`, `classifyError`, `progressiveJoin`, and the `Segment` interface are now exported. Internal behavior unchanged.
+
+### Notes
+
+- The `stderrTail` / `durationMs` fields are optional. Old state files without them continue to read normally; `writeState` omits them when absent (standard `JSON.stringify` behavior with `undefined`).
+- Next candidate to verify with the new data: whether first-prompt timeouts correlate with large transcript tails (`durationMs` close to 30 000 ms) or network/auth (`stderrTail` with rate-limit or credential text that slipped past `classifyError`).
+
 ## 6.0.2
 
 ### Fixed

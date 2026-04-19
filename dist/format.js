@@ -86,7 +86,7 @@ function sessionColor(cwd, branch) {
 }
 const MIN_FOCUS_COLS = 15;
 const MIN_PROMPT_COLS = 30;
-function progressiveJoin(segments, budget, minLeft) {
+export function progressiveJoin(segments, budget, minLeft) {
     for (let count = segments.length; count >= 1; count--) {
         const used = segments.slice(0, count);
         const text = used.map((s) => s.text).join('  ');

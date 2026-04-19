@@ -15,6 +15,8 @@ export interface GitStatus {
 export interface RefinementError {
   code: 'timeout' | 'rate_limit' | 'auth' | 'unknown';
   at: string;
+  durationMs?: number;
+  stderrTail?: string;
 }
 
 export interface SessionState {

@@ -1,10 +1,11 @@
 {
   "name": "claude-recall",
-  "version": "6.0.2",
+  "version": "6.0.3",
   "description": "Session awareness statusline for Claude Code",
   "type": "module",
   "scripts": {
-    "build": "tsc"
+    "build": "tsc",
+    "test": "npm run build && node --test test/*.test.mjs"
   },
   "devDependencies": {
     "typescript": "^5.5.0",

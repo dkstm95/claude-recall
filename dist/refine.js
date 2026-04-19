@@ -22,13 +22,19 @@ const SYSTEM_PROMPT = [
     '- Describe what the session is currently trying to accomplish, not historical noise.',
     '- Prefer concrete verbs over vague nouns.',
 ].join('\n');
+const STDERR_TAIL_CHARS = 500;
+// Caps protect against a rogue `claude -p` streaming unbounded output over the
+// 30s timeout window. stderr keeps its tail (where error messages usually land).
+// stdout keeps its head (Haiku's focus label is the first ~60 chars).
+const STDERR_MAX_BUF = 8_000;
+const STDOUT_MAX_BUF = 4_000;
 export function shouldRefine(lastRefinedAt) {
     if (!lastRefinedAt)
         return true;
     const elapsed = Date.now() - new Date(lastRefinedAt).getTime();
     return !Number.isFinite(elapsed) || elapsed >= DEBOUNCE_MS;
 }
-async function readTranscriptTail(path) {
+export async function readTranscriptTail(path) {
     const fd = await open(path, 'r');
     try {
         const stats = await fd.stat();
@@ -47,7 +53,7 @@ async function readTranscriptTail(path) {
         await fd.close();
     }
 }
-function classifyError(exitCode, stderr) {
+export function classifyError(exitCode, stderr) {
     if (exitCode === null)
         return 'unknown';
     if (/rate.?limit|429|too many requests/i.test(stderr))
@@ -55,6 +61,12 @@ function classifyError(exitCode, stderr) {
     if (/auth|401|403|unauthori[sz]ed|credential/i.test(stderr))
         return 'auth';
     return 'unknown';
+}
+function stderrTail(stderr) {
+    const trimmed = stderr.trim();
+    if (!trimmed)
+        return undefined;
+    return trimmed.length > STDERR_TAIL_CHARS ? trimmed.slice(-STDERR_TAIL_CHARS) : trimmed;
 }
 export async function spawnRefinement(transcript, currentFocus) {
     if (!transcript.trim()) {
@@ -68,6 +80,7 @@ export async function spawnRefinement(transcript, currentFocus) {
         '',
         'Respond with the updated focus text only.',
     ].join('\n');
+    const startedAt = Date.now();
     return new Promise((resolve) => {
         const args = [
             '-p',
@@ -86,6 +99,12 @@ export async function spawnRefinement(transcript, currentFocus) {
         let stdout = '';
         let stderr = '';
         let settled = false;
+        const errorResult = (code) => ({
+            status: 'error',
+            code,
+            durationMs: Date.now() - startedAt,
+            stderrTail: stderrTail(stderr),
+        });
         const finish = (result) => {
             if (settled)
                 return;
@@ -97,15 +116,18 @@ export async function spawnRefinement(transcript, currentFocus) {
             catch { /* ignore */ }
             resolve(result);
         };
-        const timer = setTimeout(() => {
-            finish({ status: 'error', code: 'timeout' });
-        }, TIMEOUT_MS);
-        child.stdout.on('data', (d) => { stdout += d.toString('utf-8'); });
-        child.stderr.on('data', (d) => { stderr += d.toString('utf-8'); });
-        child.on('error', () => finish({ status: 'error', code: 'unknown' }));
+        const timer = setTimeout(() => finish(errorResult('timeout')), TIMEOUT_MS);
+        child.stdout.on('data', (d) => {
+            if (stdout.length < STDOUT_MAX_BUF)
+                stdout += d.toString('utf-8');
+        });
+        child.stderr.on('data', (d) => {
+            stderr = (stderr + d.toString('utf-8')).slice(-STDERR_MAX_BUF);
+        });
+        child.on('error', () => finish(errorResult('unknown')));
         child.on('exit', (exitCode) => {
             if (exitCode !== 0) {
-                finish({ status: 'error', code: classifyError(exitCode, stderr) });
+                finish(errorResult(classifyError(exitCode, stderr)));
                 return;
             }
             const focus = stdout
@@ -115,10 +137,10 @@ export async function spawnRefinement(transcript, currentFocus) {
                 .slice(0, FOCUS_MAX_CHARS)
                 .trim();
             if (!focus) {
-                finish({ status: 'error', code: 'unknown' });
+                finish(errorResult('unknown'));
                 return;
             }
-            finish({ status: 'ok', focus });
+            finish({ status: 'ok', focus, durationMs: Date.now() - startedAt });
         });
     });
 }
@@ -163,7 +185,12 @@ export async function triggerFocusRefinement(sessionId, transcriptPath) {
         fresh.refinementError = null;
     }
     else {
-        fresh.refinementError = { code: result.code, at: new Date().toISOString() };
+        fresh.refinementError = {
+            code: result.code,
+            at: new Date().toISOString(),
+            durationMs: result.durationMs,
+            stderrTail: result.stderrTail,
+        };
     }
     fresh.lastRefinedAt = new Date().toISOString();
     writeState(sessionId, fresh);
