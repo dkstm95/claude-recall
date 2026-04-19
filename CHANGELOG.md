@@ -1,5 +1,23 @@
 # Changelog
 
+## 6.0.4
+
+### Changed
+
+- **Timeout raised from 30s to 45s.** Measurements showed a fixed ~9s `claude -p` startup cost on systems with many MCP servers — the old 30s budget left only ~21s for Haiku and was breached on transcripts that filled the 20KB tail. 45s gives Haiku roughly 36s of headroom on the new 12KB tail.
+- **Transcript tail reduced from 20KB to 12KB** (`TRANSCRIPT_TAIL_BYTES`). A smaller input narrows Haiku's processing-time variance without losing enough recent context to affect focus-label accuracy.
+
+### Added
+
+- **`lastRefinement` snapshot.** `SessionState` now carries a new `LastRefinement` field — `{ at, status: 'ok' | 'error', code?, durationMs, transcriptBytes, stdoutBytes?, stderrTail? }` — rewritten on every refinement attempt, success or failure. Unlike `refinementError` (which only records the current error state), this gives successful runs a baseline `durationMs` and `transcriptBytes` so future regressions ("why was this one 28s when the baseline is 11s?") are diagnosable from the state file alone.
+- **Partial stdout preserved on timeout.** `spawnRefinement` now records `stdoutBytes` in error results, so timeouts where Haiku was partway through a response are distinguishable from timeouts where nothing came back at all.
+
+### Notes
+
+- `refinementError` is unchanged shape-wise; it remains the "is there a current error" signal used by the statusline (`⚠ AI timeout` etc.). `lastRefinement` is the new diagnostic trail.
+- Existing state files without `lastRefinement` read back as `null` and are upgraded on the next refinement write.
+- The tail-size constant change cascaded to `test/refine.test.mjs` fixtures (previously sized around 20KB boundaries; now 12KB).
+
 ## 6.0.3
 
 ### Added

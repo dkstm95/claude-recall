@@ -10,7 +10,7 @@ import {
   shouldRefine,
 } from '../dist/refine.js';
 
-const TAIL_BYTES = 20_000;
+const TAIL_BYTES = 12_000;
 
 // Awaits fn's promise before cleaning up the tmpdir — otherwise rmSync races
 // readTranscriptTail's fd.open and the test flakes.
@@ -37,8 +37,8 @@ await test('readTranscriptTail: empty file returns empty string', async () => {
 });
 
 await test('readTranscriptTail: file larger than tail drops first (possibly-partial) line', async () => {
-  // 25KB file — tail reads last 20KB, which starts inside a long line.
-  const longLine = 'x'.repeat(25_000);
+  // 15KB file — tail reads last 12KB, which starts inside a long line.
+  const longLine = 'x'.repeat(15_000);
   const content = longLine + '\n' + 'final line\n';
   const text = await withTmpFile(content, (p) => readTranscriptTail(p));
   assert.equal(text, 'final line\n');
@@ -46,13 +46,13 @@ await test('readTranscriptTail: file larger than tail drops first (possibly-part
 
 await test('readTranscriptTail: UTF-8 multibyte boundary is cleaned by first-newline drop', async () => {
   // '가' is 3 bytes in UTF-8, so positioning a long Korean block across the
-  // 20KB tail offset forces a mid-multibyte read. The "drop first line" step
+  // 12KB tail offset forces a mid-multibyte read. The "drop first line" step
   // must purge the resulting U+FFFD debris before Haiku sees the transcript.
-  const chunk1 = 'A'.repeat(4000) + '\n';
-  const chunk2 = '가'.repeat(7000);
+  const chunk1 = 'A'.repeat(2500) + '\n';
+  const chunk2 = '가'.repeat(4500);
   const chunk3 = '\nfinal\n';
   const content = chunk1 + chunk2 + chunk3;
-  assert.equal(Buffer.byteLength(content, 'utf-8'), 25008, 'precondition: byte size');
+  assert.equal(Buffer.byteLength(content, 'utf-8'), 16008, 'precondition: byte size');
 
   const text = await withTmpFile(content, (p) => readTranscriptTail(p));
 
@@ -62,9 +62,9 @@ await test('readTranscriptTail: UTF-8 multibyte boundary is cleaned by first-new
 
 await test('readTranscriptTail: no newline in tail, start > 0 — behavior is pass-through', async () => {
   // Locks in current behavior: without a newline to anchor the drop, the tail
-  // is returned as-is. If JSONL ever ships single-line >20KB entries, this
+  // is returned as-is. If JSONL ever ships single-line >12KB entries, this
   // test will fail and prompt a re-think of the boundary strategy.
-  const content = 'y'.repeat(25_000);
+  const content = 'y'.repeat(15_000);
   const text = await withTmpFile(content, (p) => readTranscriptTail(p));
   assert.equal(text.length, TAIL_BYTES);
   assert.ok(text.startsWith('y'));

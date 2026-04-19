@@ -29,6 +29,7 @@ export function readState(sessionId) {
             lastActivityAt: parsed['lastActivityAt'] ?? new Date().toISOString(),
             lastRefinedAt: parsed['lastRefinedAt'] ?? null,
             refinementError: parsed['refinementError'] ?? null,
+            lastRefinement: parsed['lastRefinement'] ?? null,
         };
     }
     catch {

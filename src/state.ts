@@ -19,6 +19,19 @@ export interface RefinementError {
   stderrTail?: string;
 }
 
+// Snapshot of the most recent refinement attempt, success or failure.
+// Kept separate from refinementError (which tracks only the current error state)
+// so successes also leave a durationMs baseline for diagnosing slow cases.
+export interface LastRefinement {
+  at: string;
+  status: 'ok' | 'error';
+  code?: RefinementError['code'];
+  durationMs: number;
+  transcriptBytes: number;
+  stdoutBytes?: number;
+  stderrTail?: string;
+}
+
 export interface SessionState {
   sessionId: string;
   focus: string;
@@ -30,6 +43,7 @@ export interface SessionState {
   lastActivityAt: string;
   lastRefinedAt: string | null;
   refinementError: RefinementError | null;
+  lastRefinement: LastRefinement | null;
 }
 
 export function getStateDir(): string {
@@ -62,6 +76,7 @@ export function readState(sessionId: string): SessionState | null {
       lastActivityAt: (parsed['lastActivityAt'] as string) ?? new Date().toISOString(),
       lastRefinedAt: (parsed['lastRefinedAt'] as string | null) ?? null,
       refinementError: (parsed['refinementError'] as RefinementError | null) ?? null,
+      lastRefinement: (parsed['lastRefinement'] as LastRefinement | null) ?? null,
     };
   } catch {
     return null;

@@ -40,6 +40,7 @@ async function main(): Promise<void> {
       lastActivityAt: now,
       lastRefinedAt: null,
       refinementError: null,
+      lastRefinement: null,
     };
     writeState(sessionId, state);
   } else {

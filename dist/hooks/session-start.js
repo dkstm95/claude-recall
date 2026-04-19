@@ -35,6 +35,7 @@ async function main() {
             lastActivityAt: now,
             lastRefinedAt: null,
             refinementError: null,
+            lastRefinement: null,
         };
         writeState(sessionId, state);
     }

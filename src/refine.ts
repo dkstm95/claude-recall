@@ -4,8 +4,13 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { readState, writeState, type RefinementError } from './state.js';
 
-const TIMEOUT_MS = 30_000;
-const TRANSCRIPT_TAIL_BYTES = 20_000;
+// Budget: claude CLI carries a ~9s fixed startup overhead on systems with many
+// MCP servers, so 45s leaves Haiku ~36s of headroom — covers observed p99 on
+// 12KB transcript inputs.
+const TIMEOUT_MS = 45_000;
+// Smaller tail narrows Haiku's processing-time variance without losing enough
+// recent context to hurt focus-label accuracy.
+const TRANSCRIPT_TAIL_BYTES = 12_000;
 const DEBOUNCE_MS = 5_000;
 const FOCUS_MAX_CHARS = 60;
 
@@ -28,13 +33,20 @@ const SYSTEM_PROMPT = [
 ].join('\n');
 
 type RefineResult =
-  | { status: 'ok'; focus: string; durationMs: number }
+  | { status: 'ok'; focus: string; durationMs: number; transcriptBytes: number }
   | { status: 'skip' }
-  | { status: 'error'; code: RefinementError['code']; durationMs: number; stderrTail?: string };
+  | {
+      status: 'error';
+      code: RefinementError['code'];
+      durationMs: number;
+      transcriptBytes: number;
+      stdoutBytes: number;
+      stderrTail?: string;
+    };
 
 const STDERR_TAIL_CHARS = 500;
-// Caps protect against a rogue `claude -p` streaming unbounded output over the
-// 30s timeout window. stderr keeps its tail (where error messages usually land).
+// Caps protect against a rogue `claude -p` streaming unbounded output across
+// the timeout window. stderr keeps its tail (where error messages usually land).
 // stdout keeps its head (Haiku's focus label is the first ~60 chars).
 const STDERR_MAX_BUF = 8_000;
 const STDOUT_MAX_BUF = 4_000;
@@ -84,6 +96,8 @@ export async function spawnRefinement(
     return { status: 'skip' };
   }
 
+  const transcriptBytes = Buffer.byteLength(transcript, 'utf-8');
+
   const userPrompt = [
     `Current focus: "${currentFocus || '(none)'}"`,
     '',
@@ -120,6 +134,8 @@ export async function spawnRefinement(
       status: 'error',
       code,
       durationMs: Date.now() - startedAt,
+      transcriptBytes,
+      stdoutBytes: Buffer.byteLength(stdout, 'utf-8'),
       stderrTail: stderrTail(stderr),
     });
 
@@ -155,7 +171,7 @@ export async function spawnRefinement(
         finish(errorResult('unknown'));
         return;
       }
-      finish({ status: 'ok', focus, durationMs: Date.now() - startedAt });
+      finish({ status: 'ok', focus, durationMs: Date.now() - startedAt, transcriptBytes });
     });
   });
 }
@@ -201,18 +217,35 @@ export async function triggerFocusRefinement(
     return;
   }
 
+  const now = new Date().toISOString();
+
   if (result.status === 'ok') {
     fresh.focus = result.focus;
     fresh.refinementError = null;
+    fresh.lastRefinement = {
+      at: now,
+      status: 'ok',
+      durationMs: result.durationMs,
+      transcriptBytes: result.transcriptBytes,
+    };
   } else {
     fresh.refinementError = {
       code: result.code,
-      at: new Date().toISOString(),
+      at: now,
       durationMs: result.durationMs,
       stderrTail: result.stderrTail,
     };
+    fresh.lastRefinement = {
+      at: now,
+      status: 'error',
+      code: result.code,
+      durationMs: result.durationMs,
+      transcriptBytes: result.transcriptBytes,
+      stdoutBytes: result.stdoutBytes,
+      stderrTail: result.stderrTail,
+    };
   }
-  fresh.lastRefinedAt = new Date().toISOString();
+  fresh.lastRefinedAt = now;
   writeState(sessionId, fresh);
 }
 
