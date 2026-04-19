@@ -18,7 +18,7 @@ const mk = (code) => code ? (s) => `\x1b[${code}m${s}\x1b[0m` : IDENTITY;
 const THEME_CODES = {
     default: {
         focus: '1;36', branch: '36', model: '33', worktree: '35',
-        prompt: '1', dim: '2',
+        prompt: '1', dim: '38;5;245',
         green: '32', yellow: '33', red: '31',
         accents: ['36', '35', '34', '33', '32', '31'],
     },

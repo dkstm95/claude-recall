@@ -1,5 +1,17 @@
 # Changelog
 
+## 6.0.9
+
+### Fixed
+
+- **`default` theme dim text near-invisible on dark terminals.** The default (dark-background) theme was the only one still emitting `\x1b[2m` (SGR "faint" attribute) for its `dim` slot. "Faint" is not a color — it's a hint to the terminal to blend the current foreground toward the background, and the blend strength is entirely implementation-defined. On many popular dark themes (including the one shown in the v6.0.8 screenshot report), the blend drops readability below legible for every dim-rendered segment: the `(no focus yet)` / `(awaiting first prompt)` placeholders on Lines 1–2, the `#turn` counter, the `elapsed` clock, the `5h`/`7d` labels and their `(~HH:MM)` reset timestamps on Line 3, the `$cost`, and the `(try /handoff)` Line 1 hint. Replaced with `\x1b[38;5;245m` — an explicit 256-color palette entry (≈`#8a8a8a`, neutral mid-gray) that doesn't depend on the terminal's faint-attribute rendering and reads clearly on every dark theme tested. The `light` theme (already `38;5;244`) and `vivid` (`90`) were not affected; `minimal` retains `'2'` because its monochrome ethos actually relies on the faint behavior for its one-level-of-emphasis design.
+
+### Notes
+
+- No schema changes, no new configuration, no migration. This is a single-line theme-data change in `src/config.ts::THEME_CODES.default`.
+- Why `38;5;245` specifically: indices 240–255 are the xterm 256-color grayscale ramp (`#080808` through `#eeeeee`). 245 ≈ `#8a8a8a` sits one step lighter than the `light` theme's 244 (`#808080`), favoring dark backgrounds. 256-color support is universal on every terminal that also supports ANSI escape codes at all (any terminal released in roughly the last 15 years), so the compatibility cost is zero.
+- Not changed: the `dim: '2'` inside the `minimal` theme. `minimal`'s entire design is "no color, one level of emphasis" — replacing faint with an explicit gray would contradict its stated purpose, and users who opted into `minimal` are presumed to have accepted the terminal-dependent faint rendering as part of that tradeoff.
+
 ## 6.0.8
 
 ### Fixed
