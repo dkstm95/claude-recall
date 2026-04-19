@@ -1,5 +1,5 @@
 import { readStdin } from './stdin.js';
-import { readState, createEmptySessionState } from './state.js';
+import { readState, createEmptySessionState, refreshGitStatus } from './state.js';
 import { formatStatusline, getTerminalWidth, type BuiltinData } from './format.js';
 import { readConfig } from './config.js';
 import { resolveRateLimits, type RateLimitsData } from './rate-limits-cache.js';
@@ -29,6 +29,10 @@ async function main(): Promise<void> {
   // SessionStart hook may not have flushed state yet on first statusline render.
   const cwd = input.cwd ?? input.workspace?.current_dir ?? input.workspace?.project_dir ?? '';
   const state = readState(input.session_id) ?? createEmptySessionState(input.session_id, cwd);
+
+  // Render-time refresh: hooks can't see mid-turn checkouts and the first
+  // render beats SessionStart's state flush. Mutation is scratch-only — not persisted.
+  if (cwd) await refreshGitStatus(state, cwd);
 
   const builtin: BuiltinData = {
     model: input.model,

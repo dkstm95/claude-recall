@@ -1,5 +1,5 @@
 import { readStdin } from '../stdin.js';
-import { readState, writeState, getGitStatus, refreshGitStatus, type SessionState } from '../state.js';
+import { readState, writeState, refreshGitStatus, createEmptySessionState } from '../state.js';
 import { launchRefinementWorker, isRefiningSubprocess } from '../refine.js';
 
 function isPowerOfTwo(n: number): boolean {
@@ -30,20 +30,8 @@ async function main(): Promise<void> {
   let state = readState(sessionId);
 
   if (!state) {
-    const gitStatus = getGitStatus(cwd, null);
-    state = {
-      sessionId,
-      focus: '',
-      branch: gitStatus?.branch ?? '',
-      gitStatus,
-      cwd,
-      promptCount: 0,
-      lastUserPrompt: '',
-      lastActivityAt: now,
-      lastRefinedAt: null,
-      refinementError: null,
-      lastRefinement: null,
-    } satisfies SessionState;
+    state = createEmptySessionState(sessionId, cwd);
+    await refreshGitStatus(state, cwd);
   }
 
   if (prompt.startsWith('/')) {
@@ -57,7 +45,7 @@ async function main(): Promise<void> {
   state.lastUserPrompt = prompt.slice(0, 200).replace(/[\n\t\r]/g, ' ');
   state.lastActivityAt = now;
 
-  refreshGitStatus(state, cwd);
+  await refreshGitStatus(state, cwd);
 
   writeState(sessionId, state);
 

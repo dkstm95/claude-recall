@@ -1,5 +1,5 @@
 import { readStdin } from '../stdin.js';
-import { readState, writeState, getGitStatus, refreshGitStatus } from '../state.js';
+import { readState, writeState, refreshGitStatus, createEmptySessionState } from '../state.js';
 import { launchRefinementWorker, isRefiningSubprocess } from '../refine.js';
 function isPowerOfTwo(n) {
     return n > 0 && (n & (n - 1)) === 0;
@@ -25,20 +25,8 @@ async function main() {
     const now = new Date().toISOString();
     let state = readState(sessionId);
     if (!state) {
-        const gitStatus = getGitStatus(cwd, null);
-        state = {
-            sessionId,
-            focus: '',
-            branch: gitStatus?.branch ?? '',
-            gitStatus,
-            cwd,
-            promptCount: 0,
-            lastUserPrompt: '',
-            lastActivityAt: now,
-            lastRefinedAt: null,
-            refinementError: null,
-            lastRefinement: null,
-        };
+        state = createEmptySessionState(sessionId, cwd);
+        await refreshGitStatus(state, cwd);
     }
     if (prompt.startsWith('/')) {
         state.lastActivityAt = now;
@@ -49,7 +37,7 @@ async function main() {
     state.promptCount++;
     state.lastUserPrompt = prompt.slice(0, 200).replace(/[\n\t\r]/g, ' ');
     state.lastActivityAt = now;
-    refreshGitStatus(state, cwd);
+    await refreshGitStatus(state, cwd);
     writeState(sessionId, state);
     // Focus refinement at power-of-2 turns (1, 2, 4, 8, 16, 32, ...).
     // Launched as a detached worker so it survives this hook's 10s timeout.

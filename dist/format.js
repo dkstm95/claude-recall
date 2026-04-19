@@ -226,9 +226,11 @@ export function formatStatusline(state, termWidth, builtin, config) {
     const l2 = cfg.line2;
     const l3 = cfg.line3;
     const tc = getThemeColors(cfg.theme);
+    // Fallback uses sessionStartedAt (not lastActivityAt) to match stdin's
+    // "wall-clock since session started" semantic.
     const elapsed = builtin?.cost?.total_duration_ms != null
         ? formatElapsedMs(builtin.cost.total_duration_ms)
-        : formatElapsed(state.lastActivityAt);
+        : formatElapsed(state.sessionStartedAt);
     const prefixWidth = 3;
     const accent = sessionColor(state.cwd, state.branch, tc.accents);
     const prefix = ' ' + accent('\u258D') + ' ';

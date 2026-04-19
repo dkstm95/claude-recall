@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-6.2.1-blue?style=flat-square" alt="version">
+  <img src="https://img.shields.io/badge/version-6.2.2-blue?style=flat-square" alt="version">
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="license">
   <img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen?style=flat-square&logo=node.js&logoColor=white" alt="node">
   <img src="https://img.shields.io/badge/Claude_Code-Plugin-blueviolet?style=flat-square" alt="Claude Code Plugin">
@@ -40,7 +40,7 @@ claude-recall answers two questions for every session, at a glance:
 ## Why claude-recall?
 
 - **Autonomous focus** — No commands to run. A Haiku subprocess refines each session's focus in the background, in the transcript's language.
-- **Per-session accent color** — Deterministic color bar from project dir + branch. Spot which tab is which by color, before reading any text.
+- **Directory+branch accent color** — Deterministic color bar keyed by `cwd + current branch`. Spot which tab is which by color, before reading any text. The color shifts when the branch changes mid-session, so a feature branch visually separates from its base.
 - **Tiered context hints** — Dim `(/compact soon)` at 60%, dim `(run /compact)` at 70%, red `⚠ ctx 90%+` at 90%. Aligned with Anthropic's guidance (run `/compact` around 60% for best summary quality).
 
 Plus: rich git status (dirty + ahead/behind vs `origin/<default>`), rate-limit bars (5h / 7d), Claude Code's context / cost / model — all in up to three lines.
@@ -107,7 +107,7 @@ Create `~/.claude/claude-recall/config.json`:
 
 | Element | Location | Description | Source |
 |---------|----------|-------------|--------|
-| **accent bar** | all lines, left | Session-specific color bar (`▍`) — deterministic color from project dir + branch | claude-recall |
+| **accent bar** | all lines, left | Deterministic color bar (`▍`) keyed by `cwd + current branch` — changes when branch changes | claude-recall |
 | **focus** | Line 1, left | AI-refined summary of what this session is currently working on — managed autonomously | claude-recall |
 | **branch + status** | Line 1, right | `branch*↑N↓N` — dirty flag + commits ahead/behind `origin/<default>` | claude-recall |
 | **model** | Line 1, right | Active Claude model (e.g. Opus) | Claude Code built-in |

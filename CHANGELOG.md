@@ -1,5 +1,20 @@
 # Changelog
 
+## 6.2.2
+
+### Fixed
+
+- **Branch display now updates on every render, not just on prompt submit.** Two related symptoms are fixed: (1) a brand-new session showed no branch on Line 1 until the first prompt was submitted, because the `SessionStart` hook hadn't flushed state before the first statusline render; (2) when Claude ran `git checkout` mid-turn, the old branch stuck around until the user submitted another prompt. The root cause was that the statusline read git only indirectly via the session state JSON, and the JSON was only written by hooks. The fix follows the approach used by [claude-hud](https://github.com/jarrodwatts/claude-hud): call `git` directly from the statusline process on every render.
+- **Elapsed fallback semantic now matches the stdin path.** Per Claude Code's [statusline docs](https://code.claude.com/docs/en/statusline), `cost.total_duration_ms` is "total wall-clock time since the session started". The previous fallback computed `Date.now() - state.lastActivityAt`, which measures "time since last prompt" — a different quantity that reset every turn. A new `sessionStartedAt` field is written once at `SessionStart` and never overwritten, so the fallback now uses `Date.now() - state.sessionStartedAt`. Both paths now answer the same question. Older session JSONs without the field gracefully degrade to `lastActivityAt`.
+
+### Changed
+
+- **`getGitStatus()` is now a single async implementation shared by the statusline and hooks.** Built on `execFile` (no shell), `Promise.all` across the 3 independent calls (branch / dirty / default-branch; `rev-list` for ahead/behind chains after), `--no-optional-locks` on `git status` to avoid blocking a concurrent user git command, 1s per-call timeout. The sync `execSync` path (4 sequential calls, ~40ms p95) is deleted — the async version measures ~21ms p95 on this repo and is comfortably inside the 10s hook budget. `refreshGitStatus(state, cwd)` is the single mutation helper used by both the hook bootstrap and the statusline render.
+
+### Docs
+
+- **Accent bar color framing corrected.** Previous text called it a "session-specific color" or "per-session accent color", which implied one color per session. In practice the color is a hash of `cwd + current branch`, so it changes when the branch changes mid-session — a feature, not a bug (it makes feature branches visually separate from their base). README (EN/KO) and CLAUDE.md reworded to match the actual behavior.
+
 ## 6.2.1
 
 ### Changed

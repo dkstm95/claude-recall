@@ -1,10 +1,13 @@
 import { mkdirSync, readFileSync, writeFileSync, renameSync, readdirSync, unlinkSync } from 'node:fs';
-import { execSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { cleanupContextCache } from './context-window-cache.js';
+const execFileAsync = promisify(execFile);
 export function createEmptySessionState(sessionId, cwd) {
+    const now = new Date().toISOString();
     return {
         sessionId,
         focus: '',
@@ -13,7 +16,8 @@ export function createEmptySessionState(sessionId, cwd) {
         cwd,
         promptCount: 0,
         lastUserPrompt: '',
-        lastActivityAt: new Date().toISOString(),
+        sessionStartedAt: now,
+        lastActivityAt: now,
         lastRefinedAt: null,
         refinementError: null,
         lastRefinement: null,
@@ -34,6 +38,7 @@ export function readState(sessionId) {
         if (parsed['focus'] === undefined && typeof parsed['purpose'] === 'string') {
             parsed['focus'] = parsed['purpose'];
         }
+        const lastActivityAt = parsed['lastActivityAt'] ?? new Date().toISOString();
         return {
             sessionId: parsed['sessionId'] ?? sessionId,
             focus: parsed['focus'] ?? '',
@@ -42,7 +47,8 @@ export function readState(sessionId) {
             cwd: parsed['cwd'] ?? '',
             promptCount: parsed['promptCount'] ?? 0,
             lastUserPrompt: parsed['lastUserPrompt'] ?? '',
-            lastActivityAt: parsed['lastActivityAt'] ?? new Date().toISOString(),
+            sessionStartedAt: parsed['sessionStartedAt'] ?? lastActivityAt,
+            lastActivityAt,
             lastRefinedAt: parsed['lastRefinedAt'] ?? null,
             refinementError: parsed['refinementError'] ?? null,
             lastRefinement: parsed['lastRefinement'] ?? null,
@@ -58,61 +64,58 @@ export function writeState(sessionId, state) {
     writeFileSync(tmp, JSON.stringify(state, null, 2) + '\n', 'utf-8');
     renameSync(tmp, target);
 }
-function runGit(cwd, args) {
-    return execSync(`git ${args.join(' ')}`, {
+async function runGit(cwd, args, timeoutMs = 1000) {
+    const { stdout } = await execFileAsync('git', args, {
         cwd,
-        timeout: 2000,
+        timeout: timeoutMs,
         encoding: 'utf-8',
-        stdio: ['pipe', 'pipe', 'pipe'],
         env: { ...process.env, LC_ALL: 'C' },
-    }).trim();
+    });
+    return stdout.trim();
 }
-export function refreshGitStatus(state, cwd) {
-    const gitStatus = getGitStatus(cwd, state.gitStatus);
+export async function refreshGitStatus(state, cwd) {
+    const gitStatus = await getGitStatus(cwd, state.gitStatus);
     state.gitStatus = gitStatus;
     state.branch = gitStatus?.branch ?? state.branch;
 }
-export function getGitStatus(cwd, fallback) {
+// --no-optional-locks avoids blocking a concurrent user `git status`; callers
+// (statusline + hooks) stay within their 1-10s budgets via the per-call timeout.
+export async function getGitStatus(cwd, fallback) {
     try {
-        let branch = runGit(cwd, ['rev-parse', '--abbrev-ref', 'HEAD']);
+        const [branchR, dirtyR, defaultR] = await Promise.all([
+            runGit(cwd, ['rev-parse', '--abbrev-ref', 'HEAD']).catch(() => null),
+            runGit(cwd, ['--no-optional-locks', 'status', '--porcelain']).catch(() => null),
+            runGit(cwd, ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD']).catch(() => null),
+        ]);
+        if (branchR === null)
+            return fallback;
+        let branch = branchR;
         if (branch === 'HEAD') {
-            try {
-                branch = runGit(cwd, ['rev-parse', '--short', 'HEAD']);
-            }
-            catch { /* keep 'HEAD' */ }
+            branch = await runGit(cwd, ['rev-parse', '--short', 'HEAD']).catch(() => 'HEAD');
         }
-        let dirty = false;
-        try {
-            dirty = runGit(cwd, ['status', '--porcelain']).length > 0;
-        }
-        catch { /* treat as clean */ }
+        const dirty = dirtyR !== null && dirtyR.length > 0;
         let defaultBranch = 'main';
-        try {
-            const ref = runGit(cwd, ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD']);
-            defaultBranch = ref.replace(/^origin\//, '');
+        if (defaultR) {
+            defaultBranch = defaultR.replace(/^origin\//, '');
         }
-        catch {
-            try {
-                runGit(cwd, ['rev-parse', '--verify', 'origin/master']);
+        else {
+            const master = await runGit(cwd, ['rev-parse', '--verify', 'origin/master']).catch(() => null);
+            if (master !== null)
                 defaultBranch = 'master';
-            }
-            catch { /* keep 'main' guess */ }
         }
         let ahead = 0;
         let behind = 0;
-        try {
-            const out = runGit(cwd, ['rev-list', '--left-right', '--count', `origin/${defaultBranch}...HEAD`]);
-            const parts = out.split(/\s+/).map((n) => parseInt(n, 10));
+        const revOut = await runGit(cwd, [
+            'rev-list', '--left-right', '--count', `origin/${defaultBranch}...HEAD`,
+        ]).catch(() => null);
+        if (revOut) {
+            const parts = revOut.split(/\s+/).map((n) => parseInt(n, 10));
             behind = Number.isFinite(parts[0]) ? parts[0] : 0;
             ahead = Number.isFinite(parts[1]) ? parts[1] : 0;
         }
-        catch { /* origin/<default> absent */ }
         return { branch, dirty, ahead, behind, defaultBranch };
     }
-    catch (err) {
-        const message = err instanceof Error ? err.message : '';
-        if (message.includes('not a git repository'))
-            return null;
+    catch {
         return fallback;
     }
 }

@@ -29,12 +29,12 @@ async function main(): Promise<void> {
 
   if (source === 'startup' || !existing) {
     const state = createEmptySessionState(sessionId, cwd);
-    refreshGitStatus(state, cwd);
+    await refreshGitStatus(state, cwd);
     state.lastActivityAt = now;
     writeState(sessionId, state);
   } else {
     existing.lastActivityAt = now;
-    refreshGitStatus(existing, cwd);
+    await refreshGitStatus(existing, cwd);
 
     if (source === 'clear') {
       existing.lastUserPrompt = '';
