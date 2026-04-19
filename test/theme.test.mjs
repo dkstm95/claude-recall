@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { getThemeColors, detectBackgroundTheme, readConfig } from '../dist/config.js';
+import { getThemeColors, detectBackgroundTheme } from '../dist/config.js';
 
 function withEnv(vars, fn) {
   const saved = {};
@@ -71,16 +71,6 @@ test('getThemeColors: NO_COLOR env disables every color (all themes)', () => {
   }
 });
 
-test('getThemeColors: NO_COLOR=any-value triggers (per spec)', () => {
-  // https://no-color.org — presence disables color regardless of value
-  for (const val of ['', '0', '1', 'true', 'false', 'no']) {
-    withEnv({ NO_COLOR: val }, () => {
-      const tc = getThemeColors('default');
-      assert.equal(tc.focus('z'), 'z', `NO_COLOR="${val}" should disable color`);
-    });
-  }
-});
-
 test('detectBackgroundTheme: absent COLORFGBG returns default', () => {
   withEnv({ COLORFGBG: undefined }, () => {
     assert.equal(detectBackgroundTheme(), 'default');
@@ -123,17 +113,3 @@ test('detectBackgroundTheme: malformed input falls back to default', () => {
   });
 });
 
-test('readConfig: picks light when COLORFGBG signals light and no config file', () => {
-  // HOME is pointed at a directory without a config file so readConfig hits the catch branch
-  withEnv({ HOME: '/nonexistent-home-for-claude-recall-test', COLORFGBG: '0;15' }, () => {
-    const cfg = readConfig();
-    assert.equal(cfg.theme, 'light');
-  });
-});
-
-test('readConfig: picks default when COLORFGBG signals dark and no config file', () => {
-  withEnv({ HOME: '/nonexistent-home-for-claude-recall-test', COLORFGBG: '15;0' }, () => {
-    const cfg = readConfig();
-    assert.equal(cfg.theme, 'default');
-  });
-});

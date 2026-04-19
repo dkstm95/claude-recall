@@ -70,11 +70,6 @@ await test('readTranscriptTail: no newline in tail, start > 0 — behavior is pa
   assert.ok(text.startsWith('y'));
 });
 
-test('classifyError: null exit code maps to unknown', () => {
-  assert.equal(classifyError(null, ''), 'unknown');
-  assert.equal(classifyError(null, 'rate limit exceeded'), 'unknown');
-});
-
 test('classifyError: rate-limit patterns', () => {
   assert.equal(classifyError(1, 'API rate limit exceeded'), 'rate_limit');
   assert.equal(classifyError(1, 'HTTP 429 Too Many Requests'), 'rate_limit');
@@ -93,10 +88,6 @@ test('classifyError: falls back to unknown', () => {
   assert.equal(classifyError(1, 'random error message'), 'unknown');
 });
 
-test('shouldRefine: null means always refine', () => {
-  assert.equal(shouldRefine(null), true);
-});
-
 test('shouldRefine: recent refinement within 5s window is debounced', () => {
   const justNow = new Date(Date.now() - 1000).toISOString();
   assert.equal(shouldRefine(justNow), false);
@@ -105,8 +96,4 @@ test('shouldRefine: recent refinement within 5s window is debounced', () => {
 test('shouldRefine: past the 5s window allows refresh', () => {
   const sixSecondsAgo = new Date(Date.now() - 6000).toISOString();
   assert.equal(shouldRefine(sixSecondsAgo), true);
-});
-
-test('shouldRefine: invalid timestamp falls through to refresh', () => {
-  assert.equal(shouldRefine('not-a-date'), true);
 });

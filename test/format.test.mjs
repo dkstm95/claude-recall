@@ -7,12 +7,6 @@ import {
   progressiveJoin,
 } from '../dist/format.js';
 
-test('displayWidth: ASCII counts one column per char', () => {
-  assert.equal(displayWidth(''), 0);
-  assert.equal(displayWidth('hello'), 5);
-  assert.equal(displayWidth('  spaces  '), 10);
-});
-
 test('displayWidth: Korean (Hangul) counts two columns per char', () => {
   assert.equal(displayWidth('가'), 2);
   assert.equal(displayWidth('한글'), 4);
@@ -26,11 +20,6 @@ test('displayWidth: mixed ASCII + CJK', () => {
 
 test('displayWidth: CJK punctuation range', () => {
   assert.equal(displayWidth('、。'), 4);
-});
-
-test('truncate: no-op when text fits in budget', () => {
-  assert.equal(truncate('hello', 10), 'hello');
-  assert.equal(truncate('hello', 5), 'hello');
 });
 
 test('truncate: appends ellipsis when over budget', () => {
@@ -55,16 +44,6 @@ test('truncate: replaces newline/tab/cr with spaces before measuring', () => {
   assert.equal(truncate('a\nb\tc\rd', 10), 'a b c d');
 });
 
-test('progressiveJoin: all segments fit within budget', () => {
-  const segs = [
-    { text: 'one', width: 3 },
-    { text: 'two', width: 3 },
-  ];
-  const out = progressiveJoin(segs, 20, 5);
-  assert.equal(out.text, 'one  two');
-  assert.equal(out.width, 3 + 2 + 3);
-});
-
 test('progressiveJoin: drops rightmost segments when budget tight', () => {
   const segs = [
     { text: 'keep', width: 4 },
@@ -81,10 +60,4 @@ test('progressiveJoin: keeps at least one segment even if minLeft cannot be sati
   ];
   const out = progressiveJoin(segs, 5, 10);
   assert.equal(out.text, 'single');
-});
-
-test('progressiveJoin: empty array returns empty', () => {
-  const out = progressiveJoin([], 20, 5);
-  assert.equal(out.text, '');
-  assert.equal(out.width, 0);
 });

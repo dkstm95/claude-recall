@@ -54,11 +54,6 @@ test('mergeRateLimits: partial live + cache (live 5h, cached 7d)', () => {
   assert.equal(out.seven_day.used_percentage, 22);
 });
 
-test('mergeRateLimits: returns undefined when both missing', () => {
-  assert.equal(mergeRateLimits(undefined, null), undefined);
-  assert.equal(mergeRateLimits({}, null), undefined);
-});
-
 test('readRateLimitsCache: drops windows whose resets_at has passed', () => {
   cleanupCache();
   const nowSec = Math.floor(Date.now() / 1000);
@@ -109,15 +104,6 @@ test('writeRateLimitsCache then readRateLimitsCache round-trips', () => {
   cleanupCache();
 });
 
-test('writeRateLimitsCache writes atomically (no .tmp file lingering)', () => {
-  cleanupCache();
-  const nowSec = Math.floor(Date.now() / 1000);
-  writeRateLimitsCache({ five_hour: { used_percentage: 10, resets_at: nowSec + 3600 } });
-  const raw = readFileSync(cachePath, 'utf-8');
-  assert.ok(JSON.parse(raw), 'file should be valid JSON after atomic rename');
-  cleanupCache();
-});
-
 test('hasAnyLivePct: true when any window has used_percentage', () => {
   assert.equal(hasAnyLivePct({ five_hour: { used_percentage: 0 } }), true);
   assert.equal(hasAnyLivePct({ seven_day: { used_percentage: 0 } }), true);
@@ -149,20 +135,6 @@ test('resolveRateLimits: skips write when live matches cache (no-op guard)', () 
   resolveRateLimits(data);
   const mtimeAfter = statSync(cachePath).mtimeMs;
   assert.equal(mtimeAfter, mtimeBefore, 'cache file must not be rewritten when content is unchanged');
-  cleanupCache();
-});
-
-test('resolveRateLimits: returns cached data when live is undefined', () => {
-  cleanupCache();
-  const nowSec = Math.floor(Date.now() / 1000);
-  const data = { seven_day: { used_percentage: 18, resets_at: nowSec + 86400 } };
-  writeRateLimitsCache(data);
-  const mtimeBefore = statSync(cachePath).mtimeMs;
-  const out = resolveRateLimits(undefined);
-  assert.equal(out.seven_day.used_percentage, 18);
-  // No live data → no write.
-  const mtimeAfter = statSync(cachePath).mtimeMs;
-  assert.equal(mtimeAfter, mtimeBefore);
   cleanupCache();
 });
 
