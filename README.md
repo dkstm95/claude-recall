@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-6.0.9-blue?style=flat-square" alt="version">
+  <img src="https://img.shields.io/badge/version-6.1.0-blue?style=flat-square" alt="version">
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="license">
   <img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen?style=flat-square&logo=node.js&logoColor=white" alt="node">
   <img src="https://img.shields.io/badge/Claude_Code-Plugin-blueviolet?style=flat-square" alt="Claude Code Plugin">
@@ -80,8 +80,8 @@ Create `~/.claude/claude-recall/config.json`:
 ```json
 {
   "line1": ["focus", "branch", "model"],
-  "line2": ["turn", "prompt", "elapsed", "context"],
-  "line3": ["rate_limits", "seven_day", "cost"],
+  "line2": ["turn", "prompt", "elapsed"],
+  "line3": ["context", "rate_limits", "seven_day", "cost"],
   "gitStatus": {
     "enabled": true,
     "showDirty": true,
@@ -92,8 +92,8 @@ Create `~/.claude/claude-recall/config.json`:
 ```
 
 - **line1** — Choose from: `focus`, `branch`, `model`, `worktree`
-- **line2** — Choose from: `turn`, `prompt`, `elapsed`, `context`
-- **line3** — Choose from: `rate_limits`, `seven_day`, `cost`. Set `line3: []` to force a 2-line statusline.
+- **line2** — Choose from: `turn`, `prompt`, `elapsed`
+- **line3** — Choose from: `context`, `rate_limits`, `seven_day`, `cost`. Set `line3: []` to force a 2-line statusline.
 - **gitStatus** — Toggle dirty flag and ahead/behind independently.
 - **theme** — `default` (cyan/bold, dark terminals), `light` (blue/dark-orange, white terminals), `minimal` (subdued, monochrome — severity via reverse-video), `vivid` (bright/high contrast)
   - When `theme` is omitted and the terminal exports `COLORFGBG`, claude-recall auto-selects `light` for light backgrounds (`bg=7` or `bg=15`) and `default` otherwise. An explicit `theme` value always wins.
@@ -115,18 +115,19 @@ Legacy configs with `"line1": ["purpose", ...]` are transparently mapped to `"fo
 | **turn** | Line 2, left | Current prompt number (`#12`) | claude-recall |
 | **last prompt** | Line 2, left | The last prompt you typed (now with ~3× more visible width vs v5) | claude-recall |
 | **elapsed** | Line 2, right | Time since session start / last activity | claude-recall |
-| **context%** | Line 2, right | Context window usage — green (<70%), yellow (70-89%), red (≥90%) | Claude Code built-in |
+| **ctx bar** | Line 3 | Context window usage — `ctx ████░░░░░░ 45%` — green (<70%), yellow (70-89%), red (≥90%) | Claude Code built-in |
 | **5h rate limit bar** | Line 3 | 5-hour usage + reset time — `5h ████░░░░░░ 45% (~16:59)` | Claude Code built-in |
 | **7d rate limit bar** | Line 3 | 7-day usage + reset date/time — `7d ██░░░░░░░░ 20% (~4/25 13:59)` | Claude Code built-in |
 | **cost** | Line 3, right | Cumulative session cost | Claude Code built-in |
+| **context warning** | Line 1, right | Dim `(try /handoff)` at 70-89%, red `⚠ try /handoff` at ≥90% — guaranteed visible even when Line 3 is off | claude-recall |
 | **worktree** *(opt-in)* | Line 1, right | `⎇ <name>` when inside a linked git worktree | Claude Code built-in |
 | **refinement error** | Line 1, left | Red `⚠ AI <reason>` label replaces focus when a background refinement fails | claude-recall |
 
 Notes:
-- Line 3 renders only when rate-limits data is present (Claude subscribers). API-key-only users naturally see two lines.
+- Line 3 renders when any of `ctx` / `rate_limits` / `seven_day` / `cost` has data. API-key-only users with no rate-limits still get the `ctx` bar once the context window starts filling; the line is hidden only until there's something to show.
 - **First-entry cache.** On session entry, Claude Code hasn't made an API call yet, so stdin has no `rate_limits`. claude-recall persists the last-seen values to `~/.claude/claude-recall/rate-limits.json` and renders from that cache on first render, so you see the 5h / 7d bars the moment `claude` starts. Windows whose `resets_at` has passed are dropped from the cache (they'd overstate usage in the new window).
-- On narrow terminals, Line 3 drops `cost` first, then the `7d` segment, so the `5h` bar + reset time is always visible.
-- At **90%+** context, Line 2's `cost` slot becomes a red `⚠ try /handoff` warning.
+- On narrow terminals, Line 3 drops `cost` first, then `7d`, then `5h`, keeping `ctx` visible the longest — context exhaustion is the most urgent signal.
+- At **70-89%** context, Line 1 shows a dim `(try /handoff)` hint. At **≥90%**, it becomes red `⚠ try /handoff`. The warning lives on Line 1 so it stays visible even when users opt out of Line 3 entirely (`line3: []`).
 - Ahead/behind counts reflect your last `git fetch`. Run `git fetch` periodically to keep the `↓N` indicator honest.
 
 </details>

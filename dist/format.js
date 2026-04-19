@@ -101,6 +101,11 @@ const ERROR_LABELS = {
     auth: '\u26A0 AI auth failed',
     unknown: '\u26A0 AI refinement failed',
 };
+const HINT_CRITICAL_RAW = '  \u26A0 try /handoff';
+const HINT_WARNING_RAW = '  (try /handoff)';
+const HINT_CRITICAL_WIDTH = displayWidth(HINT_CRITICAL_RAW);
+const HINT_WARNING_WIDTH = displayWidth(HINT_WARNING_RAW);
+const HINT_MAX_WIDTH = Math.max(HINT_CRITICAL_WIDTH, HINT_WARNING_WIDTH);
 function renderGitText(gs, cfg) {
     let text = gs.branch;
     if (cfg.showDirty && gs.dirty)
@@ -113,12 +118,14 @@ function renderGitText(gs, cfg) {
     }
     return text;
 }
-function renderBar(pct, width, tc) {
+const DEFAULT_THRESHOLDS = { red: 80, yellow: 50 };
+const CTX_THRESHOLDS = { red: 90, yellow: 70 };
+function renderBar(pct, width, tc, th = DEFAULT_THRESHOLDS) {
     const clamped = Math.max(0, Math.min(100, pct));
     const filled = Math.round((clamped / 100) * width);
     const empty = width - filled;
     const bar = '\u2588'.repeat(filled) + '\u2591'.repeat(empty);
-    const color = clamped >= 80 ? tc.red : clamped >= 50 ? tc.yellow : tc.green;
+    const color = clamped >= th.red ? tc.red : clamped >= th.yellow ? tc.yellow : tc.green;
     return color(bar);
 }
 function pad2(n) {
@@ -134,11 +141,11 @@ function formatSevenDayReset(resetsAtEpochSec) {
     const d = new Date(resetsAtEpochSec * 1000);
     return `(~${d.getMonth() + 1}/${d.getDate()} ${formatHM(d)})`;
 }
-function formatUsageSegment(label, pct, tc, resetText) {
-    const bar = renderBar(pct, 10, tc);
+function formatUsageSegment(label, pct, tc, resetText, th = DEFAULT_THRESHOLDS) {
+    const bar = renderBar(pct, 10, tc, th);
     const pctText = `${Math.round(pct)}%`;
     const labelColored = tc.dim(label);
-    const pctColored = pct >= 80 ? tc.red(pctText) : pct >= 50 ? tc.yellow(pctText) : tc.green(pctText);
+    const pctColored = pct >= th.red ? tc.red(pctText) : pct >= th.yellow ? tc.yellow(pctText) : tc.green(pctText);
     const resetPart = resetText ? ` ${tc.dim(resetText)}` : '';
     const text = `${labelColored} ${bar} ${pctColored}${resetPart}`;
     return { text, width: visibleWidth(text) };
@@ -146,8 +153,8 @@ function formatUsageSegment(label, pct, tc, resetText) {
 export function formatStatusline(state, termWidth, builtin, config) {
     const cfg = config ?? {
         line1: ['focus', 'branch', 'model'],
-        line2: ['turn', 'prompt', 'elapsed', 'context'],
-        line3: ['rate_limits', 'seven_day', 'cost'],
+        line2: ['turn', 'prompt', 'elapsed'],
+        line3: ['context', 'rate_limits', 'seven_day', 'cost'],
         gitStatus: { enabled: true, showDirty: true, showAheadBehind: true },
         theme: 'default',
     };
@@ -184,15 +191,23 @@ export function formatStatusline(state, termWidth, builtin, config) {
         line1Right.push({ text: s, width: visibleWidth(s) });
     }
     const line1RightJoined = progressiveJoin(line1Right, termWidth - prefixWidth, MIN_FOCUS_COLS);
-    // Line 1 hint: (try /handoff) when context is 70-89% (≥90% uses L2 warning)
+    // Line 1 hint: dim (try /handoff) at 70-89%; red ⚠ try /handoff at ≥90%
     const ctxPct = builtin?.context_window?.used_percentage;
-    const wantsContinueHint = ctxPct != null && ctxPct >= 70 && ctxPct < 90;
-    const HINT_WIDTH = 16;
+    const isCritical = ctxPct != null && ctxPct >= 90;
+    const isWarning = ctxPct != null && ctxPct >= 70 && ctxPct < 90;
     const spaceForRight1 = line1RightJoined.width > 0 ? line1RightJoined.width + 2 : 0;
-    const availWithHint = termWidth - prefixWidth - HINT_WIDTH - spaceForRight1;
-    const showContinueHint = wantsContinueHint && availWithHint >= MIN_FOCUS_COLS + 5;
-    const hintText = showContinueHint ? tc.dim('  (try /handoff)') : '';
-    const hintWidth = showContinueHint ? HINT_WIDTH : 0;
+    const availWithHint = termWidth - prefixWidth - HINT_MAX_WIDTH - spaceForRight1;
+    const showHint = (isCritical || isWarning) && availWithHint >= MIN_FOCUS_COLS + 5;
+    let hintText = '';
+    let hintWidth = 0;
+    if (showHint && isCritical) {
+        hintText = tc.red(HINT_CRITICAL_RAW);
+        hintWidth = HINT_CRITICAL_WIDTH;
+    }
+    else if (showHint) {
+        hintText = tc.dim(HINT_WARNING_RAW);
+        hintWidth = HINT_WARNING_WIDTH;
+    }
     const availLeft = termWidth - prefixWidth - hintWidth - spaceForRight1;
     let leftText;
     let leftWidth;
@@ -221,7 +236,7 @@ export function formatStatusline(state, termWidth, builtin, config) {
     const gap1 = Math.max(1, termWidth - prefixWidth - leftWidth - hintWidth - line1RightJoined.width);
     const line1 = prefix + leftText + hintText + ' '.repeat(gap1) + line1RightJoined.text;
     // =========================================================================
-    // Line 2: #turn + last_prompt + elapsed/ctx (right)
+    // Line 2: #turn + last_prompt + elapsed (right)
     // =========================================================================
     let line2 = null;
     if (l2.length > 0) {
@@ -229,19 +244,6 @@ export function formatStatusline(state, termWidth, builtin, config) {
         if (l2.includes('elapsed')) {
             const s = tc.dim(elapsed);
             line2Right.push({ text: s, width: visibleWidth(s) });
-        }
-        if (l2.includes('context') && builtin?.context_window?.used_percentage != null) {
-            const pct = Math.round(builtin.context_window.used_percentage);
-            if (pct >= 90) {
-                const warnText = `${pct}% \u26A0 try /handoff`;
-                const warn = tc.red(warnText);
-                line2Right.push({ text: warn, width: visibleWidth(warnText) });
-            }
-            else {
-                const label = `${pct}%`;
-                const s = pct >= 70 ? tc.yellow(label) : tc.green(label);
-                line2Right.push({ text: s, width: visibleWidth(s) });
-            }
         }
         const hasTurn = l2.includes('turn');
         const turnLabel = hasTurn ? tc.dim(`#${state.promptCount}  `) : '';
@@ -267,9 +269,12 @@ export function formatStatusline(state, termWidth, builtin, config) {
         line2 = prefix + turnLabel + promptText + ' '.repeat(gap2) + line2RightJoined.text;
     }
     // =========================================================================
-    // Line 3 (opt-out): rate_limits bar + 7d bar + cost
+    // Line 3 (opt-out): ctx bar + 5h bar + 7d bar + cost
     // =========================================================================
     const line3Segments = [];
+    if (l3.includes('context') && ctxPct != null) {
+        line3Segments.push(formatUsageSegment('ctx', ctxPct, tc, undefined, CTX_THRESHOLDS));
+    }
     if (l3.includes('rate_limits') && builtin?.rate_limits?.five_hour?.used_percentage != null) {
         const pct = builtin.rate_limits.five_hour.used_percentage;
         const resetsAt = builtin.rate_limits.five_hour.resets_at;

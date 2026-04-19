@@ -1,5 +1,25 @@
 # Changelog
 
+## 6.1.0
+
+### Changed
+
+- **Context window `%` moved from Line 2 to Line 3 as a `ctx` bar.** Previously the context usage was a bare percentage at the right edge of Line 2 (e.g. `45%`), sitting next to `elapsed` and competing with `last_prompt` for horizontal space. Line 3 already carries the `5h` and `7d` rate-limit bars via the shared `formatUsageSegment()` renderer, so context now slots into the same visual language: `ctx ████░░░░░░ 45%   5h ██░░░░░░░░ 15%   7d █░░░░░░░░░  8%   $0.03`. Line 2 is now dedicated to session-turn activity (`#turn last_prompt  elapsed`), which lets the prompt claim the freed horizontal space on narrow terminals. The `ctx` segment uses the same threshold palette as `5h`/`7d` but with tighter breakpoints (red ≥90%, yellow ≥70%) to match the criticality of context exhaustion vs quota pressure.
+
+### Added
+
+- **Critical-context warning (`⚠ try /handoff`) promoted to Line 1.** The ≥90% warning previously lived in Line 2's context slot; with context gone from L2, the warning would have been invisible to users who turn Line 3 off entirely via `line3: []`. It now appears on Line 1 alongside (and replacing) the existing 70-89% `(try /handoff)` dim hint — rendered in red with a ⚠ glyph at ≥90%, dim parens at 70-89%. Line 1 is unconditional, so the warning is guaranteed to render regardless of `line3` opt-out.
+
+### Migration
+
+- **Existing `config.json` files with `"context"` in `line2` are auto-migrated.** On read, if the stored config lists `context` under `line2` and `line3` does not already include it, `context` is prepended to `line3` at load time — users keep the feature without editing their config. Users who want the new default layout can delete `context` from `line2` (it is now an invalid L2 slot and will be silently filtered).
+
+### Notes
+
+- The new L3 default order is `['context', 'rate_limits', 'seven_day', 'cost']`. `progressiveJoin` drops segments right-to-left on narrow terminals, so on constrained widths `cost` drops first, then `7d`, then `5h` — `ctx` is the last to go, matching its criticality.
+- `renderBar()` and `formatUsageSegment()` gained an optional `thresholds` parameter so the context bar can use `{red: 90, yellow: 70}` while the rate-limit bars keep their original `{red: 80, yellow: 50}`. No behavior change for the existing bars.
+- 5 new tests in `test/statusline.test.mjs` cover the ctx bar render, L2 no longer carries `%`, ≥90% red warning on L1, 70-89% dim hint on L1 (no ⚠), and L3 opt-out (`line3: []`) hiding ctx. Total: 46 → 51.
+
 ## 6.0.9
 
 ### Fixed

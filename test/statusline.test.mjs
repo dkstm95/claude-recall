@@ -11,8 +11,8 @@ import { createEmptySessionState } from '../dist/state.js';
 
 const BASE_CFG = {
   line1: ['focus', 'branch', 'model'],
-  line2: ['turn', 'prompt', 'elapsed', 'context'],
-  line3: ['rate_limits', 'seven_day', 'cost'],
+  line2: ['turn', 'prompt', 'elapsed'],
+  line3: ['context', 'rate_limits', 'seven_day', 'cost'],
   gitStatus: { enabled: true, showDirty: true, showAheadBehind: true },
   theme: 'default',
 };
@@ -76,4 +76,56 @@ test('formatStatusline: refinementError suppresses focus placeholder (error wins
   const clean1 = stripAnsi(out.split('\n')[0]);
   assert.ok(clean1.includes('AI timeout'), `Line 1 should show error label, got "${clean1}"`);
   assert.ok(!clean1.includes(FOCUS_PLACEHOLDER), `placeholder should yield to error label`);
+});
+
+test('formatStatusline: ctx bar renders on Line 3 when context_window present', () => {
+  const builtin = {
+    model: { display_name: 'Sonnet 4.6' },
+    context_window: { used_percentage: 45 },
+  };
+  const out = formatStatusline(emptyState(), 140, builtin, BASE_CFG);
+  const lines = out.split('\n');
+  assert.equal(lines.length, 3, `expected 3 lines with ctx on L3, got ${lines.length}`);
+  const clean3 = stripAnsi(lines[2]);
+  assert.ok(clean3.includes('ctx'), `Line 3 should show ctx label, got "${clean3}"`);
+  assert.ok(clean3.includes('45%'), `Line 3 should show 45%, got "${clean3}"`);
+});
+
+test('formatStatusline: Line 2 no longer carries context percentage', () => {
+  const builtin = {
+    model: { display_name: 'Sonnet 4.6' },
+    context_window: { used_percentage: 45 },
+  };
+  const out = formatStatusline(emptyState(), 140, builtin, BASE_CFG);
+  const clean2 = stripAnsi(out.split('\n')[1]);
+  assert.ok(!clean2.includes('45%'), `Line 2 should NOT show context %, got "${clean2}"`);
+});
+
+test('formatStatusline: ≥90% context shows red ⚠ try /handoff on Line 1', () => {
+  const builtin = {
+    model: { display_name: 'Sonnet 4.6' },
+    context_window: { used_percentage: 92 },
+  };
+  const out = formatStatusline(emptyState(), 140, builtin, BASE_CFG);
+  const clean1 = stripAnsi(out.split('\n')[0]);
+  assert.ok(clean1.includes('\u26A0 try /handoff'), `Line 1 should show ⚠ try /handoff at ≥90%, got "${clean1}"`);
+});
+
+test('formatStatusline: 70-89% context shows dim (try /handoff) hint on Line 1', () => {
+  const builtin = {
+    model: { display_name: 'Sonnet 4.6' },
+    context_window: { used_percentage: 75 },
+  };
+  const out = formatStatusline(emptyState(), 140, builtin, BASE_CFG);
+  const clean1 = stripAnsi(out.split('\n')[0]);
+  assert.ok(clean1.includes('(try /handoff)'), `Line 1 should show (try /handoff) at 70-89%, got "${clean1}"`);
+  assert.ok(!clean1.includes('\u26A0'), `Line 1 should NOT show ⚠ below 90%, got "${clean1}"`);
+});
+
+test('formatStatusline: ctx hidden when line3 is empty (opt-out)', () => {
+  const cfg = { ...BASE_CFG, line3: [] };
+  const builtin = { context_window: { used_percentage: 45 } };
+  const out = formatStatusline(emptyState(), 140, builtin, cfg);
+  const lines = out.split('\n');
+  assert.ok(lines.every((l) => !stripAnsi(l).includes('ctx')), `ctx should be hidden when line3 is empty`);
 });
