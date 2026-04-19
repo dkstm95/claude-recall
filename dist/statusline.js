@@ -2,6 +2,7 @@ import { readStdin } from './stdin.js';
 import { readState, createEmptySessionState } from './state.js';
 import { formatStatusline, getTerminalWidth } from './format.js';
 import { readConfig } from './config.js';
+import { resolveRateLimits } from './rate-limits-cache.js';
 async function main() {
     const raw = await readStdin();
     let input;
@@ -21,7 +22,7 @@ async function main() {
         cost: input.cost,
         context_window: input.context_window,
         workspace: input.workspace,
-        rate_limits: input.rate_limits,
+        rate_limits: resolveRateLimits(input.rate_limits),
     };
     const config = readConfig();
     const output = formatStatusline(state, getTerminalWidth(), builtin, config);

@@ -2,6 +2,7 @@ import { readStdin } from './stdin.js';
 import { readState, createEmptySessionState } from './state.js';
 import { formatStatusline, getTerminalWidth, type BuiltinData } from './format.js';
 import { readConfig } from './config.js';
+import { resolveRateLimits, type RateLimitsData } from './rate-limits-cache.js';
 
 interface StatuslineInput {
   session_id?: string;
@@ -10,10 +11,7 @@ interface StatuslineInput {
   cost?: { total_cost_usd?: number; total_duration_ms?: number };
   context_window?: { used_percentage?: number };
   workspace?: { git_worktree?: string; current_dir?: string; project_dir?: string };
-  rate_limits?: {
-    five_hour?: { used_percentage?: number; resets_at?: number };
-    seven_day?: { used_percentage?: number; resets_at?: number };
-  };
+  rate_limits?: RateLimitsData;
 }
 
 async function main(): Promise<void> {
@@ -36,7 +34,7 @@ async function main(): Promise<void> {
     cost: input.cost,
     context_window: input.context_window,
     workspace: input.workspace,
-    rate_limits: input.rate_limits,
+    rate_limits: resolveRateLimits(input.rate_limits),
   };
 
   const config = readConfig();

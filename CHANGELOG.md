@@ -1,5 +1,20 @@
 # Changelog
 
+## 6.0.8
+
+### Fixed
+
+- **Line 3 blank on first entry.** When `claude` launched into a fresh session, the rate-limit bars on line 3 were absent until the first API call completed — Claude Code's statusline stdin omits `rate_limits` until it has made at least one request, so the only populated field was `cost: 0`, rendering line 3 as a lonely `$0.00`. Since `rate_limits` are an **account-level quota** (5h / 7d windows are identical across every session for the same user), they're a natural candidate for cross-session caching. Added `src/rate-limits-cache.ts` which persists the last-known `rate_limits` to `~/.claude/claude-recall/rate-limits.json`. `statusline.ts` now calls a single `resolveRateLimits()` helper that merges live stdin data over this cache on every render (live wins; cache fills gaps), and writes back only when the merged value actually differs from what's on disk. Line 3 now renders `5h ██░░░░░░░░ 15%   7d █░░░░░░░░░  8%` the moment `claude` starts, assuming the user has used claude-recall recently enough that the cached windows haven't rolled over.
+
+### Notes
+
+- **Staleness is `resets_at`-based, not wall-clock-based.** A cached window is kept as long as its `resets_at` epoch is still in the future. Once a window's reset fires, the cached percentage is dropped from the read (actual usage is 0 in the new window, so surfacing the old number would overstate quota pressure). This also means a 2-hour-old cache entry is still valid if the 5-hour window hasn't rolled over — the actual percentage can only have gone *up*, so the cached value is a safe lower bound.
+- **Hot-path discipline.** The statusline is re-rendered every ~300ms by Claude Code, so naive caching would issue 3–4 `writeFileSync` + `renameSync` pairs per second on identical data between API calls. `resolveRateLimits()` compares the merged value against the already-read cache (`dataEqual`) and skips the write when nothing changed. `mkdirSync` is hoisted to the write path only; reads hit `readFileSync` directly against a module-level `CACHE_PATH` constant, so cold-start cost is a single file open.
+- **No new configuration.** Caching is implicit and automatic; there is no opt-out. Users who don't want persistent state can delete `~/.claude/claude-recall/rate-limits.json` — it will not be recreated until claude-recall next sees live `rate_limits` in stdin.
+- **Cache is global, not per-session.** Account-level quotas are identical for every parallel session, so a single file at `~/.claude/claude-recall/rate-limits.json` is shared across all sessions. Atomic write via `.tmp.<uuid>` + `renameSync`, matching the pattern used by `state.ts::writeState`. The `RateLimitsData` / `RateLimitWindow` shape lives in one place (`rate-limits-cache.ts`) and is imported by `format.ts::BuiltinData` and `statusline.ts::StatuslineInput`, replacing three identical inline type definitions.
+- 14 new unit tests (`test/rate-limits-cache.test.mjs`) cover the merge precedence (live > cache), partial-live + partial-cache, stale-window filtering (both windows stale → `null`; one window stale → other survives), round-trip, the `hasAnyLivePct` guard, and `resolveRateLimits` end-to-end — including an `mtime`-based assertion that repeat identical live data does *not* rewrite the cache file.
+- Total test count: 45 → 59.
+
 ## 6.0.7
 
 ### Fixed

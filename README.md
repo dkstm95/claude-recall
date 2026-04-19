@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-6.0.7-blue?style=flat-square" alt="version">
+  <img src="https://img.shields.io/badge/version-6.0.8-blue?style=flat-square" alt="version">
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="license">
   <img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen?style=flat-square&logo=node.js&logoColor=white" alt="node">
   <img src="https://img.shields.io/badge/Claude_Code-Plugin-blueviolet?style=flat-square" alt="Claude Code Plugin">
@@ -124,6 +124,7 @@ Legacy configs with `"line1": ["purpose", ...]` are transparently mapped to `"fo
 
 Notes:
 - Line 3 renders only when rate-limits data is present (Claude subscribers). API-key-only users naturally see two lines.
+- **First-entry cache.** On session entry, Claude Code hasn't made an API call yet, so stdin has no `rate_limits`. claude-recall persists the last-seen values to `~/.claude/claude-recall/rate-limits.json` and renders from that cache on first render, so you see the 5h / 7d bars the moment `claude` starts. Windows whose `resets_at` has passed are dropped from the cache (they'd overstate usage in the new window).
 - On narrow terminals, Line 3 drops `cost` first, then the `7d` segment, so the `5h` bar + reset time is always visible.
 - At **90%+** context, Line 2's `cost` slot becomes a red `⚠ try /handoff` warning.
 - Ahead/behind counts reflect your last `git fetch`. Run `git fetch` periodically to keep the `↓N` indicator honest.

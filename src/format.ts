@@ -1,5 +1,6 @@
 import type { SessionState, RefinementError, GitStatus } from './state.js';
 import type { StatuslineConfig, ThemeColors } from './config.js';
+import type { RateLimitsData } from './rate-limits-cache.js';
 import { getThemeColors } from './config.js';
 
 export interface BuiltinData {
@@ -7,10 +8,7 @@ export interface BuiltinData {
   cost?: { total_cost_usd?: number; total_duration_ms?: number };
   context_window?: { used_percentage?: number };
   workspace?: { git_worktree?: string };
-  rate_limits?: {
-    five_hour?: { used_percentage?: number; resets_at?: number };
-    seven_day?: { used_percentage?: number; resets_at?: number };
-  };
+  rate_limits?: RateLimitsData;
 }
 
 // CJK / fullwidth ranges occupy 2 terminal columns
