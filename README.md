@@ -99,8 +99,6 @@ Create `~/.claude/claude-recall/config.json`:
   - When `theme` is omitted and the terminal exports `COLORFGBG`, claude-recall auto-selects `light` for light backgrounds (`bg=7` or `bg=15`) and `default` otherwise. An explicit `theme` value always wins.
   - Setting the `NO_COLOR` environment variable (any value, per [no-color.org](https://no-color.org)) suppresses all ANSI color output regardless of theme.
 
-Legacy configs with `"line1": ["purpose", ...]` are transparently mapped to `"focus"`.
-
 ## Statusline reference
 
 <details>
@@ -113,7 +111,7 @@ Legacy configs with `"line1": ["purpose", ...]` are transparently mapped to `"fo
 | **branch + status** | Line 1, right | `branch*↑N↓N` — dirty flag + commits ahead/behind `origin/<default>` | claude-recall |
 | **model** | Line 1, right | Active Claude model (e.g. Opus) | Claude Code built-in |
 | **turn** | Line 2, left | Current prompt number (`#12`) | claude-recall |
-| **last prompt** | Line 2, left | The last prompt you typed (now with ~3× more visible width vs v5) | claude-recall |
+| **last prompt** | Line 2, left | The last prompt you typed | claude-recall |
 | **elapsed** | Line 2, right | Time since session start / last activity | claude-recall |
 | **ctx bar** | Line 3 | Context window usage — `ctx ████░░░░░░ 45%` — green (<70%), yellow (70-89%), red (≥90%) | Claude Code built-in |
 | **5h rate limit bar** | Line 3 | 5-hour usage + reset time — `5h ████░░░░░░ 45% (~16:59)` | Claude Code built-in |
@@ -126,7 +124,7 @@ Legacy configs with `"line1": ["purpose", ...]` are transparently mapped to `"fo
 Notes:
 - Line 3 renders when any of `ctx` / `rate_limits` / `seven_day` / `cost` has data. API-key-only users with no rate-limits still get the `ctx` bar once the context window starts filling; the line is hidden only until there's something to show.
 - **`5h` / `7d` bars require Claude.ai Pro/Max.** Claude Code omits the `rate_limits` stdin field for Claude API key users, so the two rate-limit bars never populate on API-key setups (no error — just absent). The `ctx` and `$cost` segments still render normally.
-- **First-entry cache.** On session entry, Claude Code hasn't made an API call yet, so stdin has no `rate_limits` or `context_window`. claude-recall persists the last-seen values to `~/.claude/claude-recall/rate-limits.json` (per-account) and `~/.claude/claude-recall/context-windows.json` (per-session) and renders from those caches on first render, so you see the 5h / 7d and ctx bars the moment `claude` starts. Rate-limit windows whose `resets_at` has passed are dropped from the cache (they'd overstate usage in the new window); context-window entries are pruned when the matching session expires (7d idle).
+- **First-entry cache.** Claude Code omits `rate_limits` and `context_window` from stdin until the first API call, so claude-recall caches the last-seen values under `~/.claude/claude-recall/` and restores them on first render — the bars show up immediately instead of waiting for the first prompt. See CHANGELOG v6.1.4 / v6.1.5 for details.
 - On narrow terminals, Line 3 drops `cost` first, then `7d`, then `5h`, keeping `ctx` visible the longest — context exhaustion is the most urgent signal.
 - At **70-89%** context, Line 1 shows a dim `(try /handoff)` hint. At **≥90%**, it becomes red `⚠ try /handoff`. The warning lives on Line 1 so it stays visible even when users opt out of Line 3 entirely (`line3: []`).
 - Ahead/behind counts reflect your last `git fetch`. Run `git fetch` periodically to keep the `↓N` indicator honest.
@@ -141,11 +139,11 @@ Triggers (OR):
 - **PreCompact** — right before Claude Code compacts context, capture the current state.
 - **SessionEnd** — final snapshot for handoff continuity.
 
-Each trigger spawns `claude -p --model=haiku` as a subprocess with the last 20KB of the transcript. The subprocess:
+Each trigger spawns `claude -p --model=haiku` as a subprocess with the last 12KB of the transcript. The subprocess:
 - Disables tools (`--tools ""`), disables slash commands, disables session persistence
 - Carries `CLAUDE_RECALL_REFINING=1` in env so claude-recall's own hooks skip in the child (no recursion)
 - Emits only the focus text in the transcript's language
-- Has a 30-second timeout and 5-second debounce
+- Has a 45-second timeout and 5-second debounce
 
 On failure, Line 1's focus is replaced by a red label (`⚠ AI timeout`, `⚠ AI rate limited`, `⚠ AI auth failed`, or `⚠ AI refinement failed`) until the next successful refinement clears it.
 

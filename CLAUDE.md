@@ -1,6 +1,6 @@
 # claude-recall
 
-Claude Code plugin (v6.0.0) that provides a session awareness statusline.
+Claude Code plugin (v6.1.5) that provides a session awareness statusline.
 Tracks a Haiku-refined focus label, activity, git status, and prompt count for every parallel Claude Code session.
 
 - **Author**: seungilahn
@@ -36,14 +36,14 @@ src/                      # TypeScript source
   format.ts               #   3-line statusline formatter, CJK width, bar renderer, progressive truncation
   statusline.ts           #   Entry point: stdin JSON -> formatStatusline() -> stdout
   stdin.ts                #   Async stdin reader utility
-  refine.ts               #   Haiku subprocess wrapper: spawnRefinement + triggerFocusRefinement + 5s debounce
+  refine.ts               #   Haiku subprocess wrapper: spawnRefinement + triggerFocusRefinement + launchRefinementWorker (detached) + 5s debounce
+  refine-worker.ts        #   Detached worker entry — runs `triggerFocusRefinement` outside the 10s hook window
   rate-limits-cache.ts    #   Per-account cache for rate_limits stdin field (omitted on first render)
   context-window-cache.ts #   Per-session cache for context_window stdin field (omitted on first render)
   hooks/
     session-start.ts      #   Initialize/resume session, cleanup old sessions (>7d)
     prompt-submit.ts      #   Track prompts, update git status, trigger focus refinement at power-of-2 turns
-    pre-compact.ts        #   Refine focus before context compaction
-    session-end.ts        #   Refine focus at session end (final snapshot)
+    trigger-refinement.ts #   Shared entry for PreCompact + SessionEnd — spawns the detached refine-worker
 dist/                     # Compiled JS (committed, do NOT edit directly)
 assets/                   # SVG preview images for marketplace
 ```
@@ -51,21 +51,23 @@ assets/                   # SVG preview images for marketplace
 ## Data Flow
 
 ```
-SessionStart event -> session-start.ts -> creates/updates ~/.claude/claude-recall/sessions/{id}.json
-UserPromptSubmit   -> prompt-submit.ts  -> increments promptCount, updates git status, triggers focus refinement at 2^k turns (k>=0, so 1,2,4,8,...)
-PreCompact         -> pre-compact.ts    -> triggers focus refinement (natural milestone)
-SessionEnd         -> session-end.ts    -> triggers focus refinement (final snapshot)
-Statusline render  -> statusline.ts     -> reads session JSON + stdin metrics -> 1-3 line statusline output
-/handoff command   -> handoff.md        -> writes structured handoff MD file for a fresh session
+SessionStart event -> session-start.ts        -> creates/updates ~/.claude/claude-recall/sessions/{id}.json
+UserPromptSubmit   -> prompt-submit.ts         -> increments promptCount, updates git status, triggers focus refinement at 2^k turns (k>=0, so 1,2,4,8,...)
+PreCompact         -> trigger-refinement.ts    -> fire-and-forget the refine-worker (natural milestone)
+SessionEnd         -> trigger-refinement.ts    -> fire-and-forget the refine-worker (final snapshot)
+Statusline render  -> statusline.ts            -> reads session JSON + stdin metrics -> 1-3 line statusline output
+/handoff command   -> handoff.md               -> writes structured handoff MD file for a fresh session
 ```
 
 Focus refinement path:
 ```
-trigger -> refine.ts::triggerFocusRefinement (5s debounce via lastRefinedAt)
-         -> spawn `claude -p --model=haiku --tools "" --no-session-persistence ...`
-            with env CLAUDE_RECALL_REFINING=1 (prevents recursive plugin hook firing in child)
-         -> 30s timeout; output text -> state.focus OR refinementError (empty transcript = silent skip, not an error)
+trigger hook -> refine.ts::launchRefinementWorker (spawn detached refine-worker.js, unref, return immediately)
+             -> refine-worker.ts -> refine.ts::triggerFocusRefinement (5s debounce via lastRefinedAt)
+                -> spawn `claude -p --model=haiku --tools "" --no-session-persistence ...`
+                   with env CLAUDE_RECALL_REFINING=1 (prevents recursive plugin hook firing in child)
+                -> 45s timeout; output text -> state.focus OR refinementError (empty transcript = silent skip, not an error)
 ```
+Why detached: Claude Code's 10s hook timeout would SIGHUP `claude -p` before Haiku responds (~1-5s typical, up to 45s). The hook returns in <50ms; the worker outlives it and writes state asynchronously.
 
 ## Session State Schema
 
@@ -82,7 +84,8 @@ Key fields in `~/.claude/claude-recall/sessions/{sessionId}.json`:
 | lastUserPrompt | string | Last prompt text (first 200 chars) |
 | lastActivityAt | string | ISO timestamp of last activity (drives 7-day cleanup) |
 | lastRefinedAt | string \| null | ISO timestamp of last focus refinement (debounce guard) |
-| refinementError | RefinementError \| null | `{ code: 'timeout' \| 'rate_limit' \| 'auth' \| 'unknown', at }` |
+| refinementError | RefinementError \| null | `{ code: 'timeout' \| 'rate_limit' \| 'auth' \| 'unknown', at, durationMs?, stderrTail? }` |
+| lastRefinement | LastRefinement \| null | Last refinement attempt record: `{ at, status: 'ok' \| 'error', code?, durationMs, transcriptBytes, stdoutBytes?, stderrTail? }` (diagnostics, survives across successes) |
 
 `GitStatus` fields: `branch`, `dirty`, `ahead` (vs origin/default), `behind` (vs origin/default), `defaultBranch`.
 
@@ -110,7 +113,7 @@ Line 3 (opt-out):  ▍ ctx ████░░░░░░ 45%   5h ████�
 
 ### Priority rules (what drops as width shrinks)
 
-Default fallback width is 80 cols (see `getTerminalWidth()`); set `$COLUMNS` in the launcher for wider budgets.
+Width precedence: `stdout.columns` → `stderr.columns` → `$COLUMNS` → `80` fallback (see `getTerminalWidth()` in `src/format.ts`). Claude Code inherits stderr, so `stderr.columns` reports the actual render-area width on modern versions; `$COLUMNS` only matters when neither stream is a TTY.
 
 **Line 1** — `focus` always renders (truncated with `…` to min 15 cols). Right-side segments follow config order left-to-right = high-to-low priority, and `progressiveJoin` drops the rightmost segments first. Default `['focus', 'branch', 'model']` means `model` drops before `branch`.
 
@@ -134,11 +137,10 @@ Effect at the 80-col fallback with all four segments populated: L0 is ~91 cols �
 - **CJK-aware**: `displayWidth()` and `isWide()` in format.ts handle double-width characters
 - **Slash command filtering**: prompt-submit.ts ignores prompts starting with `/`
 - **Lazy cleanup**: Sessions idle for >7 days (by `lastActivityAt`) are cleaned on SessionStart, not continuously
-- **Legacy field tolerance**: `readState()` migrates `purpose` → `focus` on read and silently drops `purposeSource`; canonical schema is rewritten on next `writeState()`
 - **Stdin-first elapsed**: statusline prefers `cost.total_duration_ms` from stdin over self-tracked timestamps
 - **Git call optimization**: full git status runs every 10 prompts (`% 10 === 1`), not every prompt
-- **Theme system**: `ThemeColors` interface abstracts all color calls; 3 presets (default, minimal, vivid)
-- **Config-driven statusline**: line1/line2/line3 element arrays control which segments render. Legacy `'purpose'` slot names map to `'focus'`.
+- **Theme system**: `ThemeColors` interface abstracts all color calls; 4 presets (default, light, minimal, vivid). `COLORFGBG`-based auto-select picks `light` on light terminals when `theme` is omitted; `NO_COLOR` strips all ANSI output.
+- **Config-driven statusline**: line1/line2/line3 element arrays control which segments render.
 - **Focus refinement recursion guard**: `refine.ts` sets `CLAUDE_RECALL_REFINING=1` in the child env; all hooks early-return when this env var is set, preventing the spawned `claude -p` from re-triggering the plugin.
 - **Debounce on refinement**: `shouldRefine()` checks `lastRefinedAt` against a 5s window. Optimistic write of `lastRefinedAt` before the `claude -p` call narrows the concurrent-spawn race window.
 
@@ -164,10 +166,9 @@ Do this in the same commit, not as a separate step.
 ## Hook Configuration
 
 All hooks defined in `hooks/hooks.json`:
-- `SessionStart` / `UserPromptSubmit` — timeout 10s (fast path, must finish quickly)
-- `PreCompact` / `SessionEnd` — timeout 35s (allows 30s Haiku call + overhead)
+- `SessionStart` / `UserPromptSubmit` / `PreCompact` / `SessionEnd` — all **timeout 10s**. Even the refinement triggers finish fast because `launchRefinementWorker` spawns a detached `refine-worker.js` and returns immediately; the worker carries the 45s Haiku budget outside the hook window.
 - Matcher: `"*"` (triggers on all events)
-- Command pattern: `node "${CLAUDE_PLUGIN_ROOT}/dist/hooks/<name>.js"`
+- Command pattern: `node "${CLAUDE_PLUGIN_ROOT}/dist/hooks/<name>.js"` — `PreCompact` and `SessionEnd` share `trigger-refinement.js`.
 
 ## Important Notes
 
