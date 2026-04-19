@@ -3,6 +3,7 @@ import { readState, createEmptySessionState } from './state.js';
 import { formatStatusline, getTerminalWidth } from './format.js';
 import { readConfig } from './config.js';
 import { resolveRateLimits } from './rate-limits-cache.js';
+import { resolveContextWindow } from './context-window-cache.js';
 async function main() {
     const raw = await readStdin();
     let input;
@@ -20,7 +21,7 @@ async function main() {
     const builtin = {
         model: input.model,
         cost: input.cost,
-        context_window: input.context_window,
+        context_window: resolveContextWindow(input.session_id, input.context_window),
         workspace: input.workspace,
         rate_limits: resolveRateLimits(input.rate_limits),
     };

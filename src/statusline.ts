@@ -3,13 +3,14 @@ import { readState, createEmptySessionState } from './state.js';
 import { formatStatusline, getTerminalWidth, type BuiltinData } from './format.js';
 import { readConfig } from './config.js';
 import { resolveRateLimits, type RateLimitsData } from './rate-limits-cache.js';
+import { resolveContextWindow, type ContextWindowData } from './context-window-cache.js';
 
 interface StatuslineInput {
   session_id?: string;
   cwd?: string;
   model?: { display_name?: string };
   cost?: { total_cost_usd?: number; total_duration_ms?: number };
-  context_window?: { used_percentage?: number };
+  context_window?: ContextWindowData;
   workspace?: { git_worktree?: string; current_dir?: string; project_dir?: string };
   rate_limits?: RateLimitsData;
 }
@@ -32,7 +33,7 @@ async function main(): Promise<void> {
   const builtin: BuiltinData = {
     model: input.model,
     cost: input.cost,
-    context_window: input.context_window,
+    context_window: resolveContextWindow(input.session_id, input.context_window),
     workspace: input.workspace,
     rate_limits: resolveRateLimits(input.rate_limits),
   };

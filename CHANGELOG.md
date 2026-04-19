@@ -1,5 +1,18 @@
 # Changelog
 
+## 6.1.4
+
+### Fixed
+
+- **Line 3 `ctx` bar hidden on the first statusline render of every session; appeared only after the first user prompt.** Claude Code omits `context_window` from statusline stdin until the first API call populates token accounting, and `src/statusline.ts` was passing the field through raw — so `format.ts`'s `ctxPct != null` gate dropped the segment on entry. Fix: added `src/context-window-cache.ts` which persists per-session `used_percentage` to `~/.claude/claude-recall/context-windows.json`, keyed by `session_id`. When stdin lacks `context_window`, `resolveContextWindow()` falls back to the last-seen value for that session; when stdin supplies a live value, the cache is updated (atomic tmp+rename, no-op-guarded to skip unchanged writes). Resume sessions now show the previous `ctx` value immediately on render, replaced by the live value as soon as the first API call completes.
+
+### Notes
+
+- **Same root cause as `rate_limits` first-render omission** (solved in v6.0.x), but `context_window` was missed at the time and v6.1.0's Line-3 promotion made it visible. The new cache mirrors `src/rate-limits-cache.ts`'s shape (atomic write + change-detection guard) with one structural difference: `context_window` has no reset timestamp (percentages only grow until the session ends), so the `isFresh()` staleness check is replaced by `cleanupContextCache(keptSessionIds)` wired into `cleanupOldSessions()` in `src/state.ts` — when the 7-day session GC prunes a state file, the matching cache entry goes with it.
+- Keyed by `session_id` (not a single global blob like rate-limits) so parallel Claude Code sessions don't contaminate each other's cached context percentages.
+- Semantics: `stdout.columns → stderr.columns → $COLUMNS → 80` from v6.1.3 remains unchanged — this release only touches `context_window` plumbing.
+- 13 new tests in `test/context-window-cache.test.mjs` cover read/write round-trip, malformed JSON tolerance, live-wins-over-cache, cache-fills-when-live-undefined (the Claude Code case), no-op-guard on unchanged writes, parallel-session isolation, and `cleanupContextCache` pruning. Total: 61 → 74.
+
 ## 6.1.3
 
 ### Fixed

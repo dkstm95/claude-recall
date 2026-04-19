@@ -3,6 +3,7 @@ import { execSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
+import { cleanupContextCache } from './context-window-cache.js';
 
 export interface GitStatus {
   branch: string;
@@ -169,6 +170,7 @@ export function cleanupOldSessions(): void {
   } catch {
     return;
   }
+  const kept = new Set<string>();
   for (const f of files) {
     if (!f.endsWith('.json') || f.includes('.tmp.')) continue;
     try {
@@ -177,9 +179,12 @@ export function cleanupOldSessions(): void {
       const ts = new Date(state.lastActivityAt ?? 0).getTime();
       if (isNaN(ts) || now - ts > CLEANUP_MAX_AGE_MS) {
         unlinkSync(join(dir, f));
+      } else {
+        kept.add(f.replace(/\.json$/, ''));
       }
     } catch {
       // skip
     }
   }
+  cleanupContextCache(kept);
 }

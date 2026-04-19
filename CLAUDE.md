@@ -37,6 +37,8 @@ src/                      # TypeScript source
   statusline.ts           #   Entry point: stdin JSON -> formatStatusline() -> stdout
   stdin.ts                #   Async stdin reader utility
   refine.ts               #   Haiku subprocess wrapper: spawnRefinement + triggerFocusRefinement + 5s debounce
+  rate-limits-cache.ts    #   Per-account cache for rate_limits stdin field (omitted on first render)
+  context-window-cache.ts #   Per-session cache for context_window stdin field (omitted on first render)
   hooks/
     session-start.ts      #   Initialize/resume session, cleanup old sessions (>7d)
     prompt-submit.ts      #   Track prompts, update git status, trigger focus refinement at power-of-2 turns
