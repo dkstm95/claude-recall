@@ -127,12 +127,26 @@ function renderBar(pct, width, tc) {
     const color = clamped >= 80 ? tc.red : clamped >= 50 ? tc.yellow : tc.green;
     return color(bar);
 }
-function formatUsageSegment(label, pct, tc) {
+function pad2(n) {
+    return n < 10 ? `0${n}` : `${n}`;
+}
+function formatHM(d) {
+    return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+function formatFiveHourReset(resetsAtEpochSec) {
+    return `(~${formatHM(new Date(resetsAtEpochSec * 1000))})`;
+}
+function formatSevenDayReset(resetsAtEpochSec) {
+    const d = new Date(resetsAtEpochSec * 1000);
+    return `(~${d.getMonth() + 1}/${d.getDate()} ${formatHM(d)})`;
+}
+function formatUsageSegment(label, pct, tc, resetText) {
     const bar = renderBar(pct, 10, tc);
     const pctText = `${Math.round(pct)}%`;
     const labelColored = tc.dim(label);
     const pctColored = pct >= 80 ? tc.red(pctText) : pct >= 50 ? tc.yellow(pctText) : tc.green(pctText);
-    const text = `${labelColored} ${bar} ${pctColored}`;
+    const resetPart = resetText ? ` ${tc.dim(resetText)}` : '';
+    const text = `${labelColored} ${bar} ${pctColored}${resetPart}`;
     return { text, width: visibleWidth(text) };
 }
 export function formatStatusline(state, termWidth, builtin, config) {
@@ -256,11 +270,15 @@ export function formatStatusline(state, termWidth, builtin, config) {
     const line3Segments = [];
     if (l3.includes('rate_limits') && builtin?.rate_limits?.five_hour?.used_percentage != null) {
         const pct = builtin.rate_limits.five_hour.used_percentage;
-        line3Segments.push(formatUsageSegment('5h', pct, tc));
+        const resetsAt = builtin.rate_limits.five_hour.resets_at;
+        const resetText = resetsAt != null ? formatFiveHourReset(resetsAt) : undefined;
+        line3Segments.push(formatUsageSegment('5h', pct, tc, resetText));
     }
     if (l3.includes('seven_day') && builtin?.rate_limits?.seven_day?.used_percentage != null) {
         const pct = builtin.rate_limits.seven_day.used_percentage;
-        line3Segments.push(formatUsageSegment('7d', pct, tc));
+        const resetsAt = builtin.rate_limits.seven_day.resets_at;
+        const resetText = resetsAt != null ? formatSevenDayReset(resetsAt) : undefined;
+        line3Segments.push(formatUsageSegment('7d', pct, tc, resetText));
     }
     if (l3.includes('cost') && builtin?.cost?.total_cost_usd != null) {
         const cost = builtin.cost.total_cost_usd;
@@ -270,7 +288,8 @@ export function formatStatusline(state, termWidth, builtin, config) {
     if (line3Segments.length === 0) {
         return line1 + '\n' + line2;
     }
-    const line3Joined = line3Segments.map((s) => s.text).join('  ');
-    const line3 = prefix + line3Joined;
+    // Progressive drop for narrow terminals: drop cost first, then 7d, keeping 5h.
+    const line3Joined = progressiveJoin(line3Segments, termWidth - prefixWidth, 0);
+    const line3 = prefix + line3Joined.text;
     return line1 + '\n' + line2 + '\n' + line3;
 }

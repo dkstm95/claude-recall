@@ -5,14 +5,14 @@
   },
   "metadata": {
     "description": "Session awareness statusline for parallel Claude Code sessions — autonomous focus, git status, rate-limit bars",
-    "version": "6.0.4"
+    "version": "6.0.5"
   },
   "plugins": [
     {
       "name": "claude-recall",
       "source": "./",
       "description": "Session awareness statusline for parallel Claude Code sessions — AI-refined focus label managed autonomously (Haiku background calls), plus git status (dirty + ahead/behind vs origin/default), rate-limit bars, and context/cost tracking.",
-      "version": "6.0.4",
+      "version": "6.0.5",
       "author": { "name": "seungilahn" },
       "keywords": ["statusline", "session", "context", "productivity", "multi-session", "parallel", "theme", "focus", "git", "rate-limits"],
       "category": "productivity"

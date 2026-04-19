@@ -10,8 +10,8 @@ interface StatuslineInput {
   context_window?: { used_percentage?: number };
   workspace?: { git_worktree?: string };
   rate_limits?: {
-    five_hour?: { used_percentage?: number };
-    seven_day?: { used_percentage?: number };
+    five_hour?: { used_percentage?: number; resets_at?: number };
+    seven_day?: { used_percentage?: number; resets_at?: number };
   };
 }
 

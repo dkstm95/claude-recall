@@ -1,5 +1,23 @@
 # Changelog
 
+## 6.0.5
+
+### Added
+
+- **Rate-limit reset timestamps on Line 3.** Each usage segment now shows when its window resets, parsed from `rate_limits.{five_hour|seven_day}.resets_at` (Unix epoch seconds, provided by Claude Code for Pro/Max subscribers).
+  - **5h**: `5h ████░░░░░░ 45% (~16:59)` — local-time `HH:MM` only. The reset is always within 5 hours, so the date is implied.
+  - **7d**: `7d ██░░░░░░░░ 20% (~4/25 13:59)` — local `M/D HH:MM`. Weekday is intentionally omitted to keep the segment compact.
+  - The reset text is rendered in the theme's `dim` color so it reads as secondary info to the bar/percent.
+  - Gracefully degrades: segments where `resets_at` is absent (API-key users, first-render, missing field) fall back to the pre-6.0.5 format with no `(~...)` suffix.
+
+### Changed
+
+- **Line 3 now uses `progressiveJoin` instead of a plain `'  '.join(...)`.** On narrow terminals the right-most segments drop in order `cost → 7d → 5h`, guaranteeing the most important signal (5h usage + reset) always survives. Before this change, Line 3 could visibly wrap or clip when the reset suffix pushed segments past `$COLUMNS`.
+
+### Notes
+
+- All timestamps render in the machine's local timezone via `Date#getHours`/`getMonth`/`getDate`. No timezone offset is printed — the user reads whatever wall-clock they're living in.
+
 ## 6.0.4
 
 ### Changed

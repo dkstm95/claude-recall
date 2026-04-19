@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-6.0.4-blue?style=flat-square" alt="version">
+  <img src="https://img.shields.io/badge/version-6.0.5-blue?style=flat-square" alt="version">
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="license">
   <img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen?style=flat-square&logo=node.js&logoColor=white" alt="node">
   <img src="https://img.shields.io/badge/Claude_Code-Plugin-blueviolet?style=flat-square" alt="Claude Code Plugin">
@@ -114,14 +114,15 @@ Legacy configs with `"line1": ["purpose", ...]` are transparently mapped to `"fo
 | **last prompt** | Line 2, left | The last prompt you typed (now with ~3× more visible width vs v5) | claude-recall |
 | **elapsed** | Line 2, right | Time since session start / last activity | claude-recall |
 | **context%** | Line 2, right | Context window usage — green (<70%), yellow (70-89%), red (≥90%) | Claude Code built-in |
-| **5h rate limit bar** | Line 3 | 5-hour usage visualized — `5h ████░░░░░░ 45%` | Claude Code built-in |
-| **7d rate limit bar** | Line 3 | 7-day usage visualized (when data available) | Claude Code built-in |
+| **5h rate limit bar** | Line 3 | 5-hour usage + reset time — `5h ████░░░░░░ 45% (~16:59)` | Claude Code built-in |
+| **7d rate limit bar** | Line 3 | 7-day usage + reset date/time — `7d ██░░░░░░░░ 20% (~4/25 13:59)` | Claude Code built-in |
 | **cost** | Line 3, right | Cumulative session cost | Claude Code built-in |
 | **worktree** *(opt-in)* | Line 1, right | `⎇ <name>` when inside a linked git worktree | Claude Code built-in |
 | **refinement error** | Line 1, left | Red `⚠ AI <reason>` label replaces focus when a background refinement fails | claude-recall |
 
 Notes:
 - Line 3 renders only when rate-limits data is present (Claude subscribers). API-key-only users naturally see two lines.
+- On narrow terminals, Line 3 drops `cost` first, then the `7d` segment, so the `5h` bar + reset time is always visible.
 - At **90%+** context, Line 2's `cost` slot becomes a red `⚠ try /handoff` warning.
 - Ahead/behind counts reflect your last `git fetch`. Run `git fetch` periodically to keep the `↓N` indicator honest.
 
