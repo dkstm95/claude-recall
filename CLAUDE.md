@@ -50,7 +50,7 @@ assets/                   # SVG preview images for marketplace
 
 ```
 SessionStart event -> session-start.ts -> creates/updates ~/.claude/claude-recall/sessions/{id}.json
-UserPromptSubmit   -> prompt-submit.ts  -> increments promptCount, updates git status, triggers focus refinement at 2^k turns (k>=1, so 2,4,8,...)
+UserPromptSubmit   -> prompt-submit.ts  -> increments promptCount, updates git status, triggers focus refinement at 2^k turns (k>=0, so 1,2,4,8,...)
 PreCompact         -> pre-compact.ts    -> triggers focus refinement (natural milestone)
 SessionEnd         -> session-end.ts    -> triggers focus refinement (final snapshot)
 Statusline render  -> statusline.ts     -> reads session JSON + stdin metrics -> 1-3 line statusline output

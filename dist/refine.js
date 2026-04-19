@@ -56,15 +56,7 @@ function classifyError(exitCode, stderr) {
         return 'auth';
     return 'unknown';
 }
-export async function spawnRefinement(transcriptPath, currentFocus) {
-    let transcript = '';
-    try {
-        transcript = await readTranscriptTail(transcriptPath);
-    }
-    catch {
-        // Transcript file missing — treat as "no data yet" rather than a failure.
-        return { status: 'skip' };
-    }
+export async function spawnRefinement(transcript, currentFocus) {
     if (!transcript.trim()) {
         return { status: 'skip' };
     }
@@ -138,11 +130,24 @@ export async function triggerFocusRefinement(sessionId, transcriptPath) {
         return;
     if (!shouldRefine(state.lastRefinedAt))
         return;
+    // Prefer the JSONL transcript tail; fall back to the persisted last user prompt
+    // when the file is missing or empty (typical on the first prompt, where Claude
+    // Code's transcript flush hasn't completed by the time UserPromptSubmit fires).
+    let transcript = '';
+    try {
+        transcript = await readTranscriptTail(transcriptPath);
+    }
+    catch {
+        /* fall through to fallback */
+    }
+    if (!transcript.trim() && state.lastUserPrompt.trim()) {
+        transcript = `User: ${state.lastUserPrompt}`;
+    }
     // Optimistic write narrows the concurrent-spawn window during the subprocess call.
     const previousRefinedAt = state.lastRefinedAt;
     state.lastRefinedAt = new Date().toISOString();
     writeState(sessionId, state);
-    const result = await spawnRefinement(transcriptPath, state.focus);
+    const result = await spawnRefinement(transcript, state.focus);
     // Re-read so we don't clobber fields another hook may have updated during the spawn window.
     const fresh = readState(sessionId);
     if (!fresh)

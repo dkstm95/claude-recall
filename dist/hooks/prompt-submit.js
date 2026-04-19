@@ -55,11 +55,10 @@ async function main() {
         state.branch = gitStatus?.branch ?? state.branch;
     }
     writeState(sessionId, state);
-    // Focus refinement at power-of-2 turns (2, 4, 8, 16, 32, ...).
-    // promptCount=1 is skipped to avoid racing Claude Code's transcript flush —
-    // at the very first prompt, the JSONL transcript is often not yet written.
+    // Focus refinement at power-of-2 turns (1, 2, 4, 8, 16, 32, ...).
     // Launched as a detached worker so it survives this hook's 10s timeout.
-    if (transcriptPath && state.promptCount >= 2 && isPowerOfTwo(state.promptCount)) {
+    // First-prompt transcript-flush race is handled inside triggerFocusRefinement.
+    if (transcriptPath && isPowerOfTwo(state.promptCount)) {
         launchRefinementWorker(sessionId, transcriptPath);
     }
     process.stdout.write('{}\n');

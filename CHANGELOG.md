@@ -1,5 +1,14 @@
 # Changelog
 
+## 6.0.2
+
+### Fixed
+
+- **Focus label now appears at the very first prompt.** v6.0.1 deferred the first refinement to `promptCount=2` to avoid an empty-transcript race; the cost was an empty `(no focus yet)` line for the entire first turn. Resolved deterministically by giving `spawnRefinement` a `fallbackPrompt` parameter:
+  - When the JSONL transcript tail is empty (typical on the first prompt), `refine.ts` now wraps `state.lastUserPrompt` as a one-turn synthetic transcript and feeds it to Haiku instead of skipping. `state.lastUserPrompt` is persisted via atomic `writeFileSync` + `renameSync` *before* the worker is spawned, so the fallback is race-free.
+  - `prompt-submit.ts` trigger condition relaxed back to `isPowerOfTwo(promptCount)` — `1, 2, 4, 8, 16, ...` (was `2, 4, 8, ...`).
+  - PreCompact / SessionEnd paths are unchanged: they still pass no fallback and still silently skip when the transcript is genuinely empty.
+
 ## 6.0.1
 
 ### Fixed
