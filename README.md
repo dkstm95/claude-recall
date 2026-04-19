@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-6.0.5-blue?style=flat-square" alt="version">
+  <img src="https://img.shields.io/badge/version-6.0.6-blue?style=flat-square" alt="version">
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="license">
   <img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen?style=flat-square&logo=node.js&logoColor=white" alt="node">
   <img src="https://img.shields.io/badge/Claude_Code-Plugin-blueviolet?style=flat-square" alt="Claude Code Plugin">
@@ -95,7 +95,9 @@ Create `~/.claude/claude-recall/config.json`:
 - **line2** — Choose from: `turn`, `prompt`, `elapsed`, `context`
 - **line3** — Choose from: `rate_limits`, `seven_day`, `cost`. Set `line3: []` to force a 2-line statusline.
 - **gitStatus** — Toggle dirty flag and ahead/behind independently.
-- **theme** — `default` (cyan/bold), `minimal` (subdued, no color), `vivid` (bright/high contrast)
+- **theme** — `default` (cyan/bold, dark terminals), `light` (blue/dark-orange, white terminals), `minimal` (subdued, monochrome — severity via reverse-video), `vivid` (bright/high contrast)
+  - When `theme` is omitted and the terminal exports `COLORFGBG`, claude-recall auto-selects `light` for light backgrounds (`bg=7` or `bg=15`) and `default` otherwise. An explicit `theme` value always wins.
+  - Setting the `NO_COLOR` environment variable (any value, per [no-color.org](https://no-color.org)) suppresses all ANSI color output regardless of theme.
 
 Legacy configs with `"line1": ["purpose", ...]` are transparently mapped to `"focus"`.
 

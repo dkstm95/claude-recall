@@ -1,5 +1,27 @@
 # Changelog
 
+## 6.0.6
+
+### Added
+
+- **`light` theme.** First-class support for light-background terminals. Uses blue (`\x1b[34m`) for focus/branch, magenta (`\x1b[35m`) for model/worktree, a 256-color mid-grey (`\x1b[38;5;244m`) for `dim`, and a 256-color dark-orange (`\x1b[38;5;166m`) where dark themes use yellow — the 16-color yellow (`\x1b[33m`) is near-invisible on white and was the single biggest readability regression for users on light terminals.
+- **Auto-detection via `COLORFGBG`.** When `theme` is absent from `~/.claude/claude-recall/config.json` and the terminal exports `COLORFGBG`, claude-recall picks `light` for `bg=7` or `bg=15` and `default` otherwise. Supports both two-part (`15;0`) and three-part (`0;default;15`) forms. Any explicit `theme` value wins; users who have already pinned a theme see zero behavior change.
+- **`NO_COLOR` support.** Per [no-color.org](https://no-color.org), the presence of the `NO_COLOR` environment variable (any value, including empty string) disables every ANSI escape the plugin emits — across all themes, including the session accent bar. 5 lines at the top of `getThemeColors()`.
+- **Theme-aware accent bar.** `ThemeColors` now carries an `accents: ColorFn[]` array and `format.ts::sessionColor` consumes it via injection. Previously the `▍` prefix used a hardcoded six-color palette regardless of theme, which contradicted `minimal` (claimed "no color") and occasionally rendered the bar in `\x1b[33m` yellow — invisible on white backgrounds, breaking session identification for 1-in-6 sessions on light terminals.
+  - `minimal` accents collapse to `[dim]` (a single subdued block, preserving the theme's monochrome ethos at the cost of per-session color identity).
+  - `light` accents drop yellow entirely and use `[36, 35, 34, 32, 31]` — five colors all readable on white.
+
+### Fixed
+
+- **`minimal` theme severity collision.** Previously both `yellow` and `red` resolved to `\x1b[1m` (bold), making 50% and 80% rate-limit bars, 70% and 90% context warnings, and `⚠ AI` error labels visually indistinguishable in `minimal` mode. `red` now uses `\x1b[1;7m` (bold + reverse video) — the transport-level "flip fg/bg" trick that reads as high-alarm on any terminal without introducing a color.
+- **`vivid.prompt` invisibility on light backgrounds.** Was `\x1b[1;97m` (bold + bright-white), which on any light-background terminal renders as white-on-white. Now `\x1b[1m` (bold only); severity vs. default theme comes from the surrounding bright-color accents, not the prompt itself.
+
+### Notes
+
+- No schema changes to `SessionState` or the stdin contract. This is a purely presentational release.
+- New unit tests (`test/theme.test.mjs`): 14 cases covering the collision fix, `NO_COLOR` short-circuit across all four themes, `COLORFGBG` parsing edge cases (two-part, three-part, malformed, absent), and `readConfig` fallback routing.
+- Total test count: 26 → 40.
+
 ## 6.0.5
 
 ### Added

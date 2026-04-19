@@ -87,22 +87,13 @@ export function getTerminalWidth(): number {
   return 80;
 }
 
-const ACCENT_COLORS = [
-  (s: string) => `\x1b[36m${s}\x1b[0m`,
-  (s: string) => `\x1b[35m${s}\x1b[0m`,
-  (s: string) => `\x1b[34m${s}\x1b[0m`,
-  (s: string) => `\x1b[33m${s}\x1b[0m`,
-  (s: string) => `\x1b[32m${s}\x1b[0m`,
-  (s: string) => `\x1b[31m${s}\x1b[0m`,
-];
-
-function sessionColor(cwd: string, branch: string): (s: string) => string {
+function sessionColor(cwd: string, branch: string, accents: ((s: string) => string)[]): (s: string) => string {
   const key = `${cwd}:${branch}`;
   let hash = 0;
   for (let i = 0; i < key.length; i++) {
     hash = ((hash << 5) - hash + key.charCodeAt(i)) | 0;
   }
-  return ACCENT_COLORS[Math.abs(hash) % ACCENT_COLORS.length];
+  return accents[Math.abs(hash) % accents.length];
 }
 
 export interface Segment {
@@ -210,7 +201,7 @@ export function formatStatusline(
     : formatElapsed(state.lastActivityAt);
   const prefixWidth = 3;
 
-  const accent = sessionColor(state.cwd, state.branch);
+  const accent = sessionColor(state.cwd, state.branch, tc.accents);
   const prefix = ' ' + accent('\u258D') + ' ';
 
   // =========================================================================
