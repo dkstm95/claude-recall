@@ -5,6 +5,7 @@ import {
   displayWidth,
   truncate,
   progressiveJoin,
+  getTerminalWidth,
 } from '../dist/format.js';
 
 test('displayWidth: Korean (Hangul) counts two columns per char', () => {
@@ -60,4 +61,30 @@ test('progressiveJoin: keeps at least one segment even if minLeft cannot be sati
   ];
   const out = progressiveJoin(segs, 5, 10);
   assert.equal(out.text, 'single');
+});
+
+test('getTerminalWidth: $COLUMNS overrides all other signals', () => {
+  const saved = process.env.COLUMNS;
+  process.env.COLUMNS = '140';
+  try {
+    assert.equal(getTerminalWidth(), 140);
+  } finally {
+    if (saved === undefined) delete process.env.COLUMNS;
+    else process.env.COLUMNS = saved;
+  }
+});
+
+test('getTerminalWidth: rejects invalid $COLUMNS (0 / negative) and returns a positive width', () => {
+  const saved = process.env.COLUMNS;
+  process.env.COLUMNS = '0';
+  try {
+    // COLUMNS=0 must NOT be returned verbatim; we expect either the /dev/tty
+    // width (test run in a TTY) or the 80 fallback (detached runner).
+    assert.ok(getTerminalWidth() > 0);
+    process.env.COLUMNS = '-5';
+    assert.ok(getTerminalWidth() > 0);
+  } finally {
+    if (saved === undefined) delete process.env.COLUMNS;
+    else process.env.COLUMNS = saved;
+  }
 });

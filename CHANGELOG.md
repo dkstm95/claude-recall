@@ -1,5 +1,16 @@
 # Changelog
 
+## 6.1.1
+
+### Fixed
+
+- **Line 3 truncated on wide terminals (regression introduced in v6.1.0).** `getTerminalWidth()` only read `$COLUMNS`, which Claude Code does not set on the statusline subprocess — so every render fell through to the `80` fallback regardless of actual terminal width. Pre-v6.1.0 the default Line 3 (`5h  7d  $cost`) happened to fit in 80 cols (~66 wide), masking the bug. v6.1.0 added the `ctx` bar, pushing the full Line 3 to ~89 cols; with the 80-col fallback still in effect, `progressiveJoin` silently dropped `$cost` and `7d` from the right, leaving `ctx  5h` even on 178-col terminals. Fix: `getTerminalWidth()` now opens `/dev/tty` (the controlling terminal inherited from Claude Code's process tree) and reads `tty.WriteStream.columns`, falling back to 80 only when `/dev/tty` is unreachable (e.g. detached CI subprocesses, Windows without a TTY). `$COLUMNS` is still honored first when set explicitly, preserving test overrides.
+
+### Notes
+
+- Investigation method: a probe launcher dumped env + `/dev/tty` state on a live statusline render and confirmed `stty size </dev/tty` reported `38 178` (rows cols) while `$COLUMNS` was unset and all three stdio fds had `isTTY=false`. Node's `tty.WriteStream(fd).columns` returned the same 178. The fix is a direct application of that finding.
+- 2 new tests in `test/format.test.mjs` cover the `$COLUMNS` override path and the fallback behavior when no TTY is reachable. Total: 51 → 53.
+
 ## 6.1.0
 
 ### Changed

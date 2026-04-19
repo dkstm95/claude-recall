@@ -1,3 +1,5 @@
+import { openSync, closeSync } from 'node:fs';
+import { WriteStream, isatty } from 'node:tty';
 import type { SessionState, RefinementError, GitStatus } from './state.js';
 import type { StatuslineConfig, ThemeColors } from './config.js';
 import type { RateLimitsData } from './rate-limits-cache.js';
@@ -80,8 +82,30 @@ export function formatElapsedMs(ms: number): string {
 }
 
 export function getTerminalWidth(): number {
-  const env = parseInt(process.env['COLUMNS'] ?? '', 10);
+  const env = parseInt(process.env.COLUMNS ?? '', 10);
   if (!isNaN(env) && env > 0) return env;
+
+  // Claude Code spawns the statusline subprocess with piped stdio, so
+  // process.stdout.isTTY is false. The controlling terminal is still
+  // reachable via /dev/tty, which is inherited from the parent process tree.
+  let fd: number | undefined;
+  try {
+    fd = openSync('/dev/tty', 'r+');
+    if (isatty(fd)) {
+      const ws = new WriteStream(fd);
+      fd = undefined;
+      const cols = ws.columns;
+      ws.destroy();
+      if (cols && cols > 0) return cols;
+    }
+  } catch {
+    // /dev/tty unavailable (e.g. non-interactive CI, Windows) — fall through.
+  } finally {
+    if (fd !== undefined) {
+      try { closeSync(fd); } catch {}
+    }
+  }
+
   return 80;
 }
 

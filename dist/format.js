@@ -1,3 +1,5 @@
+import { openSync, closeSync } from 'node:fs';
+import { WriteStream, isatty } from 'node:tty';
 import { getThemeColors } from './config.js';
 // CJK / fullwidth ranges occupy 2 terminal columns
 function isWide(code) {
@@ -63,9 +65,35 @@ export function formatElapsedMs(ms) {
     return formatDurationMs(ms);
 }
 export function getTerminalWidth() {
-    const env = parseInt(process.env['COLUMNS'] ?? '', 10);
+    const env = parseInt(process.env.COLUMNS ?? '', 10);
     if (!isNaN(env) && env > 0)
         return env;
+    // Claude Code spawns the statusline subprocess with piped stdio, so
+    // process.stdout.isTTY is false. The controlling terminal is still
+    // reachable via /dev/tty, which is inherited from the parent process tree.
+    let fd;
+    try {
+        fd = openSync('/dev/tty', 'r+');
+        if (isatty(fd)) {
+            const ws = new WriteStream(fd);
+            fd = undefined;
+            const cols = ws.columns;
+            ws.destroy();
+            if (cols && cols > 0)
+                return cols;
+        }
+    }
+    catch {
+        // /dev/tty unavailable (e.g. non-interactive CI, Windows) — fall through.
+    }
+    finally {
+        if (fd !== undefined) {
+            try {
+                closeSync(fd);
+            }
+            catch { }
+        }
+    }
     return 80;
 }
 function sessionColor(cwd, branch, accents) {
