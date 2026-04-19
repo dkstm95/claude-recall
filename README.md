@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-6.1.5-blue?style=flat-square" alt="version">
+  <img src="https://img.shields.io/badge/version-6.2.0-blue?style=flat-square" alt="version">
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="license">
   <img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen?style=flat-square&logo=node.js&logoColor=white" alt="node">
   <img src="https://img.shields.io/badge/Claude_Code-Plugin-blueviolet?style=flat-square" alt="Claude Code Plugin">
@@ -41,7 +41,7 @@ claude-recall answers two questions for every session, at a glance:
 
 - **Autonomous focus** — No commands to run. A Haiku subprocess refines each session's focus in the background, in the transcript's language.
 - **Per-session accent color** — Deterministic color bar from project dir + branch. Spot which tab is which by color, before reading any text.
-- **`/handoff` emergency exit** — When context is about to run out, writes a structured Markdown summary to disk that survives session termination. Seed a fresh session with `@<path>` to continue.
+- **Tiered context hints** — Dim `(/compact soon)` at 60%, dim `(run /compact)` at 70%, red `⚠ ctx 90%+` at 90%. Aligned with Anthropic's guidance (run `/compact` around 60% for best summary quality).
 
 Plus: rich git status (dirty + ahead/behind vs `origin/<default>`), rate-limit bars (5h / 7d), Claude Code's context / cost / model — all in up to three lines.
 
@@ -70,8 +70,9 @@ Everything works automatically after install. There are no focus-management comm
 
 | Command | Description |
 |---------|-------------|
-| `/handoff` | Write a handoff summary to `~/.claude/claude-recall/handoffs/`; reference it in a fresh session via `@<path>` |
 | `/setup` | Reconfigure statusline / verify installation |
+
+For context management, use Claude Code's native commands: `/compact` (manual compaction, best around 60%), `/clear` (switch to unrelated task), `/resume` (pick up a prior session).
 
 ## Customization
 
@@ -117,7 +118,7 @@ Create `~/.claude/claude-recall/config.json`:
 | **5h rate limit bar** | Line 3 | 5-hour usage + reset time — `5h ████░░░░░░ 45% (~16:59)` | Claude Code built-in |
 | **7d rate limit bar** | Line 3 | 7-day usage + reset date/time — `7d ██░░░░░░░░ 20% (~4/25 13:59)` | Claude Code built-in |
 | **cost** | Line 3, right | Cumulative session cost | Claude Code built-in |
-| **context warning** | Line 1, right | Dim `(try /handoff)` at 70-89%, red `⚠ try /handoff` at ≥90% — guaranteed visible even when Line 3 is off | claude-recall |
+| **context hint** | Line 1, right | Dim `(/compact soon)` at 60-69%, dim `(run /compact)` at 70-89%, red `⚠ ctx 90%+` at ≥90% — guaranteed visible even when Line 3 is off | claude-recall |
 | **worktree** *(opt-in)* | Line 1, right | `⎇ <name>` when inside a linked git worktree | Claude Code built-in |
 | **refinement error** | Line 1, left | Red `⚠ AI <reason>` label replaces focus when a background refinement fails | claude-recall |
 
@@ -126,7 +127,7 @@ Notes:
 - **`5h` / `7d` bars require Claude.ai Pro/Max.** Claude Code omits the `rate_limits` stdin field for Claude API key users, so the two rate-limit bars never populate on API-key setups (no error — just absent). The `ctx` and `$cost` segments still render normally.
 - **First-entry cache.** Claude Code omits `rate_limits` and `context_window` from stdin until the first API call, so claude-recall caches the last-seen values under `~/.claude/claude-recall/` and restores them on first render — the bars show up immediately instead of waiting for the first prompt. See CHANGELOG v6.1.4 / v6.1.5 for details.
 - On narrow terminals, Line 3 drops `cost` first, then `7d`, then `5h`, keeping `ctx` visible the longest — context exhaustion is the most urgent signal.
-- At **70-89%** context, Line 1 shows a dim `(try /handoff)` hint. At **≥90%**, it becomes red `⚠ try /handoff`. The warning lives on Line 1 so it stays visible even when users opt out of Line 3 entirely (`line3: []`).
+- Context hint tiers on Line 1: **60-69%** dim `(/compact soon)` — proactive nudge at Anthropic's recommended timing for best summary quality. **70-89%** dim `(run /compact)` — user can steer preservation via `/compact focus on <topic>`. **≥90%** red `⚠ ctx 90%+` — auto-compact is imminent or already running; the hint warns without prescribing an action. All tiers live on Line 1 so the signal stays visible even when users opt out of Line 3 entirely (`line3: []`).
 - Ahead/behind counts reflect your last `git fetch`. Run `git fetch` periodically to keep the `↓N` indicator honest.
 
 </details>
@@ -137,7 +138,7 @@ Notes:
 Triggers (OR):
 - **Power-of-2 turns** — 1, 2, 4, 8, 16, 32, 64, ... Rapid initial convergence, sparse drift checks later.
 - **PreCompact** — right before Claude Code compacts context, capture the current state.
-- **SessionEnd** — final snapshot for handoff continuity.
+- **SessionEnd** — final snapshot before the session closes.
 
 Each trigger spawns `claude -p --model=haiku` as a subprocess with the last 12KB of the transcript. The subprocess:
 - Disables tools (`--tools ""`), disables slash commands, disables session persistence

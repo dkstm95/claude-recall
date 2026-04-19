@@ -79,7 +79,7 @@
     </text>
   </g>
 
-  <!-- Session 2 — accent: magenta, mid-context (78% ctx — dim "try /handoff" on Line 1) -->
+  <!-- Session 2 — accent: magenta, mid-context (78% ctx — dim "run /compact" on Line 1) -->
   <g transform="translate(20, 180)">
     <rect class="tab-bg" x="0" y="0" width="720" height="22" rx="6 6 0 0"/>
     <text y="15">
@@ -89,11 +89,11 @@
     </text>
     <rect class="bg-dim" x="0" y="22" width="720" height="108" rx="0 0 6 6"/>
     <rect class="frame" x="0" y="0" width="720" height="130" rx="6"/>
-    <!-- Line 1: focus + dim (try /handoff) hint + branch + model -->
+    <!-- Line 1: focus + dim (run /compact) hint + branch + model -->
     <text y="46">
       <tspan class="magenta" x="14"> &#9613; </tspan>
       <tspan class="cyan-bold">Fix payment API timeout in webhook handler</tspan>
-      <tspan class="dim">  (try /handoff)</tspan>
+      <tspan class="dim">  (run /compact)</tspan>
       <tspan class="cyan" x="530">fix/payment*&#8593;5&#8595;2</tspan>
       <tspan class="yellow" x="672">Sonnet</tspan>
     </text>
@@ -128,7 +128,7 @@
     </text>
   </g>
 
-  <!-- Session 3 — accent: green, context 92% (red ⚠ try /handoff on Line 1), on main, needs pull -->
+  <!-- Session 3 — accent: green, context 92% (red ⚠ ctx 90%+ on Line 1), on main, needs pull -->
   <g transform="translate(20, 320)">
     <rect class="tab-bg" x="0" y="0" width="720" height="22" rx="6 6 0 0"/>
     <text y="15">
@@ -138,11 +138,11 @@
     </text>
     <rect class="bg-dim" x="0" y="22" width="720" height="78" rx="0 0 6 6"/>
     <rect class="frame" x="0" y="0" width="720" height="100" rx="6"/>
-    <!-- Line 1: focus + red ⚠ try /handoff + branch + model -->
+    <!-- Line 1: focus + red ⚠ ctx 90%+ + branch + model -->
     <text y="46">
       <tspan class="green" x="14"> &#9613; </tspan>
       <tspan class="cyan-bold">Add unit tests for user service edge cases</tspan>
-      <tspan class="red-bold">  &#9888; try /handoff</tspan>
+      <tspan class="red-bold">  &#9888; ctx 90%+</tspan>
       <tspan class="cyan" x="560">main&#8595;3</tspan>
       <tspan class="yellow" x="650">Opus</tspan>
     </text>

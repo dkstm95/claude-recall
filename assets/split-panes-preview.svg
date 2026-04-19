@@ -148,17 +148,17 @@
     </text>
   </g>
 
-  <!-- Pane 4: Bottom-right — accent: blue, context 92% (red ⚠ try /handoff on Line 1) -->
+  <!-- Pane 4: Bottom-right — accent: blue, context 92% (red ⚠ ctx 90%+ on Line 1) -->
   <g transform="translate(402, 268)">
     <rect class="bg-dim" width="396" height="230"/>
     <text x="8" y="16" class="pane-label">~/docs</text>
     <text class="dim" x="12" y="40">Updated API documentation for the</text>
     <text class="dim" x="12" y="55">new authentication endpoints.</text>
-    <!-- Line 1: focus + red ⚠ try /handoff + branch (critical warning moved from Line 2) -->
+    <!-- Line 1: focus + red ⚠ ctx 90%+ + branch (critical warning moved from Line 2) -->
     <text y="160">
       <tspan class="blue" x="10"> &#9613; </tspan>
       <tspan class="cyan-bold">Update API docs</tspan>
-      <tspan class="red-bold">  &#9888; try /handoff</tspan>
+      <tspan class="red-bold">  &#9888; ctx 90%+</tspan>
       <tspan class="cyan" x="320">docs*&#8593;7</tspan>
     </text>
     <text y="176">

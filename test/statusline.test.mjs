@@ -101,26 +101,26 @@ test('formatStatusline: Line 2 no longer carries context percentage', () => {
   assert.ok(!clean2.includes('45%'), `Line 2 should NOT show context %, got "${clean2}"`);
 });
 
-test('formatStatusline: ≥90% context shows red ⚠ try /handoff on Line 1', () => {
-  const builtin = {
-    model: { display_name: 'Sonnet 4.6' },
-    context_window: { used_percentage: 92 },
-  };
-  const out = formatStatusline(emptyState(), 140, builtin, BASE_CFG);
-  const clean1 = stripAnsi(out.split('\n')[0]);
-  assert.ok(clean1.includes('\u26A0 try /handoff'), `Line 1 should show ⚠ try /handoff at ≥90%, got "${clean1}"`);
-});
-
-test('formatStatusline: 70-89% context shows dim (try /handoff) hint on Line 1', () => {
-  const builtin = {
-    model: { display_name: 'Sonnet 4.6' },
-    context_window: { used_percentage: 75 },
-  };
-  const out = formatStatusline(emptyState(), 140, builtin, BASE_CFG);
-  const clean1 = stripAnsi(out.split('\n')[0]);
-  assert.ok(clean1.includes('(try /handoff)'), `Line 1 should show (try /handoff) at 70-89%, got "${clean1}"`);
-  assert.ok(!clean1.includes('\u26A0'), `Line 1 should NOT show ⚠ below 90%, got "${clean1}"`);
-});
+// Line 1 context hint tiers. ≥90% is intentionally command-name-free — the
+// render-site comment in src/format.ts explains why.
+for (const { pct, name, expect, forbid } of [
+  { pct: 92, name: '≥90% critical',    expect: '\u26A0 ctx 90%+',  forbid: '/compact' },
+  { pct: 75, name: '70-89% warning',   expect: '(run /compact)',   forbid: '\u26A0' },
+  { pct: 63, name: '60-69% suggest',   expect: '(/compact soon)',  forbid: '\u26A0' },
+  { pct: 45, name: '<60% silent',      expect: null,               forbid: '/compact' },
+]) {
+  test(`formatStatusline: ctx ${pct}% → ${name} hint tier`, () => {
+    const out = formatStatusline(emptyState(), 140, {
+      model: { display_name: 'Sonnet 4.6' },
+      context_window: { used_percentage: pct },
+    }, BASE_CFG);
+    const clean1 = stripAnsi(out.split('\n')[0]);
+    if (expect !== null) {
+      assert.ok(clean1.includes(expect), `expected "${expect}" at ${pct}%, got "${clean1}"`);
+    }
+    assert.ok(!clean1.includes(forbid), `forbidden "${forbid}" appeared at ${pct}%, got "${clean1}"`);
+  });
+}
 
 test('formatStatusline: ctx hidden when line3 is empty (opt-out)', () => {
   const cfg = { ...BASE_CFG, line3: [] };

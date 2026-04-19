@@ -140,11 +140,15 @@ const ERROR_LABELS: Record<RefinementError['code'], string> = {
   unknown: '\u26A0 AI refinement failed',
 };
 
-const HINT_CRITICAL_RAW = '  \u26A0 try /handoff';
-const HINT_WARNING_RAW = '  (try /handoff)';
-const HINT_CRITICAL_WIDTH = displayWidth(HINT_CRITICAL_RAW);
-const HINT_WARNING_WIDTH = displayWidth(HINT_WARNING_RAW);
-const HINT_MAX_WIDTH = Math.max(HINT_CRITICAL_WIDTH, HINT_WARNING_WIDTH);
+// Ordered high → low so a simple `.find(h => ctxPct >= h.min)` picks the most
+// severe active tier. ≥90% deliberately drops the command name — auto-compact
+// is imminent there, so prescribing an action that may be overridden in
+// seconds is worse than surfacing only the severity.
+const HINT_TIERS = [
+  { min: 90, raw: '  \u26A0 ctx 90%+',  color: (tc: ThemeColors, s: string) => tc.red(s) },
+  { min: 70, raw: '  (run /compact)',   color: (tc: ThemeColors, s: string) => tc.dim(s) },
+  { min: 60, raw: '  (/compact soon)',  color: (tc: ThemeColors, s: string) => tc.dim(s) },
+].map((h) => ({ ...h, width: displayWidth(h.raw) }));
 
 function renderGitText(gs: GitStatus, cfg: StatuslineConfig['gitStatus']): string {
   let text = gs.branch;
@@ -325,22 +329,16 @@ export function formatStatusline(
 
   const line1RightJoined = progressiveJoin(line1Right, termWidth - prefixWidth, MIN_FOCUS_COLS);
 
-  // Line 1 hint: dim (try /handoff) at 70-89%; red ⚠ try /handoff at ≥90%
   const ctxPct = builtin?.context_window?.used_percentage;
-  const isCritical = ctxPct != null && ctxPct >= 90;
-  const isWarning = ctxPct != null && ctxPct >= 70 && ctxPct < 90;
+  const tier = ctxPct != null ? HINT_TIERS.find((h) => ctxPct >= h.min) : undefined;
   const spaceForRight1 = line1RightJoined.width > 0 ? line1RightJoined.width + 2 : 0;
-  const availWithHint = termWidth - prefixWidth - HINT_MAX_WIDTH - spaceForRight1;
-  const showHint = (isCritical || isWarning) && availWithHint >= MIN_FOCUS_COLS + 5;
-  let hintText = '';
-  let hintWidth = 0;
-  if (showHint && isCritical) {
-    hintText = tc.red(HINT_CRITICAL_RAW);
-    hintWidth = HINT_CRITICAL_WIDTH;
-  } else if (showHint) {
-    hintText = tc.dim(HINT_WARNING_RAW);
-    hintWidth = HINT_WARNING_WIDTH;
-  }
+  // Reserve against the ACTIVE tier's width, not a global max — this way a
+  // narrow terminal that can fit the short critical hint but not the longer
+  // suggest hint still shows the critical warning when ctx is actually ≥90%.
+  const availWithHint = termWidth - prefixWidth - (tier?.width ?? 0) - spaceForRight1;
+  const showHint = tier != null && availWithHint >= MIN_FOCUS_COLS + 5;
+  const hintText = showHint ? tier.color(tc, tier.raw) : '';
+  const hintWidth = showHint ? tier.width : 0;
 
   const availLeft = termWidth - prefixWidth - hintWidth - spaceForRight1;
 

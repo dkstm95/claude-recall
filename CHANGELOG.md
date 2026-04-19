@@ -1,5 +1,29 @@
 # Changelog
 
+## 6.2.0
+
+### Removed
+
+- **`/handoff` command removed.** The feature was positioned as an "emergency exit" for context exhaustion, but review exposed fundamental issues: (1) it relied on the current session's Claude to summarize at exactly the moment that Claude is most context-starved and least capable of quality synthesis; (2) its 50KB transcript-tail sampling biased toward recent debugging noise and dropped the session's original intent; (3) the structured output template ignored rich state fields (`gitStatus.dirty`, `lastUserPrompt`) that were already available; (4) Claude Code's native `/compact`, `/clear`, and `/resume` commands cover the real use cases more reliably. Removal scope: `commands/handoff.md` deleted, Line 1 `/handoff` hints replaced (see below), README / README.ko / CLAUDE.md / tests updated.
+
+### Changed
+
+- **Line 1 context hint redesigned as a three-tier, Anthropic-aligned system.** Anthropic's official guidance is to run `/compact` around 60% context for the best summary quality, and auto-compact kicks in near the limit regardless of user action. The new tiers:
+  - **60-69%** — dim `(/compact soon)` — proactive nudge at the recommended timing (new, previously no hint below 70%).
+  - **70-89%** — dim `(run /compact)` — replaces the v6.1.x `(try /handoff)` hint. The action window where the user can still meaningfully steer preservation via `/compact focus on <topic>`.
+  - **≥90%** — red `⚠ ctx 90%+` — replaces the v6.1.x `⚠ try /handoff` warning. At this point auto-compact is imminent or already running, so the hint surfaces only the severity, not a command prescription. Also future-proof: decoupling the critical warning from a specific command name means Anthropic renaming or replacing `/compact` doesn't break the plugin's UX.
+- **Docs reframed.** README's "Why claude-recall?" replaces the `/handoff emergency exit` bullet with "Tiered context hints". The commands table drops the `/handoff` row; the plugin now ships with just `/setup`. A short pointer to Claude Code's native `/compact` / `/clear` / `/resume` replaces the handoff usage narrative.
+
+### Migration
+
+- **Existing handoff files are left untouched.** `~/.claude/claude-recall/handoffs/*.md` are user-owned artifacts — the upgrade does not delete them. Remove manually if desired (`rm -rf ~/.claude/claude-recall/handoffs/`).
+- **Workflow replacement.** Where `/handoff` was used to "save a summary before the session dies", use Claude Code natively: `/compact focus on <what to preserve>` (summary stays in-session), or close the session and use `claude --resume` to pick up the transcript later.
+
+### Notes
+
+- 4 statusline tests rewritten/added: the ≥90% and 70-89% hint tests were rewritten to expect the new strings (and to assert the ≥90% hint does **not** name a command); new tests cover the 60-69% suggest tier and the "no hint below 60%" guarantee. Total: 75 → 77.
+- `HINT_MAX_WIDTH` (the width reservation used to decide whether the hint fits alongside Line 1's focus slot) now spans three constants. On narrow terminals where the hint would crowd focus below its 15-col minimum, the hint drops silently — same fallback behavior as v6.1.x.
+
 ## 6.1.5
 
 ### Fixed
