@@ -1,5 +1,5 @@
 import { readStdin } from '../stdin.js';
-import { readState, writeState, cleanupOldSessions, getGitStatus } from '../state.js';
+import { readState, writeState, cleanupOldSessions, getGitStatus, createEmptySessionState } from '../state.js';
 import { isRefiningSubprocess } from '../refine.js';
 async function main() {
     // Prevent the subprocess from bootstrapping its own state file.
@@ -24,19 +24,10 @@ async function main() {
     const existing = readState(sessionId);
     if (source === 'startup' || !existing) {
         const gitStatus = getGitStatus(cwd, null);
-        const state = {
-            sessionId,
-            focus: '',
-            branch: gitStatus?.branch ?? '',
-            gitStatus,
-            cwd,
-            promptCount: 0,
-            lastUserPrompt: '',
-            lastActivityAt: now,
-            lastRefinedAt: null,
-            refinementError: null,
-            lastRefinement: null,
-        };
+        const state = createEmptySessionState(sessionId, cwd);
+        state.branch = gitStatus?.branch ?? '';
+        state.gitStatus = gitStatus;
+        state.lastActivityAt = now;
         writeState(sessionId, state);
     }
     else {

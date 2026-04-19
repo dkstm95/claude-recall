@@ -39,7 +39,7 @@ export function displayWidth(str: string): number {
   return w;
 }
 
-function stripAnsi(s: string): string {
+export function stripAnsi(s: string): string {
   return s.replace(/\x1b\[[0-9;]*m/g, '');
 }
 
@@ -103,6 +103,9 @@ export interface Segment {
 
 const MIN_FOCUS_COLS = 15;
 const MIN_PROMPT_COLS = 30;
+
+export const FOCUS_PLACEHOLDER = '(no focus yet)';
+export const PROMPT_PLACEHOLDER = '(awaiting first prompt)';
 
 export function progressiveJoin(segments: Segment[], budget: number, minLeft: number): { text: string; width: number } {
   for (let count = segments.length; count >= 1; count--) {
@@ -256,7 +259,7 @@ export function formatStatusline(
       leftText = focusColored;
       leftWidth = visibleWidth(focusColored);
     } else {
-      const placeholder = tc.dim('(no focus yet)');
+      const placeholder = tc.dim(FOCUS_PLACEHOLDER);
       leftText = placeholder;
       leftWidth = visibleWidth(placeholder);
     }
@@ -271,46 +274,53 @@ export function formatStatusline(
   // =========================================================================
   // Line 2: #turn + last_prompt + elapsed/ctx (right)
   // =========================================================================
-  if (!state.lastUserPrompt) return line1;
+  let line2: string | null = null;
+  if (l2.length > 0) {
+    const line2Right: Segment[] = [];
 
-  const line2Right: Segment[] = [];
-
-  if (l2.includes('elapsed')) {
-    const s = tc.dim(elapsed);
-    line2Right.push({ text: s, width: visibleWidth(s) });
-  }
-
-  if (l2.includes('context') && builtin?.context_window?.used_percentage != null) {
-    const pct = Math.round(builtin.context_window.used_percentage);
-    if (pct >= 90) {
-      const warnText = `${pct}% \u26A0 try /handoff`;
-      const warn = tc.red(warnText);
-      line2Right.push({ text: warn, width: visibleWidth(warnText) });
-    } else {
-      const label = `${pct}%`;
-      const s = pct >= 70 ? tc.yellow(label) : tc.green(label);
+    if (l2.includes('elapsed')) {
+      const s = tc.dim(elapsed);
       line2Right.push({ text: s, width: visibleWidth(s) });
     }
+
+    if (l2.includes('context') && builtin?.context_window?.used_percentage != null) {
+      const pct = Math.round(builtin.context_window.used_percentage);
+      if (pct >= 90) {
+        const warnText = `${pct}% \u26A0 try /handoff`;
+        const warn = tc.red(warnText);
+        line2Right.push({ text: warn, width: visibleWidth(warnText) });
+      } else {
+        const label = `${pct}%`;
+        const s = pct >= 70 ? tc.yellow(label) : tc.green(label);
+        line2Right.push({ text: s, width: visibleWidth(s) });
+      }
+    }
+
+    const hasTurn = l2.includes('turn');
+    const turnLabel = hasTurn ? tc.dim(`#${state.promptCount}  `) : '';
+    const turnWidth = hasTurn ? `#${state.promptCount}  `.length : 0;
+
+    const line2Budget = termWidth - prefixWidth - turnWidth;
+    const line2RightJoined = progressiveJoin(line2Right, line2Budget, MIN_PROMPT_COLS);
+    const spaceForRight2 = line2RightJoined.width > 0 ? line2RightJoined.width + 2 : 0;
+
+    let promptText = '';
+    let promptWidth = 0;
+    if (l2.includes('prompt')) {
+      const maxPromptCols = line2Budget - spaceForRight2;
+      if (state.lastUserPrompt) {
+        promptText = tc.prompt(truncate(state.lastUserPrompt, Math.max(maxPromptCols, MIN_PROMPT_COLS)));
+        promptWidth = visibleWidth(promptText);
+      } else {
+        const placeholder = tc.dim(PROMPT_PLACEHOLDER);
+        promptText = placeholder;
+        promptWidth = visibleWidth(placeholder);
+      }
+    }
+
+    const gap2 = Math.max(1, termWidth - prefixWidth - turnWidth - promptWidth - line2RightJoined.width);
+    line2 = prefix + turnLabel + promptText + ' '.repeat(gap2) + line2RightJoined.text;
   }
-
-  const hasTurn = l2.includes('turn');
-  const turnLabel = hasTurn ? tc.dim(`#${state.promptCount}  `) : '';
-  const turnWidth = hasTurn ? `#${state.promptCount}  `.length : 0;
-
-  const line2Budget = termWidth - prefixWidth - turnWidth;
-  const line2RightJoined = progressiveJoin(line2Right, line2Budget, MIN_PROMPT_COLS);
-  const spaceForRight2 = line2RightJoined.width > 0 ? line2RightJoined.width + 2 : 0;
-
-  let promptText = '';
-  let promptWidth = 0;
-  if (l2.includes('prompt')) {
-    const maxPromptCols = line2Budget - spaceForRight2;
-    promptText = tc.prompt(truncate(state.lastUserPrompt, Math.max(maxPromptCols, MIN_PROMPT_COLS)));
-    promptWidth = visibleWidth(promptText);
-  }
-
-  const gap2 = Math.max(1, termWidth - prefixWidth - turnWidth - promptWidth - line2RightJoined.width);
-  const line2 = prefix + turnLabel + promptText + ' '.repeat(gap2) + line2RightJoined.text;
 
   // =========================================================================
   // Line 3 (opt-out): rate_limits bar + 7d bar + cost
@@ -337,13 +347,13 @@ export function formatStatusline(
     line3Segments.push({ text: s, width: visibleWidth(s) });
   }
 
-  if (line3Segments.length === 0) {
-    return line1 + '\n' + line2;
-  }
-
   // Progressive drop for narrow terminals: drop cost first, then 7d, keeping 5h.
-  const line3Joined = progressiveJoin(line3Segments, termWidth - prefixWidth, 0);
-  const line3 = prefix + line3Joined.text;
+  const line3 = line3Segments.length > 0
+    ? prefix + progressiveJoin(line3Segments, termWidth - prefixWidth, 0).text
+    : null;
 
-  return line1 + '\n' + line2 + '\n' + line3;
+  const parts: string[] = [line1];
+  if (line2) parts.push(line2);
+  if (line3) parts.push(line3);
+  return parts.join('\n');
 }

@@ -1,5 +1,21 @@
 # Changelog
 
+## 6.0.7
+
+### Fixed
+
+- **Blank statusline on first entry.** When `claude` was launched in a fresh session, the statusline rendered empty until the user sent their first prompt — Claude Code called the statusline before the `SessionStart` hook had finished writing state, so `readState()` returned `null` and `statusline.ts` silently `process.exit(0)`'d (graceful-degradation path). Now `statusline.ts` synthesizes an initial `SessionState` from the stdin payload (`session_id`, `cwd`, `workspace.current_dir`) so Line 1 renders `(no focus yet)` + model immediately, and Line 2 renders `#0  (awaiting first prompt)` + elapsed + context%. Parallel-session users no longer stare at a blank bar while the hook boots.
+
+### Changed
+
+- **Line 2 no longer requires a prompt to render.** The previous `if (!state.lastUserPrompt) return line1;` early-return in `format.ts::formatStatusline` hid the entire second line before the first user prompt, which suppressed turn count, elapsed time, and context% — all of which are meaningful even at `#0`. Line 2 now renders unconditionally when `config.line2` is non-empty; the prompt slot shows `(awaiting first prompt)` in `dim` until a real prompt arrives. Users who explicitly set `line2: []` still get a single-line HUD.
+
+### Notes
+
+- No schema changes to `SessionState`, stdin contract, or config. This is a purely presentational release — no new fields, no migration.
+- 5 new unit tests (`test/statusline.test.mjs`) cover the first-entry render, 3-line render with `rate_limits`, the post-first-prompt transition away from the placeholder, `line2: []` opt-out, and `refinementError` winning over the focus placeholder.
+- Total test count: 40 → 45.
+
 ## 6.0.6
 
 ### Added

@@ -1,5 +1,5 @@
 import { readStdin } from './stdin.js';
-import { readState } from './state.js';
+import { readState, createEmptySessionState } from './state.js';
 import { formatStatusline, getTerminalWidth } from './format.js';
 import { readConfig } from './config.js';
 async function main() {
@@ -13,9 +13,9 @@ async function main() {
     }
     if (!input.session_id)
         process.exit(0);
-    const state = readState(input.session_id);
-    if (!state)
-        process.exit(0);
+    // SessionStart hook may not have flushed state yet on first statusline render.
+    const cwd = input.cwd ?? input.workspace?.current_dir ?? input.workspace?.project_dir ?? '';
+    const state = readState(input.session_id) ?? createEmptySessionState(input.session_id, cwd);
     const builtin = {
         model: input.model,
         cost: input.cost,

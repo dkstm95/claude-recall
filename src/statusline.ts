@@ -1,14 +1,15 @@
 import { readStdin } from './stdin.js';
-import { readState } from './state.js';
+import { readState, createEmptySessionState } from './state.js';
 import { formatStatusline, getTerminalWidth, type BuiltinData } from './format.js';
 import { readConfig } from './config.js';
 
 interface StatuslineInput {
   session_id?: string;
+  cwd?: string;
   model?: { display_name?: string };
   cost?: { total_cost_usd?: number; total_duration_ms?: number };
   context_window?: { used_percentage?: number };
-  workspace?: { git_worktree?: string };
+  workspace?: { git_worktree?: string; current_dir?: string; project_dir?: string };
   rate_limits?: {
     five_hour?: { used_percentage?: number; resets_at?: number };
     seven_day?: { used_percentage?: number; resets_at?: number };
@@ -26,8 +27,9 @@ async function main(): Promise<void> {
 
   if (!input.session_id) process.exit(0);
 
-  const state = readState(input.session_id);
-  if (!state) process.exit(0);
+  // SessionStart hook may not have flushed state yet on first statusline render.
+  const cwd = input.cwd ?? input.workspace?.current_dir ?? input.workspace?.project_dir ?? '';
+  const state = readState(input.session_id) ?? createEmptySessionState(input.session_id, cwd);
 
   const builtin: BuiltinData = {
     model: input.model,

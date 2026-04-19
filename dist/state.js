@@ -3,6 +3,21 @@ import { execSync } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
+export function createEmptySessionState(sessionId, cwd) {
+    return {
+        sessionId,
+        focus: '',
+        branch: '',
+        gitStatus: null,
+        cwd,
+        promptCount: 0,
+        lastUserPrompt: '',
+        lastActivityAt: new Date().toISOString(),
+        lastRefinedAt: null,
+        refinementError: null,
+        lastRefinement: null,
+    };
+}
 export function getStateDir() {
     const dir = join(homedir(), '.claude', 'claude-recall', 'sessions');
     mkdirSync(dir, { recursive: true });

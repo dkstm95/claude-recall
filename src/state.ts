@@ -46,6 +46,22 @@ export interface SessionState {
   lastRefinement: LastRefinement | null;
 }
 
+export function createEmptySessionState(sessionId: string, cwd: string): SessionState {
+  return {
+    sessionId,
+    focus: '',
+    branch: '',
+    gitStatus: null,
+    cwd,
+    promptCount: 0,
+    lastUserPrompt: '',
+    lastActivityAt: new Date().toISOString(),
+    lastRefinedAt: null,
+    refinementError: null,
+    lastRefinement: null,
+  };
+}
+
 export function getStateDir(): string {
   const dir = join(homedir(), '.claude', 'claude-recall', 'sessions');
   mkdirSync(dir, { recursive: true });

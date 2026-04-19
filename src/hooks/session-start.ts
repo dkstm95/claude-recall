@@ -1,5 +1,5 @@
 import { readStdin } from '../stdin.js';
-import { readState, writeState, cleanupOldSessions, getGitStatus, type SessionState } from '../state.js';
+import { readState, writeState, cleanupOldSessions, getGitStatus, createEmptySessionState } from '../state.js';
 import { isRefiningSubprocess } from '../refine.js';
 
 async function main(): Promise<void> {
@@ -29,19 +29,10 @@ async function main(): Promise<void> {
 
   if (source === 'startup' || !existing) {
     const gitStatus = getGitStatus(cwd, null);
-    const state: SessionState = {
-      sessionId,
-      focus: '',
-      branch: gitStatus?.branch ?? '',
-      gitStatus,
-      cwd,
-      promptCount: 0,
-      lastUserPrompt: '',
-      lastActivityAt: now,
-      lastRefinedAt: null,
-      refinementError: null,
-      lastRefinement: null,
-    };
+    const state = createEmptySessionState(sessionId, cwd);
+    state.branch = gitStatus?.branch ?? '';
+    state.gitStatus = gitStatus;
+    state.lastActivityAt = now;
     writeState(sessionId, state);
   } else {
     existing.lastActivityAt = now;
