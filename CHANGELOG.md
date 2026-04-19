@@ -1,5 +1,17 @@
 # Changelog
 
+## 6.1.3
+
+### Fixed
+
+- **Line 3 reset timestamps (especially `7d`'s `(~M/D HH:MM)`) silently hidden even on wide terminals.** `getTerminalWidth()` only read `$COLUMNS`, which Claude Code never sets on the statusline subprocess, and the `/setup`-generated launcher doesn't export it either — so every render fell through to the 80-col fallback regardless of actual terminal width, triggering the Line 3 compaction ladder's L1 (drop 7d's reset text) on every wide-terminal render. Fix: `getTerminalWidth()` now reads `process.stderr.columns` before falling back to `$COLUMNS`/80. Claude Code spawns the statusline with `stdio: ['pipe', 'pipe', 'inherit']`, so stderr stays attached to the parent terminal and reports Claude Code's actual render-area width — no `/dev/tty` probe needed, which avoids the multiplexer trap that forced v6.1.1's revert (outer tty wider than Claude Code's pane). Wide-terminal users now see L0 (all segments with reset timestamps) automatically on plugin update — no launcher change required.
+
+### Notes
+
+- Precedence: `stdout.columns` → `stderr.columns` → `$COLUMNS` → `80`. `stdout` goes first for users who explicitly redirect stderr; `$COLUMNS` remains honored as an explicit override for environments where neither stream is a TTY (detached CI, custom launchers).
+- Inspired by [claude-hud](https://github.com/jarrodwatts/claude-hud)'s `src/render/index.ts` approach. The key observation — "Claude Code pipes stdout but inherits stderr" — is a property of Claude Code's spawn convention rather than Node-level tty magic, so this is a design-level fix, not a probe-and-hope.
+- 3 net new tests in `test/format.test.mjs` cover the precedence chain (stdout > stderr > $COLUMNS > 80) and zero-column rejection; the prior `$COLUMNS overrides the fallback` test was rewritten to first null out stdout/stderr, since stderr now wins over `$COLUMNS` when both are set. Total: 58 → 61.
+
 ## 6.1.2
 
 ### Fixed

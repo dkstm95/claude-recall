@@ -79,14 +79,18 @@ export function formatElapsedMs(ms: number): string {
   return formatDurationMs(ms);
 }
 
-// Claude Code spawns the statusline subprocess with piped stdio and no $COLUMNS,
-// so reading the real tty is fragile: process.stdout.isTTY is false, and /dev/tty
-// (even when openable) may report a width that doesn't match Claude Code's actual
-// statusline render area — inside multiplexers like cmux/tmux the outer tty can
-// be wider than the pane Claude Code draws into, which causes Claude Code to
-// ellipsis-truncate our padded lines and drop Lines 2–3. Fall back to 80 and let
-// users opt into a wider budget by setting $COLUMNS in their statusline launcher.
+// Claude Code spawns the statusline with stdio: ['pipe', 'pipe', 'inherit'] —
+// stdout is captured (so we can't read its columns), but stderr stays attached
+// to the parent terminal. That makes process.stderr.columns the authoritative
+// width for Claude Code's render area, sidestepping the /dev/tty multiplexer
+// trap that bit v6.1.1 (outer tty wider than Claude Code's pane). stdout goes
+// first for users who redirect stderr; $COLUMNS remains an explicit override
+// for cases where neither stream is a TTY.
 export function getTerminalWidth(): number {
+  const stdout = process.stdout.columns;
+  if (typeof stdout === 'number' && stdout > 0) return stdout;
+  const stderr = process.stderr.columns;
+  if (typeof stderr === 'number' && stderr > 0) return stderr;
   const env = parseInt(process.env.COLUMNS ?? '', 10);
   if (!isNaN(env) && env > 0) return env;
   return 80;

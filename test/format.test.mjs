@@ -63,26 +63,72 @@ test('progressiveJoin: keeps at least one segment even if minLeft cannot be sati
   assert.equal(out.text, 'single');
 });
 
-test('getTerminalWidth: $COLUMNS overrides the fallback', () => {
-  const saved = process.env.COLUMNS;
-  process.env.COLUMNS = '140';
+function withStreamColumns(values, fn) {
+  const stdoutDesc = Object.getOwnPropertyDescriptor(process.stdout, 'columns');
+  const stderrDesc = Object.getOwnPropertyDescriptor(process.stderr, 'columns');
+  Object.defineProperty(process.stdout, 'columns', { value: values.stdout, configurable: true, writable: true });
+  Object.defineProperty(process.stderr, 'columns', { value: values.stderr, configurable: true, writable: true });
   try {
-    assert.equal(getTerminalWidth(), 140);
+    fn();
+  } finally {
+    if (stdoutDesc) Object.defineProperty(process.stdout, 'columns', stdoutDesc);
+    else delete process.stdout.columns;
+    if (stderrDesc) Object.defineProperty(process.stderr, 'columns', stderrDesc);
+    else delete process.stderr.columns;
+  }
+}
+
+function withEnvColumns(value, fn) {
+  const saved = process.env.COLUMNS;
+  if (value === undefined) delete process.env.COLUMNS;
+  else process.env.COLUMNS = value;
+  try {
+    fn();
   } finally {
     if (saved === undefined) delete process.env.COLUMNS;
     else process.env.COLUMNS = saved;
   }
+}
+
+test('getTerminalWidth: stdout.columns takes highest precedence', () => {
+  withStreamColumns({ stdout: 120, stderr: 200 }, () => {
+    withEnvColumns('140', () => {
+      assert.equal(getTerminalWidth(), 120);
+    });
+  });
+});
+
+test('getTerminalWidth: falls back to stderr.columns when stdout is piped (the Claude Code case)', () => {
+  withStreamColumns({ stdout: undefined, stderr: 178 }, () => {
+    withEnvColumns('140', () => {
+      assert.equal(getTerminalWidth(), 178);
+    });
+  });
+});
+
+test('getTerminalWidth: $COLUMNS used when neither stdout nor stderr has columns', () => {
+  withStreamColumns({ stdout: undefined, stderr: undefined }, () => {
+    withEnvColumns('140', () => {
+      assert.equal(getTerminalWidth(), 140);
+    });
+  });
 });
 
 test('getTerminalWidth: rejects invalid $COLUMNS (0 / negative) and falls back to 80', () => {
-  const saved = process.env.COLUMNS;
-  process.env.COLUMNS = '0';
-  try {
-    assert.equal(getTerminalWidth(), 80);
-    process.env.COLUMNS = '-5';
-    assert.equal(getTerminalWidth(), 80);
-  } finally {
-    if (saved === undefined) delete process.env.COLUMNS;
-    else process.env.COLUMNS = saved;
-  }
+  withStreamColumns({ stdout: undefined, stderr: undefined }, () => {
+    withEnvColumns('0', () => {
+      assert.equal(getTerminalWidth(), 80);
+    });
+    withEnvColumns('-5', () => {
+      assert.equal(getTerminalWidth(), 80);
+    });
+  });
+});
+
+test('getTerminalWidth: rejects zero-column streams (piped/non-TTY)', () => {
+  withStreamColumns({ stdout: 0, stderr: 0 }, () => {
+    withEnvColumns('140', () => {
+      assert.equal(getTerminalWidth(), 140);
+    });
+  });
 });
