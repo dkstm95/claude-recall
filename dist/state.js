@@ -67,6 +67,11 @@ function runGit(cwd, args) {
         env: { ...process.env, LC_ALL: 'C' },
     }).trim();
 }
+export function refreshGitStatus(state, cwd) {
+    const gitStatus = getGitStatus(cwd, state.gitStatus);
+    state.gitStatus = gitStatus;
+    state.branch = gitStatus?.branch ?? state.branch;
+}
 export function getGitStatus(cwd, fallback) {
     try {
         let branch = runGit(cwd, ['rev-parse', '--abbrev-ref', 'HEAD']);

@@ -1,5 +1,5 @@
 import { readStdin } from '../stdin.js';
-import { readState, writeState, cleanupOldSessions, getGitStatus, createEmptySessionState } from '../state.js';
+import { readState, writeState, cleanupOldSessions, refreshGitStatus, createEmptySessionState } from '../state.js';
 import { isRefiningSubprocess } from '../refine.js';
 
 async function main(): Promise<void> {
@@ -28,17 +28,13 @@ async function main(): Promise<void> {
   const existing = readState(sessionId);
 
   if (source === 'startup' || !existing) {
-    const gitStatus = getGitStatus(cwd, null);
     const state = createEmptySessionState(sessionId, cwd);
-    state.branch = gitStatus?.branch ?? '';
-    state.gitStatus = gitStatus;
+    refreshGitStatus(state, cwd);
     state.lastActivityAt = now;
     writeState(sessionId, state);
   } else {
     existing.lastActivityAt = now;
-    const gitStatus = getGitStatus(cwd, existing.gitStatus);
-    existing.gitStatus = gitStatus;
-    existing.branch = gitStatus?.branch ?? existing.branch;
+    refreshGitStatus(existing, cwd);
 
     if (source === 'clear') {
       existing.lastUserPrompt = '';

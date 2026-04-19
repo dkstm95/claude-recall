@@ -1,5 +1,5 @@
 import { readStdin } from '../stdin.js';
-import { readState, writeState, getGitStatus } from '../state.js';
+import { readState, writeState, getGitStatus, refreshGitStatus } from '../state.js';
 import { launchRefinementWorker, isRefiningSubprocess } from '../refine.js';
 function isPowerOfTwo(n) {
     return n > 0 && (n & (n - 1)) === 0;
@@ -49,12 +49,7 @@ async function main() {
     state.promptCount++;
     state.lastUserPrompt = prompt.slice(0, 200).replace(/[\n\t\r]/g, ' ');
     state.lastActivityAt = now;
-    // Refresh git status every 10 prompts (the call is expensive)
-    if (state.promptCount % 10 === 1 || !state.gitStatus) {
-        const gitStatus = getGitStatus(cwd, state.gitStatus);
-        state.gitStatus = gitStatus;
-        state.branch = gitStatus?.branch ?? state.branch;
-    }
+    refreshGitStatus(state, cwd);
     writeState(sessionId, state);
     // Focus refinement at power-of-2 turns (1, 2, 4, 8, 16, 32, ...).
     // Launched as a detached worker so it survives this hook's 10s timeout.

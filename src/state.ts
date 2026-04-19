@@ -117,6 +117,12 @@ function runGit(cwd: string, args: string[]): string {
   }).trim();
 }
 
+export function refreshGitStatus(state: SessionState, cwd: string): void {
+  const gitStatus = getGitStatus(cwd, state.gitStatus);
+  state.gitStatus = gitStatus;
+  state.branch = gitStatus?.branch ?? state.branch;
+}
+
 export function getGitStatus(cwd: string, fallback: GitStatus | null): GitStatus | null {
   try {
     let branch = runGit(cwd, ['rev-parse', '--abbrev-ref', 'HEAD']);

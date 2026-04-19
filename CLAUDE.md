@@ -138,7 +138,7 @@ Effect at the 80-col fallback with all four segments populated: L0 is ~91 cols â
 - **Slash command filtering**: prompt-submit.ts ignores prompts starting with `/`
 - **Lazy cleanup**: Sessions idle for >7 days (by `lastActivityAt`) are cleaned on SessionStart, not continuously
 - **Stdin-first elapsed**: statusline prefers `cost.total_duration_ms` from stdin over self-tracked timestamps
-- **Git call optimization**: full git status runs every 10 prompts (`% 10 === 1`), not every prompt
+- **Git call cost is bounded, not cached**: full git status runs every prompt (measured ~40ms p95). Each of the 4 `execSync` calls in `runGit()` has a 2s timeout, so worst-case 8s stays inside the 10s hook budget even on pathological repos (index.lock contention, slow network FS).
 - **Theme system**: `ThemeColors` interface abstracts all color calls; 4 presets (default, light, minimal, vivid). `COLORFGBG`-based auto-select picks `light` on light terminals when `theme` is omitted; `NO_COLOR` strips all ANSI output.
 - **Config-driven statusline**: line1/line2/line3 element arrays control which segments render.
 - **Focus refinement recursion guard**: `refine.ts` sets `CLAUDE_RECALL_REFINING=1` in the child env; all hooks early-return when this env var is set, preventing the spawned `claude -p` from re-triggering the plugin.

@@ -1,5 +1,11 @@
 # Changelog
 
+## 6.2.1
+
+### Changed
+
+- **Git status refreshes every prompt instead of every 10th prompt.** The prior `promptCount % 10 === 1` cache was premature optimization: `getGitStatus()` measures at ~40ms p95 on a small repo and each of its 4 sub-calls is already bounded by a 2s `execSync` timeout (so worst-case 8s fits inside the 10s `UserPromptSubmit` hook budget). The stale-branch UX — switching branches mid-session and seeing the old name in Line 1 until turn 11 — was strictly worse than the negligible cost. Larger monorepos will still benefit from the per-call timeout guard.
+
 ## 6.2.0
 
 ### Removed
