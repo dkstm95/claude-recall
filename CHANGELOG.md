@@ -1,5 +1,16 @@
 # Changelog
 
+## 6.1.5
+
+### Fixed
+
+- **Line 3 `ctx` bar still hidden on the first render of brand-new sessions.** v6.1.4's per-session cache restored the bar for resumed sessions (cache hit covers the stdin-omission window), but a truly new `claude` invocation has no cache entry for its fresh `session_id`, so `resolveContextWindow()` returned `undefined` and `format.ts`'s `ctxPct != null` gate dropped the segment until the first user prompt triggered the first API call. Fix: `resolveContextWindow()` now returns `{ used_percentage: 0 }` as the final fallback (priority: live stdin > per-session cache > 0%) so the bar renders from the very first statusline tick. 0% is accurate for a new session (no conversation yet); for the rare pre-v6.1.4 resume with no cache entry, the 0% display self-corrects on the first prompt when the live value arrives. The 0% fallback intentionally does not populate the cache — only observed live values do.
+
+### Notes
+
+- Return type of `resolveContextWindow()` tightened from `ContextWindowData | undefined` to `ContextWindowData`. `src/statusline.ts` passes the result into `BuiltinData.context_window` (typed optional), so no call-site change was needed.
+- 1 test rewritten (previously asserted `undefined` for empty-live-and-cache), 1 new test added to confirm the 0% fallback does not write the cache. Total: 74 → 75.
+
 ## 6.1.4
 
 ### Fixed

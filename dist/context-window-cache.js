@@ -35,12 +35,13 @@ export function writeContextCache(cache) {
     writeCache(cache);
 }
 // Claude Code omits `context_window` from statusline stdin until the first
-// API call in a new client connection populates token accounting. For brand
-// new sessions that's accurate (no conversation yet ≈ 0%), but for resumed
-// sessions the first render hides the ctx bar despite the session actually
-// having N% used. Persisting per-session lets Line 3 render the last-known
-// value immediately on entry, then the live value takes over from the first
-// prompt onward. Keyed by session_id so parallel sessions don't contaminate.
+// API call in a new client connection populates token accounting. Resolution
+// priority: live stdin value > per-session cache > 0% fallback. The fallback
+// keeps the ctx bar on screen from the very first render: for brand-new
+// sessions 0% is accurate (no conversation yet), and for rare cases where
+// a resumed session has no cache entry (pre-v6.1.4 sessions, manual cache
+// deletion) the display self-corrects on the first prompt when the live
+// value arrives. Keyed by session_id so parallel sessions don't contaminate.
 export function resolveContextWindow(sessionId, live) {
     const cache = readCache();
     const livePct = live?.used_percentage;
@@ -56,7 +57,7 @@ export function resolveContextWindow(sessionId, live) {
     if (typeof cachedPct === 'number') {
         return { used_percentage: cachedPct };
     }
-    return undefined;
+    return { used_percentage: 0 };
 }
 export function cleanupContextCache(keptSessionIds) {
     const cache = readCache();

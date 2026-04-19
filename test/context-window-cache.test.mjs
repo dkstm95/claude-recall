@@ -80,10 +80,16 @@ test('resolveContextWindow: returns cached value when live has no used_percentag
   cleanupCache();
 });
 
-test('resolveContextWindow: returns undefined when both live and cache are empty', () => {
+test('resolveContextWindow: returns 0% when both live and cache are empty (brand-new session)', () => {
   cleanupCache();
   const out = resolveContextWindow('session-new', undefined);
-  assert.equal(out, undefined);
+  assert.equal(out.used_percentage, 0);
+});
+
+test('resolveContextWindow: 0% fallback does not populate the cache', () => {
+  cleanupCache();
+  resolveContextWindow('session-new', undefined);
+  assert.deepEqual(readContextCache(), {});
 });
 
 test('resolveContextWindow: skips write when live matches cache (no-op guard)', () => {
