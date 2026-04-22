@@ -1,6 +1,6 @@
 # claude-recall
 
-Claude Code plugin (v6.2.0) that provides a session awareness statusline.
+Claude Code plugin (v6.3.0) that provides a session awareness statusline.
 Tracks a Haiku-refined focus label, activity, git status, and prompt count for every parallel Claude Code session.
 
 - **Author**: seungilahn
@@ -91,9 +91,9 @@ Key fields in `~/.claude/claude-recall/sessions/{sessionId}.json`:
 ## Statusline Layout
 
 ```
-Line 1 (stable):   ▍ [focus|error-label] [ctx-hint] [worktree] [branch*↑N↓N] [model]
-Line 2 (dynamic):  ▍ [#turn last_prompt]                                        [elapsed]
-Line 3 (opt-out):  ▍ ctx ████░░░░░░ 45%   5h ████░░░░░░ 52% (~17:00)   7d █░░░░░░░░░ 19%   $0.03
+Line 1 (stable):   ▍ [focus|error-label] [ctx-hint]  [worktree] │ [branch*↑N↓N] │ [model]
+Line 2 (dynamic):  ▍ [#turn last_prompt]                                          [elapsed]
+Line 3 (opt-out):  ▍ ctx ████░░░░░░ 45% │ 5h ████░░░░░░ 52% (~17:00) │ 7d █░░░░░░░░░ 19% │ $0.03
 ```
 
 - Accent bar prefix (`▍`) colored by a deterministic hash of `cwd + current branch` — so parallel tabs on different repos or different feature branches render distinct colors. Note: the color shifts when the branch changes mid-session (by design, to distinguish branch contexts at a glance).
@@ -110,7 +110,8 @@ Line 3 (opt-out):  ▍ ctx ████░░░░░░ 45%   5h ████�
 - `line3` slot renders ctx + rate_limits bars + cost. Hidden when no data. Opt out with `line3: []`.
 - Elapsed source: stdin `cost.total_duration_ms` (wall-clock since session started, per Claude Code docs) when present, else `Date.now() - state.sessionStartedAt` (same semantic)
 - Minimum widths: focus >= 15 cols (truncated with `…`), prompt >= 30 cols (truncated with `…`)
-- Configurable via `~/.claude/claude-recall/config.json` (line1/line2/line3 slots, gitStatus toggles, theme)
+- Column grid (v6.3.0+): right-zone segments (worktree / branch / model / elapsed) left-pad to a uniform 10-col cell; a dim `│` (U+2502) joins them. This anchors `│` positions across renders and aligns Line 2's elapsed left edge with Line 1's model left edge. Long content (e.g. `feature/long-branch-name*`) overflows its cell — alignment is a soft guide, not a hard constraint.
+- Configurable via `~/.claude/claude-recall/config.json` (line1/line2/line3 slots, gitStatus toggles, theme, `separator`). Set `"separator": ""` to disable the grid and fall back to 2-space joiners (pre-v6.3.0 look). Any single glyph works (`"┊"`, `"|"`, etc.); dim color is applied per theme.
 
 ### Priority rules (what drops as width shrinks)
 

@@ -1,5 +1,12 @@
 # Changelog
 
+## 6.3.0
+
+### Added
+
+- **Column grid + vertical separators across the statusline.** Right-zone segments on Line 1 (worktree / branch / model) and Line 2 (elapsed) now left-pad to a uniform 10-column cell, and a dim `│` (U+2502, LIGHT VERTICAL) is drawn between segments on Line 1 and Line 3. Cross-line alignment follows: Line 2's elapsed left edge lines up with Line 1's model left edge for every render. Line 3 gets the same `│` between `ctx` / `5h` / `7d` / `cost`, keeping the existing compaction ladder (reset-text drops) intact. Net effect: segment boundaries fall on stable columns instead of wobbling with content length.
+- **`separator` config field.** Default `"│"`. Set to `""` to disable both the separator and the cell padding (restores the previous 2-space joiner, for users who prefer a flatter look). Any single glyph works — `"┊"` for dotted, `"|"` for ASCII, etc. Dim color is applied automatically per theme.
+
 ## 6.2.4
 
 ### Fixed

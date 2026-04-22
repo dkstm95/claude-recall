@@ -99,13 +99,29 @@ function sessionColor(cwd, branch, accents) {
 }
 const MIN_FOCUS_COLS = 15;
 const MIN_PROMPT_COLS = 30;
+// Uniform min cell width for right-zone segments (worktree, branch, model, elapsed).
+// Left-padding to this width keeps `│` separators and rightmost content edges on
+// stable columns across renders. Content wider than the min simply overflows —
+// the grid is a soft alignment guide, not a hard constraint.
+const CELL_MIN_WIDTH = 10;
+const DEFAULT_JOINER = { text: '  ', width: 2 };
 export const FOCUS_PLACEHOLDER = '(no focus yet)';
 export const PROMPT_PLACEHOLDER = '(awaiting first prompt)';
-export function progressiveJoin(segments, budget, minLeft) {
+export function makeJoiner(separator, tc) {
+    if (!separator)
+        return DEFAULT_JOINER;
+    return { text: ` ${tc.dim(separator)} `, width: 1 + displayWidth(separator) + 1 };
+}
+export function padSegmentLeft(seg, minWidth) {
+    if (seg.width >= minWidth)
+        return seg;
+    return { text: ' '.repeat(minWidth - seg.width) + seg.text, width: minWidth };
+}
+export function progressiveJoin(segments, budget, minLeft, joiner = DEFAULT_JOINER) {
     for (let count = segments.length; count >= 1; count--) {
         const used = segments.slice(0, count);
-        const text = used.map((s) => s.text).join('  ');
-        const w = used.reduce((sum, s) => sum + s.width, 0) + (used.length - 1) * 2;
+        const text = used.map((s) => s.text).join(joiner.text);
+        const w = used.reduce((sum, s) => sum + s.width, 0) + (used.length - 1) * joiner.width;
         if (budget - w >= minLeft || count === 1) {
             return { text, width: w };
         }
@@ -202,25 +218,25 @@ function buildLine3Segments(l3, builtin, ctxPct, tc, compactLevel) {
     }
     return segs;
 }
-function segmentsTotalWidth(segs) {
+function segmentsTotalWidth(segs, joinerWidth) {
     if (segs.length === 0)
         return 0;
-    return segs.reduce((sum, s) => sum + s.width, 0) + (segs.length - 1) * 2;
+    return segs.reduce((sum, s) => sum + s.width, 0) + (segs.length - 1) * joinerWidth;
 }
-function renderLine3(l3, builtin, ctxPct, tc, budget) {
+function renderLine3(l3, builtin, ctxPct, tc, budget, joiner) {
     const fullSegs = buildLine3Segments(l3, builtin, ctxPct, tc, 0);
     if (fullSegs.length === 0)
         return null;
     let segs = fullSegs;
     for (const level of [0, 1, 2]) {
         segs = level === 0 ? fullSegs : buildLine3Segments(l3, builtin, ctxPct, tc, level);
-        if (segmentsTotalWidth(segs) <= budget) {
-            return segs.map((s) => s.text).join('  ');
+        if (segmentsTotalWidth(segs, joiner.width) <= budget) {
+            return segs.map((s) => s.text).join(joiner.text);
         }
     }
     // Even fully compacted (L2) exceeds the budget: drop segments right-to-left.
     // progressiveJoin keeps at least one, so ctx always survives when present.
-    return progressiveJoin(segs, budget, 0).text;
+    return progressiveJoin(segs, budget, 0, joiner).text;
 }
 export function formatStatusline(state, termWidth, builtin, config) {
     const cfg = config ?? {
@@ -229,11 +245,14 @@ export function formatStatusline(state, termWidth, builtin, config) {
         line3: ['context', 'rate_limits', 'seven_day', 'cost'],
         gitStatus: { enabled: true, showDirty: true, showAheadBehind: true },
         theme: 'default',
+        separator: '│',
     };
     const l1 = cfg.line1;
     const l2 = cfg.line2;
     const l3 = cfg.line3;
     const tc = getThemeColors(cfg.theme);
+    const joiner = makeJoiner(cfg.separator, tc);
+    const gridOn = cfg.separator !== '';
     // Fallback uses sessionStartedAt (not lastActivityAt) to match stdin's
     // "wall-clock since session started" semantic.
     const elapsed = builtin?.cost?.total_duration_ms != null
@@ -246,25 +265,28 @@ export function formatStatusline(state, termWidth, builtin, config) {
     // Line 1: focus (or error label) + right side (worktree / branch / model)
     // =========================================================================
     const line1Right = [];
+    const pushRight = (arr, seg) => {
+        arr.push(gridOn ? padSegmentLeft(seg, CELL_MIN_WIDTH) : seg);
+    };
     if (l1.includes('worktree') && builtin?.workspace?.git_worktree) {
         const name = basenameOf(builtin.workspace.git_worktree);
         const s = tc.worktree('\u2387 ' + name);
-        line1Right.push({ text: s, width: visibleWidth(s) });
+        pushRight(line1Right, { text: s, width: visibleWidth(s) });
     }
     if (l1.includes('branch') && cfg.gitStatus.enabled && state.gitStatus && state.gitStatus.branch) {
         const gitText = renderGitText(state.gitStatus, cfg.gitStatus);
         const s = tc.branch(gitText);
-        line1Right.push({ text: s, width: visibleWidth(s) });
+        pushRight(line1Right, { text: s, width: visibleWidth(s) });
     }
     else if (l1.includes('branch') && state.branch) {
         const s = tc.branch(state.branch);
-        line1Right.push({ text: s, width: visibleWidth(s) });
+        pushRight(line1Right, { text: s, width: visibleWidth(s) });
     }
     if (l1.includes('model') && builtin?.model?.display_name) {
         const s = tc.model(builtin.model.display_name);
-        line1Right.push({ text: s, width: visibleWidth(s) });
+        pushRight(line1Right, { text: s, width: visibleWidth(s) });
     }
-    const line1RightJoined = progressiveJoin(line1Right, termWidth - prefixWidth, MIN_FOCUS_COLS);
+    const line1RightJoined = progressiveJoin(line1Right, termWidth - prefixWidth, MIN_FOCUS_COLS, joiner);
     const ctxPct = builtin?.context_window?.used_percentage;
     const tier = ctxPct != null ? HINT_TIERS.find((h) => ctxPct >= h.min) : undefined;
     const spaceForRight1 = line1RightJoined.width > 0 ? line1RightJoined.width + 2 : 0;
@@ -310,13 +332,13 @@ export function formatStatusline(state, termWidth, builtin, config) {
         const line2Right = [];
         if (l2.includes('elapsed')) {
             const s = tc.dim(elapsed);
-            line2Right.push({ text: s, width: visibleWidth(s) });
+            pushRight(line2Right, { text: s, width: visibleWidth(s) });
         }
         const hasTurn = l2.includes('turn');
         const turnLabel = hasTurn ? tc.dim(`#${state.promptCount}  `) : '';
         const turnWidth = hasTurn ? `#${state.promptCount}  `.length : 0;
         const line2Budget = termWidth - prefixWidth - turnWidth;
-        const line2RightJoined = progressiveJoin(line2Right, line2Budget, MIN_PROMPT_COLS);
+        const line2RightJoined = progressiveJoin(line2Right, line2Budget, MIN_PROMPT_COLS, joiner);
         const spaceForRight2 = line2RightJoined.width > 0 ? line2RightJoined.width + 2 : 0;
         let promptText = '';
         let promptWidth = 0;
@@ -336,7 +358,7 @@ export function formatStatusline(state, termWidth, builtin, config) {
         line2 = prefix + turnLabel + promptText + ' '.repeat(gap2) + line2RightJoined.text;
     }
     // Line 3 priority: ctx > 5h > 7d > cost. See renderLine3() for the compaction ladder.
-    const line3Body = renderLine3(l3, builtin, ctxPct, tc, termWidth - prefixWidth);
+    const line3Body = renderLine3(l3, builtin, ctxPct, tc, termWidth - prefixWidth, joiner);
     const line3 = line3Body !== null ? prefix + line3Body : null;
     const parts = [line1];
     if (line2)

@@ -17,6 +17,7 @@ export interface StatuslineConfig {
   line3: string[];
   gitStatus: GitStatusConfig;
   theme: Theme;
+  separator: string;
 }
 
 const DEFAULT_CONFIG: StatuslineConfig = {
@@ -25,6 +26,7 @@ const DEFAULT_CONFIG: StatuslineConfig = {
   line3: ['context', 'rate_limits', 'seven_day', 'cost'],
   gitStatus: { enabled: true, showDirty: true, showAheadBehind: true },
   theme: 'default',
+  separator: '│',
 };
 
 const VALID_LINE1 = ['focus', 'branch', 'model', 'worktree'];
@@ -171,12 +173,15 @@ export function readConfig(): StatuslineConfig {
     if (Array.isArray(rawL2) && rawL2.includes('context') && !line3.includes('context')) {
       line3.unshift('context');
     }
+    const rawSep = parsed['separator'];
+    const separator = typeof rawSep === 'string' ? rawSep : DEFAULT_CONFIG.separator;
     return {
       line1: sanitizeLine(parsed['line1'], VALID_LINE1, DEFAULT_CONFIG.line1),
       line2: sanitizeLine(parsed['line2'], VALID_LINE2, DEFAULT_CONFIG.line2),
       line3,
       gitStatus: sanitizeGitStatus(parsed['gitStatus']),
       theme: isTheme(requested) ? requested : fallbackTheme,
+      separator,
     };
   } catch {
     return {
