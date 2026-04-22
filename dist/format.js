@@ -62,13 +62,21 @@ export function formatElapsed(isoString) {
 export function formatElapsedMs(ms) {
     return formatDurationMs(ms);
 }
-// Claude Code spawns the statusline with stdio: ['pipe', 'pipe', 'inherit'] —
-// stdout is captured (so we can't read its columns), but stderr stays attached
-// to the parent terminal. That makes process.stderr.columns the authoritative
-// width for Claude Code's render area, sidestepping the /dev/tty multiplexer
-// trap that bit v6.1.1 (outer tty wider than Claude Code's pane). stdout goes
-// first for users who redirect stderr; $COLUMNS remains an explicit override
-// for cases where neither stream is a TTY.
+// Claude Code pipes all three stdio streams to the statusline — stdout,
+// stderr, and stdin are all pipes, not TTYs. Empirically (2026-04 on
+// Claude Code 2.1.114) and by upstream report (anthropics/claude-code#22115,
+// still open), process.stdout.columns, process.stderr.columns, and
+// process.env.COLUMNS are all undefined inside the spawned statusline
+// process, and `/dev/tty`, `tput cols`, `stty size` all fail from this
+// context. The precedence below still covers environments that DO
+// propagate a width (e.g. user explicitly sets COLUMNS in the statusLine
+// command: `COLUMNS=141 bash statusline-launcher.sh`), but the fallback
+// is the hot path for the vast majority of Claude Code users today.
+// 120 is chosen so Line 3's full L0 render (~91 cols) comfortably fits,
+// keeping the 7d reset text visible by default. Users on genuinely
+// narrow terminals can set COLUMNS explicitly in their statusLine
+// command to opt back into tighter layouts.
+const WIDTH_FALLBACK = 120;
 export function getTerminalWidth() {
     const stdout = process.stdout.columns;
     if (typeof stdout === 'number' && stdout > 0)
@@ -79,7 +87,7 @@ export function getTerminalWidth() {
     const env = parseInt(process.env.COLUMNS ?? '', 10);
     if (!isNaN(env) && env > 0)
         return env;
-    return 80;
+    return WIDTH_FALLBACK;
 }
 function sessionColor(cwd, branch, accents) {
     const key = `${cwd}:${branch}`;

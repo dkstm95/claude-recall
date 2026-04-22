@@ -114,7 +114,7 @@ Line 3 (opt-out):  ▍ ctx ████░░░░░░ 45%   5h ████�
 
 ### Priority rules (what drops as width shrinks)
 
-Width precedence: `stdout.columns` → `stderr.columns` → `$COLUMNS` → `80` fallback (see `getTerminalWidth()` in `src/format.ts`). Claude Code inherits stderr, so `stderr.columns` reports the actual render-area width on modern versions; `$COLUMNS` only matters when neither stream is a TTY.
+Width precedence: `stdout.columns` → `stderr.columns` → `$COLUMNS` → `120` fallback (see `getTerminalWidth()` in `src/format.ts`). Claude Code pipes **all three** stdio streams to the statusline ([anthropics/claude-code#22115](https://github.com/anthropics/claude-code/issues/22115), still open as of 2026-04) — so in practice every source returns `undefined` and the fallback is the hot path. `/dev/tty`, `tput cols`, and `stty size` all fail from the spawned context too, so the fallback cannot be replaced by detection. 120 keeps Line 3's full L0 render (~91 cols) visible; narrow-terminal users can explicitly inject a width via `COLUMNS=<n> bash ~/.claude/claude-recall/statusline-launcher.sh` in their settings.json `statusLine.command`.
 
 **Line 1** — `focus` always renders (truncated with `…` to min 15 cols). Right-side segments follow config order left-to-right = high-to-low priority, and `progressiveJoin` drops the rightmost segments first. Default `['focus', 'branch', 'model']` means `model` drops before `branch`.
 
@@ -129,7 +129,7 @@ Width precedence: `stdout.columns` → `stderr.columns` → `$COLUMNS` → `80` 
 | L2 | Drop 5h's `(~HH:MM)` reset too | ~10 more |
 | L3 | Drop whole segments right-to-left: `cost` → `7d` → `5h`; `ctx` always survives | variable |
 
-Effect at the 80-col fallback with all four segments populated: L0 is ~91 cols → L1 fits at ~77 cols → every segment stays visible, only 7d's reset text is hidden. See `renderLine3()` in `src/format.ts`.
+Effect at the 120-col fallback with all four segments populated: L0 (~91 cols) fits comfortably and every segment including 7d's `(~M/D HH:MM)` stays visible. If the effective width drops below ~91 cols (explicit narrow `COLUMNS`, or genuinely small pane), the ladder kicks in — at ~77-90 cols everything except the 7d reset survives (L1); below that, segments drop right-to-left. See `renderLine3()` in `src/format.ts`.
 
 ## Key Patterns
 

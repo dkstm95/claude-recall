@@ -1,5 +1,15 @@
 # Changelog
 
+## 6.2.4
+
+### Fixed
+
+- **Line 3's 7d reset text `(~M/D HH:MM)` was being dropped for most users, regardless of how wide their terminal was.** Investigation traced it to `getTerminalWidth()` falling through to its `80` fallback: `process.stdout.columns`, `process.stderr.columns`, and `process.env.COLUMNS` were all `undefined` in every Claude Code statusline spawn sampled. This is not a Claude Code regression — empirical testing on 2.1.114 plus [upstream issue anthropics/claude-code#22115](https://github.com/anthropics/claude-code/issues/22115) (still open) confirm Claude Code pipes all three stdio streams to the statusline child process and has done so since custom statuslines landed in 1.0.71. `/dev/tty`, `tput cols`, `stty size` all fail from that context too, so there is no detection path. A previous code comment incorrectly claimed "stderr is inherited" — it is not. The fallback bumps from `80` → `120`: wide enough for Line 3's full L0 render (~91 cols) so the 7d reset text stays visible by default, while preserving the precedence order (`stdout.columns` → `stderr.columns` → `$COLUMNS` → fallback) for the rare environments that do propagate a width. Users on genuinely narrow terminals can still opt back into a tighter layout by injecting `COLUMNS=<n>` into their settings.json `statusLine.command`.
+
+### Docs
+
+- **CLAUDE.md corrected.** The "Width precedence" paragraph and Line 3 ladder example now reflect the actual Claude Code spawn behavior (all stdio piped, `undefined` across the board) and the new 120-col fallback. Previous wording implied `stderr.columns` was reliably available, which is false in every Claude Code version shipped to date.
+
 ## 6.2.3
 
 ### Fixed

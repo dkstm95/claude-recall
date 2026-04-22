@@ -114,13 +114,26 @@ test('getTerminalWidth: $COLUMNS used when neither stdout nor stderr has columns
   });
 });
 
-test('getTerminalWidth: rejects invalid $COLUMNS (0 / negative) and falls back to 80', () => {
+test('getTerminalWidth: rejects invalid $COLUMNS (0 / negative) and falls back to 120', () => {
   withStreamColumns({ stdout: undefined, stderr: undefined }, () => {
     withEnvColumns('0', () => {
-      assert.equal(getTerminalWidth(), 80);
+      assert.equal(getTerminalWidth(), 120);
     });
     withEnvColumns('-5', () => {
-      assert.equal(getTerminalWidth(), 80);
+      assert.equal(getTerminalWidth(), 120);
+    });
+  });
+});
+
+// Regression (v6.2.4): Claude Code pipes all three stdio streams to the
+// statusline, so stdout/stderr columns and $COLUMNS are all typically
+// unavailable (anthropics/claude-code#22115). The 80-col POSIX default
+// was forcing every affected user into Line 3's L1 compaction — 120
+// keeps the 7d reset text visible at L0.
+test('getTerminalWidth: falls back to 120 when every source is unavailable', () => {
+  withStreamColumns({ stdout: undefined, stderr: undefined }, () => {
+    withEnvColumns(undefined, () => {
+      assert.equal(getTerminalWidth(), 120);
     });
   });
 });
