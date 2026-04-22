@@ -56,20 +56,34 @@ export function writeRateLimitsCache(data) {
         // best-effort; cache miss on next read is harmless
     }
 }
+// Field-wise merge within each window: live's used_percentage is authoritative,
+// but resets_at falls back to cache when live omits it. Claude Code sometimes
+// streams `rate_limits.<window>` with just `used_percentage` (no `resets_at`)
+// between full rate-limit responses; without this fallback, the Line 3 reset
+// text disappears until the next full payload arrives. `readRateLimitsCache`
+// already filters stale cache entries, so we can trust any cache resets_at we
+// see here.
+function mergeWindow(live, cache) {
+    if (hasPct(live)) {
+        if (typeof live.resets_at === 'number')
+            return live;
+        if (typeof cache?.resets_at === 'number') {
+            return { used_percentage: live.used_percentage, resets_at: cache.resets_at };
+        }
+        return live;
+    }
+    if (hasPct(cache))
+        return cache;
+    return undefined;
+}
 export function mergeRateLimits(live, cache) {
-    const liveFive = live?.five_hour;
-    const liveSeven = live?.seven_day;
-    const cacheFive = cache?.five_hour;
-    const cacheSeven = cache?.seven_day;
     const merged = {};
-    if (hasPct(liveFive))
-        merged.five_hour = liveFive;
-    else if (hasPct(cacheFive))
-        merged.five_hour = cacheFive;
-    if (hasPct(liveSeven))
-        merged.seven_day = liveSeven;
-    else if (hasPct(cacheSeven))
-        merged.seven_day = cacheSeven;
+    const fiveHour = mergeWindow(live?.five_hour, cache?.five_hour ?? undefined);
+    if (fiveHour)
+        merged.five_hour = fiveHour;
+    const sevenDay = mergeWindow(live?.seven_day, cache?.seven_day ?? undefined);
+    if (sevenDay)
+        merged.seven_day = sevenDay;
     return Object.keys(merged).length > 0 ? merged : undefined;
 }
 export function hasAnyLivePct(live) {

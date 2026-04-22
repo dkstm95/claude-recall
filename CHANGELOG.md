@@ -1,5 +1,11 @@
 # Changelog
 
+## 6.2.3
+
+### Fixed
+
+- **Line 3's 7d reset text (`(~M/D HH:MM)`) no longer disappears when Claude Code streams partial rate-limit updates.** The Line 3 bar would render as `7d ████ 67%` with no trailing reset timestamp, even though `~/.claude/claude-recall/rate-limits.json` still held a fresh `resets_at` from an earlier full payload. Root cause: `mergeRateLimits()` merged at the window level — if `live.seven_day` had `used_percentage` but no `resets_at`, it was taken as-is and the cached `resets_at` was discarded. The fix splits the merge per field inside each window: `used_percentage` remains live-preferred (live is the current truth), but `resets_at` falls back to the cached value when live omits it. `readRateLimitsCache()` already filters out past reset times, so any cache timestamp that survives into `mergeRateLimits` is guaranteed still in the future. Same mechanism applies to the 5-hour window.
+
 ## 6.2.2
 
 ### Fixed

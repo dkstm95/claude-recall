@@ -54,6 +54,34 @@ test('mergeRateLimits: partial live + cache (live 5h, cached 7d)', () => {
   assert.equal(out.seven_day.used_percentage, 22);
 });
 
+// Regression (v6.2.2 → v6.2.3): Claude Code occasionally streams rate_limits
+// with just used_percentage (no resets_at). The previous window-level merge
+// took live as-is and discarded the cached resets_at, so the 7d bar rendered
+// without its "(~M/D HH:MM)" reset text. Field-wise merge preserves the
+// cached resets_at as long as readRateLimitsCache still considers it fresh.
+test('mergeRateLimits: cached resets_at fills gap when live has used_percentage only', () => {
+  const live = { seven_day: { used_percentage: 67 } };
+  const cache = { seven_day: { used_percentage: 50, resets_at: 2_000_500_000 } };
+  const out = mergeRateLimits(live, cache);
+  assert.equal(out.seven_day.used_percentage, 67, 'live used_percentage wins');
+  assert.equal(out.seven_day.resets_at, 2_000_500_000, 'cached resets_at carries over');
+});
+
+test('mergeRateLimits: live resets_at wins over cache resets_at', () => {
+  const live = { five_hour: { used_percentage: 30, resets_at: 2_000_900_000 } };
+  const cache = { five_hour: { used_percentage: 20, resets_at: 2_000_100_000 } };
+  const out = mergeRateLimits(live, cache);
+  assert.equal(out.five_hour.used_percentage, 30);
+  assert.equal(out.five_hour.resets_at, 2_000_900_000);
+});
+
+test('mergeRateLimits: live used_percentage only + no cache → no resets_at', () => {
+  const live = { seven_day: { used_percentage: 67 } };
+  const out = mergeRateLimits(live, null);
+  assert.equal(out.seven_day.used_percentage, 67);
+  assert.equal(out.seven_day.resets_at, undefined, 'no resets_at available anywhere');
+});
+
 test('readRateLimitsCache: drops windows whose resets_at has passed', () => {
   cleanupCache();
   const nowSec = Math.floor(Date.now() / 1000);
