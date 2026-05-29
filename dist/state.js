@@ -1,10 +1,10 @@
-import { mkdirSync, readFileSync, writeFileSync, renameSync, readdirSync, unlinkSync } from 'node:fs';
+import { mkdirSync, readFileSync, readdirSync, unlinkSync } from 'node:fs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
 import { cleanupContextCache } from './context-window-cache.js';
+import { readJsonFile, writeJsonFileAtomic } from './json-file.js';
 const execFileAsync = promisify(execFile);
 export function createEmptySessionState(sessionId, cwd) {
     const now = new Date().toISOString();
@@ -32,37 +32,30 @@ export function getStatePath(sessionId) {
     return join(getStateDir(), `${sessionId}.json`);
 }
 export function readState(sessionId) {
-    try {
-        const raw = readFileSync(getStatePath(sessionId), 'utf-8');
-        const parsed = JSON.parse(raw);
-        if (parsed['focus'] === undefined && typeof parsed['purpose'] === 'string') {
-            parsed['focus'] = parsed['purpose'];
-        }
-        const lastActivityAt = parsed['lastActivityAt'] ?? new Date().toISOString();
-        return {
-            sessionId: parsed['sessionId'] ?? sessionId,
-            focus: parsed['focus'] ?? '',
-            branch: parsed['branch'] ?? '',
-            gitStatus: parsed['gitStatus'] ?? null,
-            cwd: parsed['cwd'] ?? '',
-            promptCount: parsed['promptCount'] ?? 0,
-            lastUserPrompt: parsed['lastUserPrompt'] ?? '',
-            sessionStartedAt: parsed['sessionStartedAt'] ?? lastActivityAt,
-            lastActivityAt,
-            lastRefinedAt: parsed['lastRefinedAt'] ?? null,
-            refinementError: parsed['refinementError'] ?? null,
-            lastRefinement: parsed['lastRefinement'] ?? null,
-        };
-    }
-    catch {
+    const parsed = readJsonFile(getStatePath(sessionId));
+    if (!parsed)
         return null;
+    if (parsed['focus'] === undefined && typeof parsed['purpose'] === 'string') {
+        parsed['focus'] = parsed['purpose'];
     }
+    const lastActivityAt = parsed['lastActivityAt'] ?? new Date().toISOString();
+    return {
+        sessionId: parsed['sessionId'] ?? sessionId,
+        focus: parsed['focus'] ?? '',
+        branch: parsed['branch'] ?? '',
+        gitStatus: parsed['gitStatus'] ?? null,
+        cwd: parsed['cwd'] ?? '',
+        promptCount: parsed['promptCount'] ?? 0,
+        lastUserPrompt: parsed['lastUserPrompt'] ?? '',
+        sessionStartedAt: parsed['sessionStartedAt'] ?? lastActivityAt,
+        lastActivityAt,
+        lastRefinedAt: parsed['lastRefinedAt'] ?? null,
+        refinementError: parsed['refinementError'] ?? null,
+        lastRefinement: parsed['lastRefinement'] ?? null,
+    };
 }
 export function writeState(sessionId, state) {
-    const target = getStatePath(sessionId);
-    const tmp = `${target}.tmp.${randomUUID()}`;
-    writeFileSync(tmp, JSON.stringify(state, null, 2) + '\n', 'utf-8');
-    renameSync(tmp, target);
+    writeJsonFileAtomic(getStatePath(sessionId), state);
 }
 async function runGit(cwd, args, timeoutMs = 1000) {
     const { stdout } = await execFileAsync('git', args, {

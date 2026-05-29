@@ -1,7 +1,6 @@
-import { mkdirSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { randomUUID } from 'node:crypto';
+import { readJsonFile, writeJsonFileAtomic } from './json-file.js';
 const BASE_DIR = join(homedir(), '.claude', 'claude-recall');
 const CACHE_PATH = join(BASE_DIR, 'rate-limits.json');
 function hasPct(w) {
@@ -31,26 +30,19 @@ function dataEqual(a, b) {
     return windowsEqual(a.five_hour, b.five_hour) && windowsEqual(a.seven_day, b.seven_day);
 }
 export function readRateLimitsCache(nowMs = Date.now()) {
-    try {
-        const raw = readFileSync(CACHE_PATH, 'utf-8');
-        const parsed = JSON.parse(raw);
-        const out = {};
-        if (isFresh(parsed.five_hour, nowMs))
-            out.five_hour = parsed.five_hour;
-        if (isFresh(parsed.seven_day, nowMs))
-            out.seven_day = parsed.seven_day;
-        return Object.keys(out).length > 0 ? out : null;
-    }
-    catch {
+    const parsed = readJsonFile(CACHE_PATH);
+    if (!parsed)
         return null;
-    }
+    const out = {};
+    if (isFresh(parsed.five_hour, nowMs))
+        out.five_hour = parsed.five_hour;
+    if (isFresh(parsed.seven_day, nowMs))
+        out.seven_day = parsed.seven_day;
+    return Object.keys(out).length > 0 ? out : null;
 }
 export function writeRateLimitsCache(data) {
     try {
-        mkdirSync(BASE_DIR, { recursive: true });
-        const tmp = `${CACHE_PATH}.tmp.${randomUUID()}`;
-        writeFileSync(tmp, JSON.stringify(data, null, 2) + '\n', 'utf-8');
-        renameSync(tmp, CACHE_PATH);
+        writeJsonFileAtomic(CACHE_PATH, data);
     }
     catch {
         // best-effort; cache miss on next read is harmless

@@ -1,28 +1,18 @@
-import { mkdirSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { randomUUID } from 'node:crypto';
+import { readJsonFile, writeJsonFileAtomic } from './json-file.js';
 const BASE_DIR = join(homedir(), '.claude', 'claude-recall');
 const CACHE_PATH = join(BASE_DIR, 'context-windows.json');
 function readCache() {
-    try {
-        const raw = readFileSync(CACHE_PATH, 'utf-8');
-        const parsed = JSON.parse(raw);
-        if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-            return parsed;
-        }
-    }
-    catch {
-        // missing/corrupt cache is harmless — fall through to empty
+    const parsed = readJsonFile(CACHE_PATH);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        return parsed;
     }
     return {};
 }
 function writeCache(cache) {
     try {
-        mkdirSync(BASE_DIR, { recursive: true });
-        const tmp = `${CACHE_PATH}.tmp.${randomUUID()}`;
-        writeFileSync(tmp, JSON.stringify(cache, null, 2) + '\n', 'utf-8');
-        renameSync(tmp, CACHE_PATH);
+        writeJsonFileAtomic(CACHE_PATH, cache);
     }
     catch {
         // best-effort; cache miss on next read is harmless

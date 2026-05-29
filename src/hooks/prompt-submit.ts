@@ -1,30 +1,18 @@
-import { readStdin } from '../stdin.js';
 import { readState, writeState, refreshGitStatus, createEmptySessionState } from '../state.js';
-import { launchRefinementWorker, isRefiningSubprocess } from '../refine.js';
+import { launchRefinementWorker } from '../refine.js';
+import { getString, runHook, type HookInput } from './common.js';
 
 function isPowerOfTwo(n: number): boolean {
   return n > 0 && (n & (n - 1)) === 0;
 }
 
-async function main(): Promise<void> {
-  if (isRefiningSubprocess()) {
-    process.stdout.write('{}\n');
-    return;
-  }
+async function handlePromptSubmit(input: HookInput): Promise<void> {
+  const sessionId = getString(input, 'session_id');
+  if (!sessionId) return;
 
-  const raw = await readStdin();
-  let input: Record<string, unknown>;
-  try {
-    input = JSON.parse(raw);
-  } catch {
-    process.stdout.write('{}\n');
-    return;
-  }
-
-  const sessionId = input['session_id'] as string;
-  const prompt = ((input['user_prompt'] ?? input['prompt'] ?? '') as string);
-  const cwd = ((input['cwd'] ?? process.cwd()) as string);
-  const transcriptPath = input['transcript_path'] as string | undefined;
+  const prompt = getString(input, 'user_prompt') ?? getString(input, 'prompt') ?? '';
+  const cwd = getString(input, 'cwd') ?? process.cwd();
+  const transcriptPath = getString(input, 'transcript_path');
 
   const now = new Date().toISOString();
   let state = readState(sessionId);
@@ -56,10 +44,6 @@ async function main(): Promise<void> {
     launchRefinementWorker(sessionId, transcriptPath);
   }
 
-  process.stdout.write('{}\n');
 }
 
-main().catch((err) => {
-  process.stderr.write(`[claude-recall prompt-submit] ${err instanceof Error ? err.message : String(err)}\n`);
-  process.stdout.write('{}\n');
-});
+await runHook('prompt-submit', handlePromptSubmit);

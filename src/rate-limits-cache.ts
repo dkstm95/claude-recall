@@ -1,7 +1,6 @@
-import { mkdirSync, readFileSync, writeFileSync, renameSync } from 'node:fs';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { randomUUID } from 'node:crypto';
+import { readJsonFile, writeJsonFileAtomic } from './json-file.js';
 
 export interface RateLimitWindow {
   used_percentage?: number;
@@ -44,24 +43,17 @@ function dataEqual(
 }
 
 export function readRateLimitsCache(nowMs: number = Date.now()): RateLimitsData | null {
-  try {
-    const raw = readFileSync(CACHE_PATH, 'utf-8');
-    const parsed = JSON.parse(raw) as RateLimitsData;
-    const out: RateLimitsData = {};
-    if (isFresh(parsed.five_hour, nowMs)) out.five_hour = parsed.five_hour;
-    if (isFresh(parsed.seven_day, nowMs)) out.seven_day = parsed.seven_day;
-    return Object.keys(out).length > 0 ? out : null;
-  } catch {
-    return null;
-  }
+  const parsed = readJsonFile<RateLimitsData>(CACHE_PATH);
+  if (!parsed) return null;
+  const out: RateLimitsData = {};
+  if (isFresh(parsed.five_hour, nowMs)) out.five_hour = parsed.five_hour;
+  if (isFresh(parsed.seven_day, nowMs)) out.seven_day = parsed.seven_day;
+  return Object.keys(out).length > 0 ? out : null;
 }
 
 export function writeRateLimitsCache(data: RateLimitsData): void {
   try {
-    mkdirSync(BASE_DIR, { recursive: true });
-    const tmp = `${CACHE_PATH}.tmp.${randomUUID()}`;
-    writeFileSync(tmp, JSON.stringify(data, null, 2) + '\n', 'utf-8');
-    renameSync(tmp, CACHE_PATH);
+    writeJsonFileAtomic(CACHE_PATH, data);
   } catch {
     // best-effort; cache miss on next read is harmless
   }

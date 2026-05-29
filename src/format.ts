@@ -127,6 +127,15 @@ const CELL_MIN_WIDTH = 10;
 
 const DEFAULT_JOINER: Joiner = { text: '  ', width: 2 };
 
+const DEFAULT_FORMAT_CONFIG: StatuslineConfig = {
+  line1: ['focus', 'branch', 'model'],
+  line2: ['turn', 'prompt', 'elapsed'],
+  line3: ['context', 'rate_limits', 'seven_day', 'cost'],
+  gitStatus: { enabled: true, showDirty: true, showAheadBehind: true },
+  theme: 'default',
+  separator: '│',
+};
+
 export const FOCUS_PLACEHOLDER = '(no focus yet)';
 export const PROMPT_PLACEHOLDER = '(awaiting first prompt)';
 
@@ -314,23 +323,138 @@ function renderLine3(
   return progressiveJoin(segs, budget, 0, joiner).text;
 }
 
+interface RenderContext {
+  state: SessionState;
+  termWidth: number;
+  builtin: BuiltinData | undefined;
+  cfg: StatuslineConfig;
+  tc: ThemeColors;
+  joiner: Joiner;
+  gridOn: boolean;
+  prefix: string;
+  prefixWidth: number;
+  elapsed: string;
+  ctxPct: number | undefined;
+}
+
+function makeSegment(text: string): Segment {
+  return { text, width: visibleWidth(text) };
+}
+
+function makeRightSegment(text: string, gridOn: boolean): Segment {
+  const seg = makeSegment(text);
+  return gridOn ? padSegmentLeft(seg, CELL_MIN_WIDTH) : seg;
+}
+
+function buildLine1RightSegments(ctx: RenderContext): Segment[] {
+  const l1 = ctx.cfg.line1;
+  const segs: Segment[] = [];
+
+  const wtName = l1.includes('worktree') ? worktreeName(ctx.builtin) : undefined;
+  if (wtName) {
+    segs.push(makeRightSegment(ctx.tc.worktree('\u2387 ' + wtName), ctx.gridOn));
+  }
+
+  if (l1.includes('branch') && ctx.cfg.gitStatus.enabled && ctx.state.gitStatus?.branch) {
+    const gitText = renderGitText(ctx.state.gitStatus, ctx.cfg.gitStatus);
+    segs.push(makeRightSegment(ctx.tc.branch(gitText), ctx.gridOn));
+  } else if (l1.includes('branch') && ctx.state.branch) {
+    segs.push(makeRightSegment(ctx.tc.branch(ctx.state.branch), ctx.gridOn));
+  }
+
+  if (l1.includes('model') && ctx.builtin?.model?.display_name) {
+    segs.push(makeRightSegment(ctx.tc.model(ctx.builtin.model.display_name), ctx.gridOn));
+  }
+
+  return segs;
+}
+
+function renderContextHint(ctx: RenderContext, rightWidth: number): Segment {
+  const tier = ctx.ctxPct != null ? HINT_TIERS.find((h) => ctx.ctxPct! >= h.min) : undefined;
+  const spaceForRight = rightWidth > 0 ? rightWidth + 2 : 0;
+  // Reserve against the ACTIVE tier's width, not a global max — this way a
+  // narrow terminal that can fit the short critical hint but not the longer
+  // suggest hint still shows the critical warning when ctx is actually ≥90%.
+  const availWithHint = ctx.termWidth - ctx.prefixWidth - (tier?.width ?? 0) - spaceForRight;
+  if (!tier || availWithHint < MIN_FOCUS_COLS + 5) {
+    return { text: '', width: 0 };
+  }
+  return { text: tier.color(ctx.tc, tier.raw), width: tier.width };
+}
+
+function renderLine1Left(ctx: RenderContext, availLeft: number): Segment {
+  if (ctx.state.refinementError) {
+    return makeSegment(ctx.tc.red(ERROR_LABELS[ctx.state.refinementError.code]));
+  }
+
+  if (!ctx.cfg.line1.includes('focus')) {
+    return { text: '', width: 0 };
+  }
+
+  if (ctx.state.focus) {
+    return makeSegment(ctx.tc.focus(truncate(ctx.state.focus, Math.max(availLeft, MIN_FOCUS_COLS))));
+  }
+
+  return makeSegment(ctx.tc.dim(FOCUS_PLACEHOLDER));
+}
+
+function renderLine1(ctx: RenderContext): string {
+  const rightJoined = progressiveJoin(
+    buildLine1RightSegments(ctx),
+    ctx.termWidth - ctx.prefixWidth,
+    MIN_FOCUS_COLS,
+    ctx.joiner,
+  );
+  const hint = renderContextHint(ctx, rightJoined.width);
+  const spaceForRight = rightJoined.width > 0 ? rightJoined.width + 2 : 0;
+  const availLeft = ctx.termWidth - ctx.prefixWidth - hint.width - spaceForRight;
+  const left = renderLine1Left(ctx, availLeft);
+  const gap = Math.max(1, ctx.termWidth - ctx.prefixWidth - left.width - hint.width - rightJoined.width);
+  return ctx.prefix + left.text + hint.text + ' '.repeat(gap) + rightJoined.text;
+}
+
+function renderPromptSegment(ctx: RenderContext, maxPromptCols: number): Segment {
+  if (!ctx.cfg.line2.includes('prompt')) {
+    return { text: '', width: 0 };
+  }
+
+  if (ctx.state.lastUserPrompt) {
+    return makeSegment(ctx.tc.prompt(truncate(ctx.state.lastUserPrompt, Math.max(maxPromptCols, MIN_PROMPT_COLS))));
+  }
+
+  return makeSegment(ctx.tc.dim(PROMPT_PLACEHOLDER));
+}
+
+function renderLine2(ctx: RenderContext): string | null {
+  const l2 = ctx.cfg.line2;
+  if (l2.length === 0) return null;
+
+  const line2Right: Segment[] = [];
+  if (l2.includes('elapsed')) {
+    line2Right.push(makeRightSegment(ctx.tc.dim(ctx.elapsed), ctx.gridOn));
+  }
+
+  const hasTurn = l2.includes('turn');
+  const turnRaw = `#${ctx.state.promptCount}  `;
+  const turnLabel = hasTurn ? ctx.tc.dim(turnRaw) : '';
+  const turnWidth = hasTurn ? turnRaw.length : 0;
+
+  const line2Budget = ctx.termWidth - ctx.prefixWidth - turnWidth;
+  const rightJoined = progressiveJoin(line2Right, line2Budget, MIN_PROMPT_COLS, ctx.joiner);
+  const spaceForRight = rightJoined.width > 0 ? rightJoined.width + 2 : 0;
+  const prompt = renderPromptSegment(ctx, line2Budget - spaceForRight);
+  const gap = Math.max(1, ctx.termWidth - ctx.prefixWidth - turnWidth - prompt.width - rightJoined.width);
+
+  return ctx.prefix + turnLabel + prompt.text + ' '.repeat(gap) + rightJoined.text;
+}
+
 export function formatStatusline(
   state: SessionState,
   termWidth: number,
   builtin?: BuiltinData,
   config?: StatuslineConfig,
 ): string {
-  const cfg = config ?? {
-    line1: ['focus', 'branch', 'model'],
-    line2: ['turn', 'prompt', 'elapsed'],
-    line3: ['context', 'rate_limits', 'seven_day', 'cost'],
-    gitStatus: { enabled: true, showDirty: true, showAheadBehind: true },
-    theme: 'default' as const,
-    separator: '│',
-  };
-  const l1 = cfg.line1;
-  const l2 = cfg.line2;
-  const l3 = cfg.line3;
+  const cfg = config ?? DEFAULT_FORMAT_CONFIG;
   const tc = getThemeColors(cfg.theme);
   const joiner = makeJoiner(cfg.separator, tc);
   const gridOn = cfg.separator !== '';
@@ -344,116 +468,26 @@ export function formatStatusline(
   const accent = sessionColor(state.cwd, state.branch, tc.accents);
   const prefix = ' ' + accent('\u258D') + ' ';
 
-  // =========================================================================
-  // Line 1: focus (or error label) + right side (worktree / branch / model)
-  // =========================================================================
-  const line1Right: Segment[] = [];
-
-  const pushRight = (arr: Segment[], seg: Segment) => {
-    arr.push(gridOn ? padSegmentLeft(seg, CELL_MIN_WIDTH) : seg);
+  const ctxPct = builtin?.context_window?.used_percentage;
+  const renderCtx: RenderContext = {
+    state,
+    termWidth,
+    builtin,
+    cfg,
+    tc,
+    joiner,
+    gridOn,
+    prefix,
+    prefixWidth,
+    elapsed,
+    ctxPct,
   };
 
-  const wtName = l1.includes('worktree') ? worktreeName(builtin) : undefined;
-  if (wtName) {
-    const name = wtName;
-    const s = tc.worktree('\u2387 ' + name);
-    pushRight(line1Right, { text: s, width: visibleWidth(s) });
-  }
-
-  if (l1.includes('branch') && cfg.gitStatus.enabled && state.gitStatus && state.gitStatus.branch) {
-    const gitText = renderGitText(state.gitStatus, cfg.gitStatus);
-    const s = tc.branch(gitText);
-    pushRight(line1Right, { text: s, width: visibleWidth(s) });
-  } else if (l1.includes('branch') && state.branch) {
-    const s = tc.branch(state.branch);
-    pushRight(line1Right, { text: s, width: visibleWidth(s) });
-  }
-
-  if (l1.includes('model') && builtin?.model?.display_name) {
-    const s = tc.model(builtin.model.display_name);
-    pushRight(line1Right, { text: s, width: visibleWidth(s) });
-  }
-
-  const line1RightJoined = progressiveJoin(line1Right, termWidth - prefixWidth, MIN_FOCUS_COLS, joiner);
-
-  const ctxPct = builtin?.context_window?.used_percentage;
-  const tier = ctxPct != null ? HINT_TIERS.find((h) => ctxPct >= h.min) : undefined;
-  const spaceForRight1 = line1RightJoined.width > 0 ? line1RightJoined.width + 2 : 0;
-  // Reserve against the ACTIVE tier's width, not a global max — this way a
-  // narrow terminal that can fit the short critical hint but not the longer
-  // suggest hint still shows the critical warning when ctx is actually ≥90%.
-  const availWithHint = termWidth - prefixWidth - (tier?.width ?? 0) - spaceForRight1;
-  const showHint = tier != null && availWithHint >= MIN_FOCUS_COLS + 5;
-  const hintText = showHint ? tier.color(tc, tier.raw) : '';
-  const hintWidth = showHint ? tier.width : 0;
-
-  const availLeft = termWidth - prefixWidth - hintWidth - spaceForRight1;
-
-  let leftText: string;
-  let leftWidth: number;
-  if (state.refinementError) {
-    const raw = ERROR_LABELS[state.refinementError.code];
-    const colored = tc.red(raw);
-    leftText = colored;
-    leftWidth = visibleWidth(colored);
-  } else if (l1.includes('focus')) {
-    if (state.focus) {
-      const focusColored = tc.focus(truncate(state.focus, Math.max(availLeft, MIN_FOCUS_COLS)));
-      leftText = focusColored;
-      leftWidth = visibleWidth(focusColored);
-    } else {
-      const placeholder = tc.dim(FOCUS_PLACEHOLDER);
-      leftText = placeholder;
-      leftWidth = visibleWidth(placeholder);
-    }
-  } else {
-    leftText = '';
-    leftWidth = 0;
-  }
-
-  const gap1 = Math.max(1, termWidth - prefixWidth - leftWidth - hintWidth - line1RightJoined.width);
-  const line1 = prefix + leftText + hintText + ' '.repeat(gap1) + line1RightJoined.text;
-
-  // =========================================================================
-  // Line 2: #turn + last_prompt + elapsed (right)
-  // =========================================================================
-  let line2: string | null = null;
-  if (l2.length > 0) {
-    const line2Right: Segment[] = [];
-
-    if (l2.includes('elapsed')) {
-      const s = tc.dim(elapsed);
-      pushRight(line2Right, { text: s, width: visibleWidth(s) });
-    }
-
-    const hasTurn = l2.includes('turn');
-    const turnLabel = hasTurn ? tc.dim(`#${state.promptCount}  `) : '';
-    const turnWidth = hasTurn ? `#${state.promptCount}  `.length : 0;
-
-    const line2Budget = termWidth - prefixWidth - turnWidth;
-    const line2RightJoined = progressiveJoin(line2Right, line2Budget, MIN_PROMPT_COLS, joiner);
-    const spaceForRight2 = line2RightJoined.width > 0 ? line2RightJoined.width + 2 : 0;
-
-    let promptText = '';
-    let promptWidth = 0;
-    if (l2.includes('prompt')) {
-      const maxPromptCols = line2Budget - spaceForRight2;
-      if (state.lastUserPrompt) {
-        promptText = tc.prompt(truncate(state.lastUserPrompt, Math.max(maxPromptCols, MIN_PROMPT_COLS)));
-        promptWidth = visibleWidth(promptText);
-      } else {
-        const placeholder = tc.dim(PROMPT_PLACEHOLDER);
-        promptText = placeholder;
-        promptWidth = visibleWidth(placeholder);
-      }
-    }
-
-    const gap2 = Math.max(1, termWidth - prefixWidth - turnWidth - promptWidth - line2RightJoined.width);
-    line2 = prefix + turnLabel + promptText + ' '.repeat(gap2) + line2RightJoined.text;
-  }
+  const line1 = renderLine1(renderCtx);
+  const line2 = renderLine2(renderCtx);
 
   // Line 3 priority: ctx > 5h > 7d > cost. See renderLine3() for the compaction ladder.
-  const line3Body = renderLine3(l3, builtin, ctxPct, tc, termWidth - prefixWidth, joiner);
+  const line3Body = renderLine3(cfg.line3, builtin, ctxPct, tc, termWidth - prefixWidth, joiner);
   const line3 = line3Body !== null ? prefix + line3Body : null;
 
   const parts: string[] = [line1];
