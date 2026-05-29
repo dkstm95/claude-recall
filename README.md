@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-6.3.0-blue?style=flat-square" alt="version">
+  <img src="https://img.shields.io/badge/version-6.3.1-blue?style=flat-square" alt="version">
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="license">
   <img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen?style=flat-square&logo=node.js&logoColor=white" alt="node">
   <img src="https://img.shields.io/badge/Claude_Code-Plugin-blueviolet?style=flat-square" alt="Claude Code Plugin">
@@ -121,7 +121,7 @@ Create `~/.claude/claude-recall/config.json`:
 | **7d rate limit bar** | Line 3 | 7-day usage + reset date/time — `7d ██░░░░░░░░ 20% (~4/25 13:59)` | Claude Code built-in |
 | **cost** | Line 3, right | Cumulative session cost | Claude Code built-in |
 | **context hint** | Line 1, right | Dim `(/compact soon)` at 60-69%, dim `(run /compact)` at 70-89%, red `⚠ ctx 90%+` at ≥90% — guaranteed visible even when Line 3 is off | claude-recall |
-| **worktree** *(opt-in)* | Line 1, right | `⎇ <name>` when inside a linked git worktree | Claude Code built-in |
+| **worktree** *(opt-in)* | Line 1, right | `⎇ <name>` from Claude Code's `worktree.name` / `worktree.path` fields when inside a linked git worktree | Claude Code built-in |
 | **refinement error** | Line 1, left | Red `⚠ AI <reason>` label replaces focus when a background refinement fails | claude-recall |
 
 Notes:

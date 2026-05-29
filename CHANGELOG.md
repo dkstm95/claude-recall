@@ -1,5 +1,16 @@
 # Changelog
 
+## 6.3.1
+
+### Fixed
+
+- **Worktree display now supports Claude Code's current statusline schema.** The `worktree` slot reads top-level `worktree.name` / `worktree.path`, while preserving the legacy `workspace.git_worktree` fallback.
+
+### Docs
+
+- **Width-detection notes updated for Claude Code 2.1.153+.** Statusline commands now receive `COLUMNS` / `LINES`, so current Claude Code versions can provide the usable width through the environment instead of always falling back to 120.
+- **`/setup` guidance updated for current statusline settings.** `refreshInterval` is documented as removed-to-disable, matching Claude Code's current minimum of `1`, and the launcher resolves the installed plugin path by searching the cache instead of assuming one fixed marketplace/plugin directory shape.
+
 ## 6.3.0
 
 ### Added

@@ -8,6 +8,7 @@ export interface BuiltinData {
   cost?: { total_cost_usd?: number; total_duration_ms?: number };
   context_window?: { used_percentage?: number };
   workspace?: { git_worktree?: string };
+  worktree?: { name?: string; path?: string; branch?: string; original_cwd?: string; original_branch?: string };
   rate_limits?: RateLimitsData;
 }
 
@@ -79,20 +80,11 @@ export function formatElapsedMs(ms: number): string {
   return formatDurationMs(ms);
 }
 
-// Claude Code pipes all three stdio streams to the statusline — stdout,
-// stderr, and stdin are all pipes, not TTYs. Empirically (2026-04 on
-// Claude Code 2.1.114) and by upstream report (anthropics/claude-code#22115,
-// still open), process.stdout.columns, process.stderr.columns, and
-// process.env.COLUMNS are all undefined inside the spawned statusline
-// process, and `/dev/tty`, `tput cols`, `stty size` all fail from this
-// context. The precedence below still covers environments that DO
-// propagate a width (e.g. user explicitly sets COLUMNS in the statusLine
-// command: `COLUMNS=141 bash statusline-launcher.sh`), but the fallback
-// is the hot path for the vast majority of Claude Code users today.
-// 120 is chosen so Line 3's full L0 render (~91 cols) comfortably fits,
-// keeping the 7d reset text visible by default. Users on genuinely
-// narrow terminals can set COLUMNS explicitly in their statusLine
-// command to opt back into tighter layouts.
+// Claude Code pipes stdout/stderr to the statusline, so stream `.columns`
+// values are normally unavailable. Since Claude Code 2.1.153, statusline
+// commands receive COLUMNS/LINES in their environment; older versions and
+// non-Claude invocations still fall back to 120. That fallback keeps Line 3's
+// full L0 render (~91 cols) visible when no reliable width is propagated.
 const WIDTH_FALLBACK = 120;
 
 export function getTerminalWidth(): number {
@@ -168,6 +160,13 @@ export function progressiveJoin(
 function basenameOf(p: string): string {
   const parts = p.split(/[\\/]+/).filter(Boolean);
   return parts.length > 0 ? parts[parts.length - 1] : p;
+}
+
+function worktreeName(builtin: BuiltinData | undefined): string | undefined {
+  const modern = builtin?.worktree?.name ?? builtin?.worktree?.path;
+  if (modern) return basenameOf(modern);
+  const legacy = builtin?.workspace?.git_worktree;
+  return legacy ? basenameOf(legacy) : undefined;
 }
 
 const ERROR_LABELS: Record<RefinementError['code'], string> = {
@@ -354,8 +353,9 @@ export function formatStatusline(
     arr.push(gridOn ? padSegmentLeft(seg, CELL_MIN_WIDTH) : seg);
   };
 
-  if (l1.includes('worktree') && builtin?.workspace?.git_worktree) {
-    const name = basenameOf(builtin.workspace.git_worktree);
+  const wtName = l1.includes('worktree') ? worktreeName(builtin) : undefined;
+  if (wtName) {
+    const name = wtName;
     const s = tc.worktree('\u2387 ' + name);
     pushRight(line1Right, { text: s, width: visibleWidth(s) });
   }

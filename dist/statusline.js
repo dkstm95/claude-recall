@@ -27,6 +27,7 @@ async function main() {
         cost: input.cost,
         context_window: resolveContextWindow(input.session_id, input.context_window),
         workspace: input.workspace,
+        worktree: input.worktree,
         rate_limits: resolveRateLimits(input.rate_limits),
     };
     const config = readConfig();

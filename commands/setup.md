@@ -18,9 +18,9 @@ Follow these steps:
 3. **Create a launcher script** at `~/.claude/claude-recall/statusline-launcher.sh` with this exact content:
    ```bash
    #!/bin/bash
-   DIR=$(ls -d ~/.claude/plugins/cache/claude-recall/claude-recall/*/ 2>/dev/null | sort -V | tail -1)
+   DIR=$(find ~/.claude/plugins/cache -path '*/claude-recall/*/dist/statusline.js' -type f 2>/dev/null | sed 's#/dist/statusline.js$##' | sort -V | tail -1)
    if [ -n "$DIR" ]; then
-     exec node "${DIR}dist/statusline.js"
+     exec node "${DIR}/dist/statusline.js"
    fi
    ```
    Make it executable: `chmod +x ~/.claude/claude-recall/statusline-launcher.sh`
@@ -38,7 +38,7 @@ Follow these steps:
    ```
    Preserve all existing settings — only add/update the `statusLine` key.
    - `padding: 1` adds one column of horizontal breathing room around the statusline.
-   - `refreshInterval: 30` re-runs the statusline every 30 seconds so the Line 2 elapsed clock stays accurate while the main session is idle. Set to `0` or remove the field to disable idle refreshes.
+   - `refreshInterval: 30` re-runs the statusline every 30 seconds so the Line 2 elapsed clock stays accurate while the main session is idle. Remove the field to disable idle refreshes.
 
 5. Verify that these files exist (relative to plugin root found in step 2):
    - `hooks/hooks.json`

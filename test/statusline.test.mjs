@@ -130,6 +130,26 @@ test('formatStatusline: ctx hidden when line3 is empty (opt-out)', () => {
   assert.ok(lines.every((l) => !stripAnsi(l).includes('ctx')), `ctx should be hidden when line3 is empty`);
 });
 
+test('formatStatusline: worktree slot reads current top-level worktree fields', () => {
+  const cfg = { ...BASE_CFG, line1: ['focus', 'worktree', 'branch', 'model'] };
+  const out = formatStatusline(emptyState(), 140, {
+    worktree: { name: 'wt-feature' },
+    model: { display_name: 'Opus 4.8' },
+  }, cfg);
+  const clean1 = stripAnsi(out.split('\n')[0]);
+  assert.ok(clean1.includes('wt-feature'), `Line 1 should show worktree.name, got "${clean1}"`);
+});
+
+test('formatStatusline: worktree slot keeps legacy workspace.git_worktree fallback', () => {
+  const cfg = { ...BASE_CFG, line1: ['focus', 'worktree', 'branch', 'model'] };
+  const out = formatStatusline(emptyState(), 140, {
+    workspace: { git_worktree: '/tmp/worktrees/legacy-feature' },
+    model: { display_name: 'Opus 4.8' },
+  }, cfg);
+  const clean1 = stripAnsi(out.split('\n')[0]);
+  assert.ok(clean1.includes('legacy-feature'), `Line 1 should show legacy worktree basename, got "${clean1}"`);
+});
+
 // =============================================================================
 // Line 3 compaction ladder (priority: ctx > 5h > 7d > cost; reset texts drop
 // before whole segments do).

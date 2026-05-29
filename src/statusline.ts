@@ -12,6 +12,7 @@ interface StatuslineInput {
   cost?: { total_cost_usd?: number; total_duration_ms?: number };
   context_window?: ContextWindowData;
   workspace?: { git_worktree?: string; current_dir?: string; project_dir?: string };
+  worktree?: { name?: string; path?: string; branch?: string; original_cwd?: string; original_branch?: string };
   rate_limits?: RateLimitsData;
 }
 
@@ -39,6 +40,7 @@ async function main(): Promise<void> {
     cost: input.cost,
     context_window: resolveContextWindow(input.session_id, input.context_window),
     workspace: input.workspace,
+    worktree: input.worktree,
     rate_limits: resolveRateLimits(input.rate_limits),
   };
 
