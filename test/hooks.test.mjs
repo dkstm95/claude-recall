@@ -46,6 +46,16 @@ test('trigger-refinement hook: malformed stdin still returns an empty hook respo
   assert.equal(result.stderr, '');
 });
 
+test('trigger-refinement hook: PostCompact compact_summary works without transcript_path', async () => {
+  const result = await runHook(
+    'dist/hooks/trigger-refinement.js',
+    JSON.stringify({ session_id: 'missing-state', compact_summary: 'Preserve release prep context.' }),
+  );
+  assert.equal(result.code, 0);
+  assert.equal(result.stdout, '{}\n');
+  assert.equal(result.stderr, '');
+});
+
 test('prompt-submit hook: missing session_id is a no-op response', async () => {
   const result = await runHook('dist/hooks/prompt-submit.js', '{"user_prompt":"hello"}');
   assert.equal(result.code, 0);

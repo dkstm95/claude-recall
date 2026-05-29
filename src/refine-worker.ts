@@ -1,10 +1,24 @@
 import { triggerFocusRefinement } from './refine.js';
+import { readFile, unlink } from 'node:fs/promises';
+
+async function readPreferredTranscript(path: string | undefined): Promise<string | undefined> {
+  if (!path) return undefined;
+  try {
+    return await readFile(path, 'utf-8');
+  } catch {
+    return undefined;
+  } finally {
+    try { await unlink(path); } catch { /* best-effort cleanup */ }
+  }
+}
 
 async function main(): Promise<void> {
   const sessionId = process.argv[2];
   const transcriptPath = process.argv[3];
-  if (!sessionId || !transcriptPath) process.exit(0);
-  await triggerFocusRefinement(sessionId, transcriptPath);
+  const preferredTranscriptPath = process.argv[4];
+  if (!sessionId || (!transcriptPath && !preferredTranscriptPath)) process.exit(0);
+  const preferredTranscript = await readPreferredTranscript(preferredTranscriptPath);
+  await triggerFocusRefinement(sessionId, transcriptPath || undefined, preferredTranscript);
 }
 
 main().catch((err) => {

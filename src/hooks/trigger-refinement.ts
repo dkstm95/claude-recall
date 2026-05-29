@@ -4,9 +4,10 @@ import { getString, runHook, type HookInput } from './common.js';
 async function handleTriggerRefinement(input: HookInput): Promise<void> {
   const sessionId = getString(input, 'session_id');
   const transcriptPath = getString(input, 'transcript_path');
+  const compactSummary = getString(input, 'compact_summary');
 
-  if (sessionId && transcriptPath) {
-    launchRefinementWorker(sessionId, transcriptPath);
+  if (sessionId && (transcriptPath || compactSummary)) {
+    launchRefinementWorker(sessionId, transcriptPath, compactSummary);
   }
 }
 

@@ -1,7 +1,10 @@
 import { spawn } from 'node:child_process';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { open } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { homedir } from 'node:os';
+import { randomUUID } from 'node:crypto';
 import { readState, writeState } from './state.js';
 // Budget: claude CLI carries a ~9s fixed startup overhead on systems with many
 // MCP servers, so 45s leaves Haiku ~36s of headroom — covers observed p99 on
@@ -152,7 +155,7 @@ export async function spawnRefinement(transcript, currentFocus) {
         });
     });
 }
-export async function triggerFocusRefinement(sessionId, transcriptPath) {
+export async function triggerFocusRefinement(sessionId, transcriptPath, preferredTranscript) {
     if (isRefiningSubprocess())
         return;
     const state = readState(sessionId);
@@ -163,12 +166,14 @@ export async function triggerFocusRefinement(sessionId, transcriptPath) {
     // Prefer the JSONL transcript tail; fall back to the persisted last user prompt
     // when the file is missing or empty (typical on the first prompt, where Claude
     // Code's transcript flush hasn't completed by the time UserPromptSubmit fires).
-    let transcript = '';
-    try {
-        transcript = await readTranscriptTail(transcriptPath);
-    }
-    catch {
-        /* fall through to fallback */
+    let transcript = preferredTranscript?.trim() ? `Compaction summary:\n${preferredTranscript}` : '';
+    if (!transcript && transcriptPath) {
+        try {
+            transcript = await readTranscriptTail(transcriptPath);
+        }
+        catch {
+            /* fall through to fallback */
+        }
     }
     if (!transcript.trim() && state.lastUserPrompt.trim()) {
         transcript = `User: ${state.lastUserPrompt}`;
@@ -225,13 +230,29 @@ export async function triggerFocusRefinement(sessionId, transcriptPath) {
  * Required because Claude Code's 10s UserPromptSubmit hook timeout would otherwise SIGHUP
  * the `claude -p` child before Haiku responds (typically 1-5s but up to 30s).
  */
-export function launchRefinementWorker(sessionId, transcriptPath) {
+function writeWorkerInput(text) {
+    if (!text?.trim())
+        return undefined;
+    const dir = join(homedir(), '.claude', 'claude-recall', 'refine-inputs');
+    mkdirSync(dir, { recursive: true });
+    const path = join(dir, `${randomUUID()}.txt`);
+    writeFileSync(path, text, 'utf-8');
+    return path;
+}
+export function launchRefinementWorker(sessionId, transcriptPath, preferredTranscript) {
     if (isRefiningSubprocess())
         return;
-    if (!sessionId || !transcriptPath)
+    if (!sessionId || (!transcriptPath && !preferredTranscript?.trim()))
         return;
     const workerPath = resolve(dirname(fileURLToPath(import.meta.url)), 'refine-worker.js');
-    const child = spawn(process.execPath, [workerPath, sessionId, transcriptPath], {
+    let inputPath;
+    try {
+        inputPath = writeWorkerInput(preferredTranscript);
+    }
+    catch {
+        inputPath = undefined;
+    }
+    const child = spawn(process.execPath, [workerPath, sessionId, transcriptPath ?? '', inputPath ?? ''], {
         detached: true,
         stdio: 'ignore',
     });

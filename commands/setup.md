@@ -45,5 +45,6 @@ Follow these steps:
    - `dist/statusline.js`
    - `dist/hooks/session-start.js`
    - `dist/hooks/prompt-submit.js`
+   - `dist/hooks/trigger-refinement.js`
 
 6. Report what was configured and tell the user to **restart Claude Code** for the statusline to take effect. Mention that future plugin updates will be picked up automatically without running `/setup` again.

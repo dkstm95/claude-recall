@@ -1,7 +1,10 @@
 import { spawn } from 'node:child_process';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { open } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { homedir } from 'node:os';
+import { randomUUID } from 'node:crypto';
 import { readState, writeState, type RefinementError } from './state.js';
 
 // Budget: claude CLI carries a ~9s fixed startup overhead on systems with many
@@ -178,7 +181,8 @@ export async function spawnRefinement(
 
 export async function triggerFocusRefinement(
   sessionId: string,
-  transcriptPath: string,
+  transcriptPath: string | undefined,
+  preferredTranscript?: string,
 ): Promise<void> {
   if (isRefiningSubprocess()) return;
 
@@ -189,11 +193,13 @@ export async function triggerFocusRefinement(
   // Prefer the JSONL transcript tail; fall back to the persisted last user prompt
   // when the file is missing or empty (typical on the first prompt, where Claude
   // Code's transcript flush hasn't completed by the time UserPromptSubmit fires).
-  let transcript = '';
-  try {
-    transcript = await readTranscriptTail(transcriptPath);
-  } catch {
-    /* fall through to fallback */
+  let transcript = preferredTranscript?.trim() ? `Compaction summary:\n${preferredTranscript}` : '';
+  if (!transcript && transcriptPath) {
+    try {
+      transcript = await readTranscriptTail(transcriptPath);
+    } catch {
+      /* fall through to fallback */
+    }
   }
   if (!transcript.trim() && state.lastUserPrompt.trim()) {
     transcript = `User: ${state.lastUserPrompt}`;
@@ -255,13 +261,32 @@ export async function triggerFocusRefinement(
  * Required because Claude Code's 10s UserPromptSubmit hook timeout would otherwise SIGHUP
  * the `claude -p` child before Haiku responds (typically 1-5s but up to 30s).
  */
-export function launchRefinementWorker(sessionId: string, transcriptPath: string): void {
+function writeWorkerInput(text: string | undefined): string | undefined {
+  if (!text?.trim()) return undefined;
+  const dir = join(homedir(), '.claude', 'claude-recall', 'refine-inputs');
+  mkdirSync(dir, { recursive: true });
+  const path = join(dir, `${randomUUID()}.txt`);
+  writeFileSync(path, text, 'utf-8');
+  return path;
+}
+
+export function launchRefinementWorker(
+  sessionId: string,
+  transcriptPath: string | undefined,
+  preferredTranscript?: string,
+): void {
   if (isRefiningSubprocess()) return;
-  if (!sessionId || !transcriptPath) return;
+  if (!sessionId || (!transcriptPath && !preferredTranscript?.trim())) return;
 
   const workerPath = resolve(dirname(fileURLToPath(import.meta.url)), 'refine-worker.js');
+  let inputPath: string | undefined;
+  try {
+    inputPath = writeWorkerInput(preferredTranscript);
+  } catch {
+    inputPath = undefined;
+  }
 
-  const child = spawn(process.execPath, [workerPath, sessionId, transcriptPath], {
+  const child = spawn(process.execPath, [workerPath, sessionId, transcriptPath ?? '', inputPath ?? ''], {
     detached: true,
     stdio: 'ignore',
   });

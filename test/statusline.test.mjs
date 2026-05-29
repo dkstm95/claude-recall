@@ -101,26 +101,15 @@ test('formatStatusline: Line 2 no longer carries context percentage', () => {
   assert.ok(!clean2.includes('45%'), `Line 2 should NOT show context %, got "${clean2}"`);
 });
 
-// Line 1 context hint tiers. ≥90% is intentionally command-name-free — the
-// render-site comment in src/format.ts explains why.
-for (const { pct, name, expect, forbid } of [
-  { pct: 92, name: '≥90% critical',    expect: '\u26A0 ctx 90%+',  forbid: '/compact' },
-  { pct: 75, name: '70-89% warning',   expect: '(run /compact)',   forbid: '\u26A0' },
-  { pct: 63, name: '60-69% suggest',   expect: '(/compact soon)',  forbid: '\u26A0' },
-  { pct: 45, name: '<60% silent',      expect: null,               forbid: '/compact' },
-]) {
-  test(`formatStatusline: ctx ${pct}% → ${name} hint tier`, () => {
-    const out = formatStatusline(emptyState(), 140, {
-      model: { display_name: 'Sonnet 4.6' },
-      context_window: { used_percentage: pct },
-    }, BASE_CFG);
-    const clean1 = stripAnsi(out.split('\n')[0]);
-    if (expect !== null) {
-      assert.ok(clean1.includes(expect), `expected "${expect}" at ${pct}%, got "${clean1}"`);
-    }
-    assert.ok(!clean1.includes(forbid), `forbidden "${forbid}" appeared at ${pct}%, got "${clean1}"`);
-  });
-}
+test('formatStatusline: Line 1 no longer renders context command hints', () => {
+  const out = formatStatusline(emptyState(), 140, {
+    model: { display_name: 'Sonnet 4.6' },
+    context_window: { used_percentage: 92 },
+  }, BASE_CFG);
+  const clean1 = stripAnsi(out.split('\n')[0]);
+  assert.ok(!clean1.includes('/compact'), `Line 1 should not prescribe compact commands, got "${clean1}"`);
+  assert.ok(!clean1.includes('ctx 90%'), `Line 1 should not duplicate context warnings, got "${clean1}"`);
+});
 
 test('formatStatusline: ctx hidden when line3 is empty (opt-out)', () => {
   const cfg = { ...BASE_CFG, line3: [] };
@@ -148,6 +137,33 @@ test('formatStatusline: worktree slot keeps legacy workspace.git_worktree fallba
   }, cfg);
   const clean1 = stripAnsi(out.split('\n')[0]);
   assert.ok(clean1.includes('legacy-feature'), `Line 1 should show legacy worktree basename, got "${clean1}"`);
+});
+
+test('formatStatusline: model slot expands model id with effort and thinking state', () => {
+  const out = formatStatusline(emptyState(), 160, {
+    model: { display_name: 'Opus', id: 'claude-opus-4-8-20260527' },
+    effort: { level: 'xhigh' },
+    thinking: { enabled: true },
+  }, BASE_CFG);
+  const clean1 = stripAnsi(out.split('\n')[0]);
+  assert.ok(clean1.includes('Opus 4.8'), `model id should enrich display_name, got "${clean1}"`);
+  assert.ok(clean1.includes('xhigh'), `effort level should render with model, got "${clean1}"`);
+  assert.ok(clean1.includes('thinking'), `thinking state should render with model, got "${clean1}"`);
+});
+
+test('formatStatusline: session, agent, and pr slots render from current statusline fields', () => {
+  const cfg = { ...BASE_CFG, line1: ['focus', 'session', 'agent', 'pr', 'model'] };
+  const out = formatStatusline(emptyState(), 180, {
+    session_name: 'release prep',
+    agent: { name: 'reviewer' },
+    pr: { number: 42, title: 'Improve statusline metadata' },
+    model: { display_name: 'Sonnet', id: 'claude-sonnet-4-6' },
+  }, cfg);
+  const clean1 = stripAnsi(out.split('\n')[0]);
+  assert.ok(clean1.includes('release prep'), `session name should render, got "${clean1}"`);
+  assert.ok(clean1.includes('@reviewer'), `agent name should render, got "${clean1}"`);
+  assert.ok(clean1.includes('PR #42'), `PR number should render, got "${clean1}"`);
+  assert.ok(clean1.includes('Sonnet 4.6'), `model id should fill missing version, got "${clean1}"`);
 });
 
 // =============================================================================

@@ -1,6 +1,6 @@
 {
   "name": "claude-recall",
-  "version": "6.3.1",
-  "description": "Session awareness statusline for parallel Claude Code sessions — autonomous focus, git status, rate-limit bars",
+  "version": "6.4.0",
+  "description": "Session awareness statusline for parallel Claude Code sessions — autonomous focus, git status, rate-limit bars, model metadata",
   "author": { "name": "seungilahn" }
 }

@@ -28,6 +28,11 @@ async function main() {
         context_window: resolveContextWindow(input.session_id, input.context_window),
         workspace: input.workspace,
         worktree: input.worktree,
+        effort: input.effort,
+        thinking: input.thinking,
+        session_name: input.session_name,
+        agent: input.agent,
+        pr: input.pr,
         rate_limits: resolveRateLimits(input.rate_limits),
     };
     const config = readConfig();

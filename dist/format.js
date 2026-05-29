@@ -144,15 +144,6 @@ const ERROR_LABELS = {
     auth: '\u26A0 AI auth failed',
     unknown: '\u26A0 AI refinement failed',
 };
-// Ordered high → low so a simple `.find(h => ctxPct >= h.min)` picks the most
-// severe active tier. ≥90% deliberately drops the command name — auto-compact
-// is imminent there, so prescribing an action that may be overridden in
-// seconds is worse than surfacing only the severity.
-const HINT_TIERS = [
-    { min: 90, raw: '  \u26A0 ctx 90%+', color: (tc, s) => tc.red(s) },
-    { min: 70, raw: '  (run /compact)', color: (tc, s) => tc.dim(s) },
-    { min: 60, raw: '  (/compact soon)', color: (tc, s) => tc.dim(s) },
-].map((h) => ({ ...h, width: displayWidth(h.raw) }));
 function renderGitText(gs, cfg) {
     let text = gs.branch;
     if (cfg.showDirty && gs.dirty)
@@ -251,12 +242,58 @@ function makeRightSegment(text, gridOn) {
     const seg = makeSegment(text);
     return gridOn ? padSegmentLeft(seg, CELL_MIN_WIDTH) : seg;
 }
+function titleCase(s) {
+    return s ? s[0].toUpperCase() + s.slice(1).toLowerCase() : s;
+}
+function modelNameFromId(id) {
+    if (!id)
+        return undefined;
+    const match = id.match(/claude-(opus|sonnet|haiku)-(\d+)-(\d+)/i);
+    if (!match)
+        return id;
+    return `${titleCase(match[1])} ${match[2]}.${match[3]}`;
+}
+function displayHasVersion(displayName) {
+    return /\d/.test(displayName);
+}
+function modelDisplay(builtin) {
+    const displayName = builtin?.model?.display_name;
+    const idName = modelNameFromId(builtin?.model?.id);
+    const base = displayName && displayHasVersion(displayName) ? displayName : (idName ?? displayName);
+    if (!base)
+        return undefined;
+    const suffixes = [];
+    const effort = builtin?.effort?.level;
+    if (effort)
+        suffixes.push(effort);
+    if (builtin?.thinking?.enabled)
+        suffixes.push('thinking');
+    return suffixes.length > 0 ? `${base} · ${suffixes.join(' · ')}` : base;
+}
+function prDisplay(pr) {
+    if (!pr)
+        return undefined;
+    if (typeof pr.number === 'number')
+        return `PR #${pr.number}`;
+    return pr.title ? `PR ${truncate(pr.title, 24)}` : undefined;
+}
 function buildLine1RightSegments(ctx) {
     const l1 = ctx.cfg.line1;
     const segs = [];
     const wtName = l1.includes('worktree') ? worktreeName(ctx.builtin) : undefined;
     if (wtName) {
         segs.push(makeRightSegment(ctx.tc.worktree('\u2387 ' + wtName), ctx.gridOn));
+    }
+    if (l1.includes('session') && ctx.builtin?.session_name) {
+        segs.push(makeRightSegment(ctx.tc.worktree('\u00A7 ' + truncate(ctx.builtin.session_name, 24)), ctx.gridOn));
+    }
+    if (l1.includes('agent') && ctx.builtin?.agent?.name) {
+        segs.push(makeRightSegment(ctx.tc.model('@' + truncate(ctx.builtin.agent.name, 24)), ctx.gridOn));
+    }
+    if (l1.includes('pr')) {
+        const prText = prDisplay(ctx.builtin?.pr);
+        if (prText)
+            segs.push(makeRightSegment(ctx.tc.branch(prText), ctx.gridOn));
     }
     if (l1.includes('branch') && ctx.cfg.gitStatus.enabled && ctx.state.gitStatus?.branch) {
         const gitText = renderGitText(ctx.state.gitStatus, ctx.cfg.gitStatus);
@@ -265,22 +302,11 @@ function buildLine1RightSegments(ctx) {
     else if (l1.includes('branch') && ctx.state.branch) {
         segs.push(makeRightSegment(ctx.tc.branch(ctx.state.branch), ctx.gridOn));
     }
-    if (l1.includes('model') && ctx.builtin?.model?.display_name) {
-        segs.push(makeRightSegment(ctx.tc.model(ctx.builtin.model.display_name), ctx.gridOn));
+    const modelText = l1.includes('model') ? modelDisplay(ctx.builtin) : undefined;
+    if (modelText) {
+        segs.push(makeRightSegment(ctx.tc.model(modelText), ctx.gridOn));
     }
     return segs;
-}
-function renderContextHint(ctx, rightWidth) {
-    const tier = ctx.ctxPct != null ? HINT_TIERS.find((h) => ctx.ctxPct >= h.min) : undefined;
-    const spaceForRight = rightWidth > 0 ? rightWidth + 2 : 0;
-    // Reserve against the ACTIVE tier's width, not a global max — this way a
-    // narrow terminal that can fit the short critical hint but not the longer
-    // suggest hint still shows the critical warning when ctx is actually ≥90%.
-    const availWithHint = ctx.termWidth - ctx.prefixWidth - (tier?.width ?? 0) - spaceForRight;
-    if (!tier || availWithHint < MIN_FOCUS_COLS + 5) {
-        return { text: '', width: 0 };
-    }
-    return { text: tier.color(ctx.tc, tier.raw), width: tier.width };
 }
 function renderLine1Left(ctx, availLeft) {
     if (ctx.state.refinementError) {
@@ -296,12 +322,11 @@ function renderLine1Left(ctx, availLeft) {
 }
 function renderLine1(ctx) {
     const rightJoined = progressiveJoin(buildLine1RightSegments(ctx), ctx.termWidth - ctx.prefixWidth, MIN_FOCUS_COLS, ctx.joiner);
-    const hint = renderContextHint(ctx, rightJoined.width);
     const spaceForRight = rightJoined.width > 0 ? rightJoined.width + 2 : 0;
-    const availLeft = ctx.termWidth - ctx.prefixWidth - hint.width - spaceForRight;
+    const availLeft = ctx.termWidth - ctx.prefixWidth - spaceForRight;
     const left = renderLine1Left(ctx, availLeft);
-    const gap = Math.max(1, ctx.termWidth - ctx.prefixWidth - left.width - hint.width - rightJoined.width);
-    return ctx.prefix + left.text + hint.text + ' '.repeat(gap) + rightJoined.text;
+    const gap = Math.max(1, ctx.termWidth - ctx.prefixWidth - left.width - rightJoined.width);
+    return ctx.prefix + left.text + ' '.repeat(gap) + rightJoined.text;
 }
 function renderPromptSegment(ctx, maxPromptCols) {
     if (!ctx.cfg.line2.includes('prompt')) {
@@ -356,7 +381,6 @@ export function formatStatusline(state, termWidth, builtin, config) {
         prefix,
         prefixWidth,
         elapsed,
-        ctxPct,
     };
     const line1 = renderLine1(renderCtx);
     const line2 = renderLine2(renderCtx);

@@ -1,6 +1,6 @@
 # claude-recall
 
-Claude Code plugin (v6.3.1) that provides a session awareness statusline.
+Claude Code plugin (v6.4.0) that provides a session awareness statusline.
 Tracks a Haiku-refined focus label, activity, git status, and prompt count for every parallel Claude Code session.
 
 - **Author**: seungilahn
@@ -28,7 +28,7 @@ npm install          # Install dev dependencies (typescript, @types/node)
 commands/                 # Slash commands (markdown with frontmatter)
   setup.md                #   /setup — configure statusline & launcher script
 hooks/
-  hooks.json              # Hook registration (SessionStart, UserPromptSubmit, PreCompact, SessionEnd)
+  hooks.json              # Hook registration (SessionStart, UserPromptSubmit, PreCompact, PostCompact, SessionEnd)
 src/                      # TypeScript source
   config.ts               #   StatuslineConfig interface, theme colors, config file reader, legacy slot mapping
   state.ts                #   SessionState interface, read/write JSON, cleanup, async getGitStatus + refreshGitStatus helper (used by both statusline and hooks)
@@ -42,7 +42,7 @@ src/                      # TypeScript source
   hooks/
     session-start.ts      #   Initialize/resume session, cleanup old sessions (>7d)
     prompt-submit.ts      #   Track prompts, update git status, trigger focus refinement at power-of-2 turns
-    trigger-refinement.ts #   Shared entry for PreCompact + SessionEnd — spawns the detached refine-worker
+    trigger-refinement.ts #   Shared entry for PreCompact + PostCompact + SessionEnd — spawns the detached refine-worker
 dist/                     # Compiled JS (committed, do NOT edit directly)
 assets/                   # SVG preview images for marketplace
 ```
@@ -53,6 +53,7 @@ assets/                   # SVG preview images for marketplace
 SessionStart event -> session-start.ts        -> creates/updates ~/.claude/claude-recall/sessions/{id}.json
 UserPromptSubmit   -> prompt-submit.ts         -> increments promptCount, updates git status, triggers focus refinement at 2^k turns (k>=0, so 1,2,4,8,...)
 PreCompact         -> trigger-refinement.ts    -> fire-and-forget the refine-worker (natural milestone)
+PostCompact        -> trigger-refinement.ts    -> fire-and-forget the refine-worker with compact_summary when present
 SessionEnd         -> trigger-refinement.ts    -> fire-and-forget the refine-worker (final snapshot)
 Statusline render  -> statusline.ts            -> reads session JSON + stdin metrics + refreshes git status directly -> 1-3 line statusline output
 ```
@@ -61,6 +62,7 @@ Focus refinement path:
 ```
 trigger hook -> refine.ts::launchRefinementWorker (spawn detached refine-worker.js, unref, return immediately)
              -> refine-worker.ts -> refine.ts::triggerFocusRefinement (5s debounce via lastRefinedAt)
+                -> reads compact_summary when supplied, else transcript tail
                 -> spawn `claude -p --model=haiku --tools "" --no-session-persistence ...`
                    with env CLAUDE_RECALL_REFINING=1 (prevents recursive plugin hook firing in child)
                 -> 45s timeout; output text -> state.focus OR refinementError (empty transcript = silent skip, not an error)
@@ -91,7 +93,7 @@ Key fields in `~/.claude/claude-recall/sessions/{sessionId}.json`:
 ## Statusline Layout
 
 ```
-Line 1 (stable):   ▍ [focus|error-label] [ctx-hint]  [worktree] │ [branch*↑N↓N] │ [model]
+Line 1 (stable):   ▍ [focus|error-label]  [worktree] │ [session] │ [agent] │ [PR] │ [branch*↑N↓N] │ [model + effort]
 Line 2 (dynamic):  ▍ [#turn last_prompt]                                          [elapsed]
 Line 3 (opt-out):  ▍ ctx ████░░░░░░ 45% │ 5h ████░░░░░░ 52% (~17:00) │ 7d █░░░░░░░░░ 19% │ $0.03
 ```
@@ -100,17 +102,16 @@ Line 3 (opt-out):  ▍ ctx ████░░░░░░ 45% │ 5h ███�
 - Focus: cyan+bold (default theme), replaced by red `⚠ AI <reason>` when `refinementError` is set
 - Prompt: bold — clear visual hierarchy (customizable via theme)
 - Context %: green (<70%), yellow (70-89%), red (≥90%) — rendered on Line 3 as `ctx` bar since v6.1.0
-- Line 1 context hint tiers (aligned with Anthropic's guidance — run `/compact` ~60% for best summary quality):
-  - **60-69%**: dim `(/compact soon)` — proactive nudge
-  - **70-89%**: dim `(run /compact)` — user can steer preservation via `/compact focus on <topic>`
-  - **≥90%**: red `⚠ ctx 90%+` — auto-compact is imminent or already running; warn without prescribing an action
+- Line 1 no longer renders command-style context hints. Context pressure stays in the Line 3 `ctx` bar.
 - Line 2 renders on every entry (with `(awaiting first prompt)` placeholder before the first prompt)
 - `worktree` slot renders `⎇ <basename>` from stdin `worktree.name` / `worktree.path` (legacy fallback: `workspace.git_worktree`) — opt-in via config
+- `session`, `agent`, and `pr` slots render Claude Code's current `session_name`, `agent.name`, and `pr` metadata — opt-in via config
 - `branch` slot renders `branch[*][↑N][↓N]` — dirty flag + ahead/behind vs `origin/<default>`. 0-count arrows suppressed.
+- `model` slot enriches `model.display_name` with version parsed from `model.id` when needed, plus `effort.level` and `thinking.enabled` suffixes when present.
 - `line3` slot renders ctx + rate_limits bars + cost. Hidden when no data. Opt out with `line3: []`.
 - Elapsed source: stdin `cost.total_duration_ms` (wall-clock since session started, per Claude Code docs) when present, else `Date.now() - state.sessionStartedAt` (same semantic)
 - Minimum widths: focus >= 15 cols (truncated with `…`), prompt >= 30 cols (truncated with `…`)
-- Column grid (v6.3.0+): right-zone segments (worktree / branch / model / elapsed) left-pad to a uniform 10-col cell; a dim `│` (U+2502) joins them. This anchors `│` positions across renders and aligns Line 2's elapsed left edge with Line 1's model left edge. Long content (e.g. `feature/long-branch-name*`) overflows its cell — alignment is a soft guide, not a hard constraint.
+- Column grid (v6.3.0+): right-zone segments (worktree / session / agent / pr / branch / model / elapsed) left-pad to a uniform 10-col cell; a dim `│` (U+2502) joins them. This anchors `│` positions across renders and aligns Line 2's elapsed left edge with Line 1's model left edge. Long content (e.g. `feature/long-branch-name*`) overflows its cell — alignment is a soft guide, not a hard constraint.
 - Configurable via `~/.claude/claude-recall/config.json` (line1/line2/line3 slots, gitStatus toggles, theme, `separator`). Set `"separator": ""` to disable the grid and fall back to 2-space joiners (pre-v6.3.0 look). Any single glyph works (`"┊"`, `"|"`, etc.); dim color is applied per theme.
 
 ### Priority rules (what drops as width shrinks)
@@ -144,6 +145,7 @@ Effect at the 120-col fallback with all four segments populated: L0 (~91 cols) f
 - **Theme system**: `ThemeColors` interface abstracts all color calls; 4 presets (default, light, minimal, vivid). `COLORFGBG`-based auto-select picks `light` on light terminals when `theme` is omitted; `NO_COLOR` strips all ANSI output.
 - **Config-driven statusline**: line1/line2/line3 element arrays control which segments render.
 - **Focus refinement recursion guard**: `refine.ts` sets `CLAUDE_RECALL_REFINING=1` in the child env; all hooks early-return when this env var is set, preventing the spawned `claude -p` from re-triggering the plugin.
+- **PostCompact summary preference**: `trigger-refinement.ts` passes Claude Code's `compact_summary` to the detached worker when present; transcript tail remains the fallback for PreCompact, SessionEnd, and prompt-triggered refinements.
 - **Debounce on refinement**: `shouldRefine()` checks `lastRefinedAt` against a 5s window. Optimistic write of `lastRefinedAt` before the `claude -p` call narrows the concurrent-spawn race window.
 
 ## Coding Conventions
@@ -168,9 +170,9 @@ Do this in the same commit, not as a separate step.
 ## Hook Configuration
 
 All hooks defined in `hooks/hooks.json`:
-- `SessionStart` / `UserPromptSubmit` / `PreCompact` / `SessionEnd` — all **timeout 10s**. Even the refinement triggers finish fast because `launchRefinementWorker` spawns a detached `refine-worker.js` and returns immediately; the worker carries the 45s Haiku budget outside the hook window.
+- `SessionStart` / `UserPromptSubmit` / `PreCompact` / `PostCompact` / `SessionEnd` — all **timeout 10s**. Even the refinement triggers finish fast because `launchRefinementWorker` spawns a detached `refine-worker.js` and returns immediately; the worker carries the 45s Haiku budget outside the hook window.
 - Matcher: `"*"` (triggers on all events)
-- Command pattern: `node "${CLAUDE_PLUGIN_ROOT}/dist/hooks/<name>.js"` — `PreCompact` and `SessionEnd` share `trigger-refinement.js`.
+- Command pattern: `node "${CLAUDE_PLUGIN_ROOT}/dist/hooks/<name>.js"` — `PreCompact`, `PostCompact`, and `SessionEnd` share `trigger-refinement.js`.
 
 ## Important Notes
 

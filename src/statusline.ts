@@ -8,11 +8,16 @@ import { resolveContextWindow, type ContextWindowData } from './context-window-c
 interface StatuslineInput {
   session_id?: string;
   cwd?: string;
-  model?: { display_name?: string };
+  model?: { display_name?: string; id?: string };
   cost?: { total_cost_usd?: number; total_duration_ms?: number };
   context_window?: ContextWindowData;
   workspace?: { git_worktree?: string; current_dir?: string; project_dir?: string };
   worktree?: { name?: string; path?: string; branch?: string; original_cwd?: string; original_branch?: string };
+  effort?: { level?: string };
+  thinking?: { enabled?: boolean };
+  session_name?: string;
+  agent?: { name?: string };
+  pr?: { number?: number; title?: string; url?: string };
   rate_limits?: RateLimitsData;
 }
 
@@ -41,6 +46,11 @@ async function main(): Promise<void> {
     context_window: resolveContextWindow(input.session_id, input.context_window),
     workspace: input.workspace,
     worktree: input.worktree,
+    effort: input.effort,
+    thinking: input.thinking,
+    session_name: input.session_name,
+    agent: input.agent,
+    pr: input.pr,
     rate_limits: resolveRateLimits(input.rate_limits),
   };
 

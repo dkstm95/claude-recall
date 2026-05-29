@@ -4,11 +4,16 @@ import type { RateLimitsData } from './rate-limits-cache.js';
 import { getThemeColors } from './config.js';
 
 export interface BuiltinData {
-  model?: { display_name?: string };
+  model?: { display_name?: string; id?: string };
   cost?: { total_cost_usd?: number; total_duration_ms?: number };
   context_window?: { used_percentage?: number };
   workspace?: { git_worktree?: string };
   worktree?: { name?: string; path?: string; branch?: string; original_cwd?: string; original_branch?: string };
+  effort?: { level?: string };
+  thinking?: { enabled?: boolean };
+  session_name?: string;
+  agent?: { name?: string };
+  pr?: { number?: number; title?: string; url?: string };
   rate_limits?: RateLimitsData;
 }
 
@@ -185,16 +190,6 @@ const ERROR_LABELS: Record<RefinementError['code'], string> = {
   unknown: '\u26A0 AI refinement failed',
 };
 
-// Ordered high → low so a simple `.find(h => ctxPct >= h.min)` picks the most
-// severe active tier. ≥90% deliberately drops the command name — auto-compact
-// is imminent there, so prescribing an action that may be overridden in
-// seconds is worse than surfacing only the severity.
-const HINT_TIERS = [
-  { min: 90, raw: '  \u26A0 ctx 90%+',  color: (tc: ThemeColors, s: string) => tc.red(s) },
-  { min: 70, raw: '  (run /compact)',   color: (tc: ThemeColors, s: string) => tc.dim(s) },
-  { min: 60, raw: '  (/compact soon)',  color: (tc: ThemeColors, s: string) => tc.dim(s) },
-].map((h) => ({ ...h, width: displayWidth(h.raw) }));
-
 function renderGitText(gs: GitStatus, cfg: StatuslineConfig['gitStatus']): string {
   let text = gs.branch;
   if (cfg.showDirty && gs.dirty) text += '*';
@@ -334,7 +329,6 @@ interface RenderContext {
   prefix: string;
   prefixWidth: number;
   elapsed: string;
-  ctxPct: number | undefined;
 }
 
 function makeSegment(text: string): Segment {
@@ -346,6 +340,41 @@ function makeRightSegment(text: string, gridOn: boolean): Segment {
   return gridOn ? padSegmentLeft(seg, CELL_MIN_WIDTH) : seg;
 }
 
+function titleCase(s: string): string {
+  return s ? s[0]!.toUpperCase() + s.slice(1).toLowerCase() : s;
+}
+
+function modelNameFromId(id: string | undefined): string | undefined {
+  if (!id) return undefined;
+  const match = id.match(/claude-(opus|sonnet|haiku)-(\d+)-(\d+)/i);
+  if (!match) return id;
+  return `${titleCase(match[1]!)} ${match[2]}.${match[3]}`;
+}
+
+function displayHasVersion(displayName: string): boolean {
+  return /\d/.test(displayName);
+}
+
+function modelDisplay(builtin: BuiltinData | undefined): string | undefined {
+  const displayName = builtin?.model?.display_name;
+  const idName = modelNameFromId(builtin?.model?.id);
+  const base = displayName && displayHasVersion(displayName) ? displayName : (idName ?? displayName);
+  if (!base) return undefined;
+
+  const suffixes: string[] = [];
+  const effort = builtin?.effort?.level;
+  if (effort) suffixes.push(effort);
+  if (builtin?.thinking?.enabled) suffixes.push('thinking');
+
+  return suffixes.length > 0 ? `${base} · ${suffixes.join(' · ')}` : base;
+}
+
+function prDisplay(pr: BuiltinData['pr']): string | undefined {
+  if (!pr) return undefined;
+  if (typeof pr.number === 'number') return `PR #${pr.number}`;
+  return pr.title ? `PR ${truncate(pr.title, 24)}` : undefined;
+}
+
 function buildLine1RightSegments(ctx: RenderContext): Segment[] {
   const l1 = ctx.cfg.line1;
   const segs: Segment[] = [];
@@ -355,6 +384,19 @@ function buildLine1RightSegments(ctx: RenderContext): Segment[] {
     segs.push(makeRightSegment(ctx.tc.worktree('\u2387 ' + wtName), ctx.gridOn));
   }
 
+  if (l1.includes('session') && ctx.builtin?.session_name) {
+    segs.push(makeRightSegment(ctx.tc.worktree('\u00A7 ' + truncate(ctx.builtin.session_name, 24)), ctx.gridOn));
+  }
+
+  if (l1.includes('agent') && ctx.builtin?.agent?.name) {
+    segs.push(makeRightSegment(ctx.tc.model('@' + truncate(ctx.builtin.agent.name, 24)), ctx.gridOn));
+  }
+
+  if (l1.includes('pr')) {
+    const prText = prDisplay(ctx.builtin?.pr);
+    if (prText) segs.push(makeRightSegment(ctx.tc.branch(prText), ctx.gridOn));
+  }
+
   if (l1.includes('branch') && ctx.cfg.gitStatus.enabled && ctx.state.gitStatus?.branch) {
     const gitText = renderGitText(ctx.state.gitStatus, ctx.cfg.gitStatus);
     segs.push(makeRightSegment(ctx.tc.branch(gitText), ctx.gridOn));
@@ -362,24 +404,12 @@ function buildLine1RightSegments(ctx: RenderContext): Segment[] {
     segs.push(makeRightSegment(ctx.tc.branch(ctx.state.branch), ctx.gridOn));
   }
 
-  if (l1.includes('model') && ctx.builtin?.model?.display_name) {
-    segs.push(makeRightSegment(ctx.tc.model(ctx.builtin.model.display_name), ctx.gridOn));
+  const modelText = l1.includes('model') ? modelDisplay(ctx.builtin) : undefined;
+  if (modelText) {
+    segs.push(makeRightSegment(ctx.tc.model(modelText), ctx.gridOn));
   }
 
   return segs;
-}
-
-function renderContextHint(ctx: RenderContext, rightWidth: number): Segment {
-  const tier = ctx.ctxPct != null ? HINT_TIERS.find((h) => ctx.ctxPct! >= h.min) : undefined;
-  const spaceForRight = rightWidth > 0 ? rightWidth + 2 : 0;
-  // Reserve against the ACTIVE tier's width, not a global max — this way a
-  // narrow terminal that can fit the short critical hint but not the longer
-  // suggest hint still shows the critical warning when ctx is actually ≥90%.
-  const availWithHint = ctx.termWidth - ctx.prefixWidth - (tier?.width ?? 0) - spaceForRight;
-  if (!tier || availWithHint < MIN_FOCUS_COLS + 5) {
-    return { text: '', width: 0 };
-  }
-  return { text: tier.color(ctx.tc, tier.raw), width: tier.width };
 }
 
 function renderLine1Left(ctx: RenderContext, availLeft: number): Segment {
@@ -405,12 +435,11 @@ function renderLine1(ctx: RenderContext): string {
     MIN_FOCUS_COLS,
     ctx.joiner,
   );
-  const hint = renderContextHint(ctx, rightJoined.width);
   const spaceForRight = rightJoined.width > 0 ? rightJoined.width + 2 : 0;
-  const availLeft = ctx.termWidth - ctx.prefixWidth - hint.width - spaceForRight;
+  const availLeft = ctx.termWidth - ctx.prefixWidth - spaceForRight;
   const left = renderLine1Left(ctx, availLeft);
-  const gap = Math.max(1, ctx.termWidth - ctx.prefixWidth - left.width - hint.width - rightJoined.width);
-  return ctx.prefix + left.text + hint.text + ' '.repeat(gap) + rightJoined.text;
+  const gap = Math.max(1, ctx.termWidth - ctx.prefixWidth - left.width - rightJoined.width);
+  return ctx.prefix + left.text + ' '.repeat(gap) + rightJoined.text;
 }
 
 function renderPromptSegment(ctx: RenderContext, maxPromptCols: number): Segment {
@@ -480,7 +509,6 @@ export function formatStatusline(
     prefix,
     prefixWidth,
     elapsed,
-    ctxPct,
   };
 
   const line1 = renderLine1(renderCtx);

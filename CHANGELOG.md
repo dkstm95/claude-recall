@@ -1,5 +1,17 @@
 # Changelog
 
+## 6.4.0
+
+### Added
+
+- **Model slot now reflects current Claude Code model metadata.** When Claude Code supplies `model.id`, claude-recall fills in concrete model versions such as `Opus 4.8` even when `model.display_name` is only `Opus`. The same slot appends `effort.level` and `thinking.enabled` when present, e.g. `Opus 4.8 · xhigh · thinking`.
+- **Optional Line 1 slots for current session metadata.** `line1` now accepts `session`, `agent`, and `pr`, rendering Claude Code's `session_name`, `agent.name`, and `pr` fields when present.
+- **PostCompact refinement trigger.** `hooks/hooks.json` now registers `PostCompact`; when Claude Code provides `compact_summary`, the detached refinement worker uses that summary before falling back to the transcript tail.
+
+### Removed
+
+- **Line 1 context command hints removed.** The statusline no longer renders `(/compact soon)`, `(run /compact)`, or `⚠ ctx 90%+` on Line 1. Context pressure remains visible through the Line 3 `ctx` bar when enabled, without prescribing compact commands.
+
 ## 6.3.1
 
 ### Fixed

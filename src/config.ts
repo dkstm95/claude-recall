@@ -29,7 +29,7 @@ const DEFAULT_CONFIG: StatuslineConfig = {
   separator: '│',
 };
 
-const VALID_LINE1 = ['focus', 'branch', 'model', 'worktree'];
+const VALID_LINE1 = ['focus', 'branch', 'model', 'worktree', 'session', 'agent', 'pr'];
 const VALID_LINE2 = ['turn', 'prompt', 'elapsed'];
 const VALID_LINE3 = ['context', 'rate_limits', 'seven_day', 'cost'];
 
