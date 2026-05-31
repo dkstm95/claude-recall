@@ -1,6 +1,4 @@
-import { join } from 'node:path';
-import { homedir } from 'node:os';
-import { readJsonFile, writeJsonFileAtomic } from './json-file.js';
+import { JsonCache, claudeRecallPath } from './cache-store.js';
 
 export interface RateLimitWindow {
   used_percentage?: number;
@@ -12,8 +10,12 @@ export interface RateLimitsData {
   seven_day?: RateLimitWindow;
 }
 
-const BASE_DIR = join(homedir(), '.claude', 'claude-recall');
-const CACHE_PATH = join(BASE_DIR, 'rate-limits.json');
+const cacheStore = new JsonCache<RateLimitsData | null>(
+  claudeRecallPath('rate-limits.json'),
+  (value) => value && typeof value === 'object' && !Array.isArray(value)
+    ? value as RateLimitsData
+    : null,
+);
 
 function hasPct(w: RateLimitWindow | undefined): w is RateLimitWindow {
   return !!w && typeof w.used_percentage === 'number';
@@ -43,7 +45,7 @@ function dataEqual(
 }
 
 export function readRateLimitsCache(nowMs: number = Date.now()): RateLimitsData | null {
-  const parsed = readJsonFile<RateLimitsData>(CACHE_PATH);
+  const parsed = cacheStore.read();
   if (!parsed) return null;
   const out: RateLimitsData = {};
   if (isFresh(parsed.five_hour, nowMs)) out.five_hour = parsed.five_hour;
@@ -52,11 +54,7 @@ export function readRateLimitsCache(nowMs: number = Date.now()): RateLimitsData 
 }
 
 export function writeRateLimitsCache(data: RateLimitsData): void {
-  try {
-    writeJsonFileAtomic(CACHE_PATH, data);
-  } catch {
-    // best-effort; cache miss on next read is harmless
-  }
+  cacheStore.write(data);
 }
 
 // Field-wise merge within each window: live's used_percentage is authoritative,

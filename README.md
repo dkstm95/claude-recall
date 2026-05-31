@@ -171,6 +171,9 @@ rm -rf ~/.claude/claude-recall/
 <details>
 <summary><strong>Development</strong></summary>
 
+Canonical project behavior, architecture, state schema, and release rules live in
+[`docs/PROJECT.md`](docs/PROJECT.md).
+
 ```bash
 git clone https://github.com/dkstm95/claude-recall.git
 cd claude-recall

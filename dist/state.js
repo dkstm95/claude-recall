@@ -31,28 +31,35 @@ export function getStateDir() {
 export function getStatePath(sessionId) {
     return join(getStateDir(), `${sessionId}.json`);
 }
-export function readState(sessionId) {
-    const parsed = readJsonFile(getStatePath(sessionId));
-    if (!parsed)
-        return null;
-    if (parsed['focus'] === undefined && typeof parsed['purpose'] === 'string') {
-        parsed['focus'] = parsed['purpose'];
-    }
-    const lastActivityAt = parsed['lastActivityAt'] ?? new Date().toISOString();
+function stringValue(value, fallback) {
+    return typeof value === 'string' ? value : fallback;
+}
+function numberValue(value, fallback) {
+    return typeof value === 'number' ? value : fallback;
+}
+function normalizeSessionState(parsed, fallbackSessionId) {
+    const focus = parsed['focus'] === undefined && typeof parsed['purpose'] === 'string'
+        ? parsed['purpose']
+        : parsed['focus'];
+    const lastActivityAt = stringValue(parsed['lastActivityAt'], new Date().toISOString());
     return {
-        sessionId: parsed['sessionId'] ?? sessionId,
-        focus: parsed['focus'] ?? '',
-        branch: parsed['branch'] ?? '',
+        sessionId: stringValue(parsed['sessionId'], fallbackSessionId),
+        focus: stringValue(focus, ''),
+        branch: stringValue(parsed['branch'], ''),
         gitStatus: parsed['gitStatus'] ?? null,
-        cwd: parsed['cwd'] ?? '',
-        promptCount: parsed['promptCount'] ?? 0,
-        lastUserPrompt: parsed['lastUserPrompt'] ?? '',
-        sessionStartedAt: parsed['sessionStartedAt'] ?? lastActivityAt,
+        cwd: stringValue(parsed['cwd'], ''),
+        promptCount: numberValue(parsed['promptCount'], 0),
+        lastUserPrompt: stringValue(parsed['lastUserPrompt'], ''),
+        sessionStartedAt: stringValue(parsed['sessionStartedAt'], lastActivityAt),
         lastActivityAt,
         lastRefinedAt: parsed['lastRefinedAt'] ?? null,
         refinementError: parsed['refinementError'] ?? null,
         lastRefinement: parsed['lastRefinement'] ?? null,
     };
+}
+export function readState(sessionId) {
+    const parsed = readJsonFile(getStatePath(sessionId));
+    return parsed ? normalizeSessionState(parsed, sessionId) : null;
 }
 export function writeState(sessionId, state) {
     writeJsonFileAtomic(getStatePath(sessionId), state);

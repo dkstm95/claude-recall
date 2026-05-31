@@ -170,6 +170,9 @@ rm -rf ~/.claude/claude-recall/
 <details>
 <summary><strong>개발</strong></summary>
 
+프로젝트 동작, 아키텍처, 상태 스키마, 릴리스 규칙의 기준 문서는
+[`docs/PROJECT.md`](docs/PROJECT.md)입니다.
+
 ```bash
 git clone https://github.com/dkstm95/claude-recall.git
 cd claude-recall

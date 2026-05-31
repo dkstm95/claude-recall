@@ -1,6 +1,4 @@
-import { join } from 'node:path';
-import { homedir } from 'node:os';
-import { readJsonFile, writeJsonFileAtomic } from './json-file.js';
+import { JsonCache, claudeRecallPath, objectOr } from './cache-store.js';
 
 export interface ContextWindowData {
   used_percentage?: number;
@@ -13,23 +11,14 @@ interface ContextCacheEntry {
 
 type ContextCache = Record<string, ContextCacheEntry>;
 
-const BASE_DIR = join(homedir(), '.claude', 'claude-recall');
-const CACHE_PATH = join(BASE_DIR, 'context-windows.json');
+const cacheStore = new JsonCache<ContextCache>(claudeRecallPath('context-windows.json'), objectOr(() => ({})));
 
 function readCache(): ContextCache {
-  const parsed = readJsonFile<unknown>(CACHE_PATH);
-  if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-    return parsed as ContextCache;
-  }
-  return {};
+  return cacheStore.read();
 }
 
 function writeCache(cache: ContextCache): void {
-  try {
-    writeJsonFileAtomic(CACHE_PATH, cache);
-  } catch {
-    // best-effort; cache miss on next read is harmless
-  }
+  cacheStore.write(cache);
 }
 
 export function readContextCache(): ContextCache {

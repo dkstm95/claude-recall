@@ -1,106 +1,37 @@
-import type { SessionState, RefinementError, GitStatus } from './state.js';
-import type { StatuslineConfig, ThemeColors } from './config.js';
-import type { RateLimitsData } from './rate-limits-cache.js';
+import type { SessionState } from './state.js';
+import type { StatuslineConfig } from './config.js';
+import type { RenderContext } from './statusline-render-context.js';
+import type { BuiltinData } from './statusline-types.js';
 import { getThemeColors } from './config.js';
+import {
+  formatElapsed,
+  formatElapsedMs,
+} from './terminal-text.js';
+import {
+  makeJoiner,
+} from './statusline-layout.js';
+import { renderLine1 } from './statusline-line1.js';
+import { renderLine2 } from './statusline-line2.js';
+import { renderLine3 } from './statusline-line3.js';
 
-export interface BuiltinData {
-  model?: { display_name?: string; id?: string };
-  cost?: { total_cost_usd?: number; total_duration_ms?: number };
-  context_window?: { used_percentage?: number };
-  workspace?: { git_worktree?: string };
-  worktree?: { name?: string; path?: string; branch?: string; original_cwd?: string; original_branch?: string };
-  effort?: { level?: string };
-  thinking?: { enabled?: boolean };
-  session_name?: string;
-  agent?: { name?: string };
-  pr?: { number?: number; title?: string; url?: string };
-  rate_limits?: RateLimitsData;
-}
-
-// CJK / fullwidth ranges occupy 2 terminal columns
-function isWide(code: number): boolean {
-  return (
-    (code >= 0x1100 && code <= 0x115f) ||
-    (code >= 0x2e80 && code <= 0x303e) ||
-    (code >= 0x3040 && code <= 0x33bf) ||
-    (code >= 0x3400 && code <= 0x4dbf) ||
-    (code >= 0x4e00 && code <= 0xa4cf) ||
-    (code >= 0xac00 && code <= 0xd7af) ||
-    (code >= 0xf900 && code <= 0xfaff) ||
-    (code >= 0xfe30 && code <= 0xfe4f) ||
-    (code >= 0xff01 && code <= 0xff60) ||
-    (code >= 0xffe0 && code <= 0xffe6) ||
-    (code >= 0x20000 && code <= 0x2fffd) ||
-    (code >= 0x30000 && code <= 0x3fffd)
-  );
-}
-
-export function displayWidth(str: string): number {
-  let w = 0;
-  for (const ch of str) {
-    w += isWide(ch.codePointAt(0)!) ? 2 : 1;
-  }
-  return w;
-}
-
-export function stripAnsi(s: string): string {
-  return s.replace(/\x1b\[[0-9;]*m/g, '');
-}
-
-function visibleWidth(s: string): number {
-  return displayWidth(stripAnsi(s));
-}
-
-export function truncate(text: string, maxCols: number): string {
-  const clean = text.replace(/[\n\t\r]/g, ' ');
-  if (displayWidth(clean) <= maxCols) return clean;
-  let result = '';
-  let rc = 0;
-  for (const c of clean) {
-    const cw = isWide(c.codePointAt(0)!) ? 2 : 1;
-    if (rc + cw > maxCols - 1) break;
-    result += c;
-    rc += cw;
-  }
-  return result + '\u2026';
-}
-
-function formatDurationMs(ms: number): string {
-  if (isNaN(ms) || ms < 0) return '0m';
-  const mins = Math.floor(ms / 60000);
-  const hours = Math.floor(mins / 60);
-  const days = Math.floor(hours / 24);
-
-  if (days > 0) return `${days}d ${hours % 24}h`;
-  if (hours > 0) return `${hours}h ${mins % 60}m`;
-  return `${mins}m`;
-}
-
-export function formatElapsed(isoString: string): string {
-  if (!isoString) return '0m';
-  return formatDurationMs(Date.now() - new Date(isoString).getTime());
-}
-
-export function formatElapsedMs(ms: number): string {
-  return formatDurationMs(ms);
-}
-
-// Claude Code pipes stdout/stderr to the statusline, so stream `.columns`
-// values are normally unavailable. Since Claude Code 2.1.153, statusline
-// commands receive COLUMNS/LINES in their environment; older versions and
-// non-Claude invocations still fall back to 120. That fallback keeps Line 3's
-// full L0 render (~91 cols) visible when no reliable width is propagated.
-const WIDTH_FALLBACK = 120;
-
-export function getTerminalWidth(): number {
-  const stdout = process.stdout.columns;
-  if (typeof stdout === 'number' && stdout > 0) return stdout;
-  const stderr = process.stderr.columns;
-  if (typeof stderr === 'number' && stderr > 0) return stderr;
-  const env = parseInt(process.env.COLUMNS ?? '', 10);
-  if (!isNaN(env) && env > 0) return env;
-  return WIDTH_FALLBACK;
-}
+export {
+  displayWidth,
+  formatElapsed,
+  formatElapsedMs,
+  getTerminalWidth,
+  stripAnsi,
+  truncate,
+} from './terminal-text.js';
+export {
+  makeJoiner,
+  padSegmentLeft,
+  progressiveJoin,
+  type Joiner,
+  type Segment,
+} from './statusline-layout.js';
+export type { BuiltinData } from './statusline-types.js';
+export { FOCUS_PLACEHOLDER } from './statusline-line1.js';
+export { PROMPT_PLACEHOLDER } from './statusline-line2.js';
 
 function sessionColor(cwd: string, branch: string, accents: ((s: string) => string)[]): (s: string) => string {
   const key = `${cwd}:${branch}`;
@@ -111,27 +42,6 @@ function sessionColor(cwd: string, branch: string, accents: ((s: string) => stri
   return accents[Math.abs(hash) % accents.length];
 }
 
-export interface Segment {
-  text: string;
-  width: number;
-}
-
-export interface Joiner {
-  text: string;
-  width: number;
-}
-
-const MIN_FOCUS_COLS = 15;
-const MIN_PROMPT_COLS = 30;
-
-// Uniform min cell width for right-zone segments (worktree, branch, model, elapsed).
-// Left-padding to this width keeps `│` separators and rightmost content edges on
-// stable columns across renders. Content wider than the min simply overflows —
-// the grid is a soft alignment guide, not a hard constraint.
-const CELL_MIN_WIDTH = 10;
-
-const DEFAULT_JOINER: Joiner = { text: '  ', width: 2 };
-
 const DEFAULT_FORMAT_CONFIG: StatuslineConfig = {
   line1: ['focus', 'branch', 'model'],
   line2: ['turn', 'prompt', 'elapsed'],
@@ -140,342 +50,6 @@ const DEFAULT_FORMAT_CONFIG: StatuslineConfig = {
   theme: 'default',
   separator: '│',
 };
-
-export const FOCUS_PLACEHOLDER = '(no focus yet)';
-export const PROMPT_PLACEHOLDER = '(awaiting first prompt)';
-
-export function makeJoiner(separator: string, tc: ThemeColors): Joiner {
-  if (!separator) return DEFAULT_JOINER;
-  return { text: ` ${tc.dim(separator)} `, width: 1 + displayWidth(separator) + 1 };
-}
-
-export function padSegmentLeft(seg: Segment, minWidth: number): Segment {
-  if (seg.width >= minWidth) return seg;
-  return { text: ' '.repeat(minWidth - seg.width) + seg.text, width: minWidth };
-}
-
-export function progressiveJoin(
-  segments: Segment[],
-  budget: number,
-  minLeft: number,
-  joiner: Joiner = DEFAULT_JOINER,
-): { text: string; width: number } {
-  for (let count = segments.length; count >= 1; count--) {
-    const used = segments.slice(0, count);
-    const text = used.map((s) => s.text).join(joiner.text);
-    const w = used.reduce((sum, s) => sum + s.width, 0) + (used.length - 1) * joiner.width;
-    if (budget - w >= minLeft || count === 1) {
-      return { text, width: w };
-    }
-  }
-  return { text: '', width: 0 };
-}
-
-function basenameOf(p: string): string {
-  const parts = p.split(/[\\/]+/).filter(Boolean);
-  return parts.length > 0 ? parts[parts.length - 1] : p;
-}
-
-function worktreeName(builtin: BuiltinData | undefined): string | undefined {
-  const modern = builtin?.worktree?.name ?? builtin?.worktree?.path;
-  if (modern) return basenameOf(modern);
-  const legacy = builtin?.workspace?.git_worktree;
-  return legacy ? basenameOf(legacy) : undefined;
-}
-
-const ERROR_LABELS: Record<RefinementError['code'], string> = {
-  timeout: '\u26A0 AI timeout',
-  rate_limit: '\u26A0 AI rate limited',
-  auth: '\u26A0 AI auth failed',
-  unknown: '\u26A0 AI refinement failed',
-};
-
-function renderGitText(gs: GitStatus, cfg: StatuslineConfig['gitStatus']): string {
-  let text = gs.branch;
-  if (cfg.showDirty && gs.dirty) text += '*';
-  if (cfg.showAheadBehind) {
-    if (gs.ahead > 0) text += `\u2191${gs.ahead}`;
-    if (gs.behind > 0) text += `\u2193${gs.behind}`;
-  }
-  return text;
-}
-
-interface BarThresholds {
-  red: number;
-  yellow: number;
-}
-
-const DEFAULT_THRESHOLDS: BarThresholds = { red: 80, yellow: 50 };
-const CTX_THRESHOLDS: BarThresholds = { red: 90, yellow: 70 };
-
-function renderBar(
-  pct: number,
-  width: number,
-  tc: ThemeColors,
-  th: BarThresholds = DEFAULT_THRESHOLDS,
-): string {
-  const clamped = Math.max(0, Math.min(100, pct));
-  const filled = Math.round((clamped / 100) * width);
-  const empty = width - filled;
-  const bar = '\u2588'.repeat(filled) + '\u2591'.repeat(empty);
-  const color = clamped >= th.red ? tc.red : clamped >= th.yellow ? tc.yellow : tc.green;
-  return color(bar);
-}
-
-function pad2(n: number): string {
-  return n < 10 ? `0${n}` : `${n}`;
-}
-
-function formatHM(d: Date): string {
-  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
-}
-
-function formatFiveHourReset(resetsAtEpochSec: number): string {
-  return `(~${formatHM(new Date(resetsAtEpochSec * 1000))})`;
-}
-
-function formatSevenDayReset(resetsAtEpochSec: number): string {
-  const d = new Date(resetsAtEpochSec * 1000);
-  return `(~${d.getMonth() + 1}/${d.getDate()} ${formatHM(d)})`;
-}
-
-function formatUsageSegment(
-  label: string,
-  pct: number,
-  tc: ThemeColors,
-  resetText?: string,
-  th: BarThresholds = DEFAULT_THRESHOLDS,
-): { text: string; width: number } {
-  const bar = renderBar(pct, 10, tc, th);
-  const pctText = `${Math.round(pct)}%`;
-  const labelColored = tc.dim(label);
-  const pctColored = pct >= th.red ? tc.red(pctText) : pct >= th.yellow ? tc.yellow(pctText) : tc.green(pctText);
-  const resetPart = resetText ? ` ${tc.dim(resetText)}` : '';
-  const text = `${labelColored} ${bar} ${pctColored}${resetPart}`;
-  return { text, width: visibleWidth(text) };
-}
-
-function buildLine3Segments(
-  l3: readonly string[],
-  builtin: BuiltinData | undefined,
-  ctxPct: number | undefined,
-  tc: ThemeColors,
-  compactLevel: 0 | 1 | 2,
-): Segment[] {
-  const segs: Segment[] = [];
-  if (l3.includes('context') && ctxPct != null) {
-    segs.push(formatUsageSegment('ctx', ctxPct, tc, undefined, CTX_THRESHOLDS));
-  }
-  const fiveHour = builtin?.rate_limits?.five_hour;
-  if (l3.includes('rate_limits') && fiveHour?.used_percentage != null) {
-    const resetText = compactLevel < 2 && fiveHour.resets_at != null
-      ? formatFiveHourReset(fiveHour.resets_at)
-      : undefined;
-    segs.push(formatUsageSegment('5h', fiveHour.used_percentage, tc, resetText));
-  }
-  const sevenDay = builtin?.rate_limits?.seven_day;
-  // 7d's reset text ("(~M/D HH:MM)") is ~14 cols, 5h's ~10, so 7d's drops first.
-  if (l3.includes('seven_day') && sevenDay?.used_percentage != null) {
-    const resetText = compactLevel < 1 && sevenDay.resets_at != null
-      ? formatSevenDayReset(sevenDay.resets_at)
-      : undefined;
-    segs.push(formatUsageSegment('7d', sevenDay.used_percentage, tc, resetText));
-  }
-  if (l3.includes('cost') && builtin?.cost?.total_cost_usd != null) {
-    const cost = builtin.cost.total_cost_usd;
-    const s = tc.dim(cost < 0.01 ? '$0.00' : `$${cost.toFixed(2)}`);
-    segs.push({ text: s, width: visibleWidth(s) });
-  }
-  return segs;
-}
-
-function segmentsTotalWidth(segs: Segment[], joinerWidth: number): number {
-  if (segs.length === 0) return 0;
-  return segs.reduce((sum, s) => sum + s.width, 0) + (segs.length - 1) * joinerWidth;
-}
-
-function renderLine3(
-  l3: readonly string[],
-  builtin: BuiltinData | undefined,
-  ctxPct: number | undefined,
-  tc: ThemeColors,
-  budget: number,
-  joiner: Joiner,
-): string | null {
-  const fullSegs = buildLine3Segments(l3, builtin, ctxPct, tc, 0);
-  if (fullSegs.length === 0) return null;
-
-  let segs = fullSegs;
-  for (const level of [0, 1, 2] as const) {
-    segs = level === 0 ? fullSegs : buildLine3Segments(l3, builtin, ctxPct, tc, level);
-    if (segmentsTotalWidth(segs, joiner.width) <= budget) {
-      return segs.map((s) => s.text).join(joiner.text);
-    }
-  }
-
-  // Even fully compacted (L2) exceeds the budget: drop segments right-to-left.
-  // progressiveJoin keeps at least one, so ctx always survives when present.
-  return progressiveJoin(segs, budget, 0, joiner).text;
-}
-
-interface RenderContext {
-  state: SessionState;
-  termWidth: number;
-  builtin: BuiltinData | undefined;
-  cfg: StatuslineConfig;
-  tc: ThemeColors;
-  joiner: Joiner;
-  gridOn: boolean;
-  prefix: string;
-  prefixWidth: number;
-  elapsed: string;
-}
-
-function makeSegment(text: string): Segment {
-  return { text, width: visibleWidth(text) };
-}
-
-function makeRightSegment(text: string, gridOn: boolean): Segment {
-  const seg = makeSegment(text);
-  return gridOn ? padSegmentLeft(seg, CELL_MIN_WIDTH) : seg;
-}
-
-function titleCase(s: string): string {
-  return s ? s[0]!.toUpperCase() + s.slice(1).toLowerCase() : s;
-}
-
-function modelNameFromId(id: string | undefined): string | undefined {
-  if (!id) return undefined;
-  const match = id.match(/claude-(opus|sonnet|haiku)-(\d+)-(\d+)/i);
-  if (!match) return id;
-  return `${titleCase(match[1]!)} ${match[2]}.${match[3]}`;
-}
-
-function displayHasVersion(displayName: string): boolean {
-  return /\d/.test(displayName);
-}
-
-function modelDisplay(builtin: BuiltinData | undefined): string | undefined {
-  const displayName = builtin?.model?.display_name;
-  const idName = modelNameFromId(builtin?.model?.id);
-  const base = displayName && displayHasVersion(displayName) ? displayName : (idName ?? displayName);
-  if (!base) return undefined;
-
-  const suffixes: string[] = [];
-  const effort = builtin?.effort?.level;
-  if (effort) suffixes.push(effort);
-  if (builtin?.thinking?.enabled) suffixes.push('thinking');
-
-  return suffixes.length > 0 ? `${base} · ${suffixes.join(' · ')}` : base;
-}
-
-function prDisplay(pr: BuiltinData['pr']): string | undefined {
-  if (!pr) return undefined;
-  if (typeof pr.number === 'number') return `PR #${pr.number}`;
-  return pr.title ? `PR ${truncate(pr.title, 24)}` : undefined;
-}
-
-function buildLine1RightSegments(ctx: RenderContext): Segment[] {
-  const l1 = ctx.cfg.line1;
-  const segs: Segment[] = [];
-
-  const wtName = l1.includes('worktree') ? worktreeName(ctx.builtin) : undefined;
-  if (wtName) {
-    segs.push(makeRightSegment(ctx.tc.worktree('\u2387 ' + wtName), ctx.gridOn));
-  }
-
-  if (l1.includes('session') && ctx.builtin?.session_name) {
-    segs.push(makeRightSegment(ctx.tc.worktree('\u00A7 ' + truncate(ctx.builtin.session_name, 24)), ctx.gridOn));
-  }
-
-  if (l1.includes('agent') && ctx.builtin?.agent?.name) {
-    segs.push(makeRightSegment(ctx.tc.model('@' + truncate(ctx.builtin.agent.name, 24)), ctx.gridOn));
-  }
-
-  if (l1.includes('pr')) {
-    const prText = prDisplay(ctx.builtin?.pr);
-    if (prText) segs.push(makeRightSegment(ctx.tc.branch(prText), ctx.gridOn));
-  }
-
-  if (l1.includes('branch') && ctx.cfg.gitStatus.enabled && ctx.state.gitStatus?.branch) {
-    const gitText = renderGitText(ctx.state.gitStatus, ctx.cfg.gitStatus);
-    segs.push(makeRightSegment(ctx.tc.branch(gitText), ctx.gridOn));
-  } else if (l1.includes('branch') && ctx.state.branch) {
-    segs.push(makeRightSegment(ctx.tc.branch(ctx.state.branch), ctx.gridOn));
-  }
-
-  const modelText = l1.includes('model') ? modelDisplay(ctx.builtin) : undefined;
-  if (modelText) {
-    segs.push(makeRightSegment(ctx.tc.model(modelText), ctx.gridOn));
-  }
-
-  return segs;
-}
-
-function renderLine1Left(ctx: RenderContext, availLeft: number): Segment {
-  if (ctx.state.refinementError) {
-    return makeSegment(ctx.tc.red(ERROR_LABELS[ctx.state.refinementError.code]));
-  }
-
-  if (!ctx.cfg.line1.includes('focus')) {
-    return { text: '', width: 0 };
-  }
-
-  if (ctx.state.focus) {
-    return makeSegment(ctx.tc.focus(truncate(ctx.state.focus, Math.max(availLeft, MIN_FOCUS_COLS))));
-  }
-
-  return makeSegment(ctx.tc.dim(FOCUS_PLACEHOLDER));
-}
-
-function renderLine1(ctx: RenderContext): string {
-  const rightJoined = progressiveJoin(
-    buildLine1RightSegments(ctx),
-    ctx.termWidth - ctx.prefixWidth,
-    MIN_FOCUS_COLS,
-    ctx.joiner,
-  );
-  const spaceForRight = rightJoined.width > 0 ? rightJoined.width + 2 : 0;
-  const availLeft = ctx.termWidth - ctx.prefixWidth - spaceForRight;
-  const left = renderLine1Left(ctx, availLeft);
-  const gap = Math.max(1, ctx.termWidth - ctx.prefixWidth - left.width - rightJoined.width);
-  return ctx.prefix + left.text + ' '.repeat(gap) + rightJoined.text;
-}
-
-function renderPromptSegment(ctx: RenderContext, maxPromptCols: number): Segment {
-  if (!ctx.cfg.line2.includes('prompt')) {
-    return { text: '', width: 0 };
-  }
-
-  if (ctx.state.lastUserPrompt) {
-    return makeSegment(ctx.tc.prompt(truncate(ctx.state.lastUserPrompt, Math.max(maxPromptCols, MIN_PROMPT_COLS))));
-  }
-
-  return makeSegment(ctx.tc.dim(PROMPT_PLACEHOLDER));
-}
-
-function renderLine2(ctx: RenderContext): string | null {
-  const l2 = ctx.cfg.line2;
-  if (l2.length === 0) return null;
-
-  const line2Right: Segment[] = [];
-  if (l2.includes('elapsed')) {
-    line2Right.push(makeRightSegment(ctx.tc.dim(ctx.elapsed), ctx.gridOn));
-  }
-
-  const hasTurn = l2.includes('turn');
-  const turnRaw = `#${ctx.state.promptCount}  `;
-  const turnLabel = hasTurn ? ctx.tc.dim(turnRaw) : '';
-  const turnWidth = hasTurn ? turnRaw.length : 0;
-
-  const line2Budget = ctx.termWidth - ctx.prefixWidth - turnWidth;
-  const rightJoined = progressiveJoin(line2Right, line2Budget, MIN_PROMPT_COLS, ctx.joiner);
-  const spaceForRight = rightJoined.width > 0 ? rightJoined.width + 2 : 0;
-  const prompt = renderPromptSegment(ctx, line2Budget - spaceForRight);
-  const gap = Math.max(1, ctx.termWidth - ctx.prefixWidth - turnWidth - prompt.width - rightJoined.width);
-
-  return ctx.prefix + turnLabel + prompt.text + ' '.repeat(gap) + rightJoined.text;
-}
 
 export function formatStatusline(
   state: SessionState,

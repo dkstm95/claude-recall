@@ -1,22 +1,10 @@
-import { join } from 'node:path';
-import { homedir } from 'node:os';
-import { readJsonFile, writeJsonFileAtomic } from './json-file.js';
-const BASE_DIR = join(homedir(), '.claude', 'claude-recall');
-const CACHE_PATH = join(BASE_DIR, 'context-windows.json');
+import { JsonCache, claudeRecallPath, objectOr } from './cache-store.js';
+const cacheStore = new JsonCache(claudeRecallPath('context-windows.json'), objectOr(() => ({})));
 function readCache() {
-    const parsed = readJsonFile(CACHE_PATH);
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
-        return parsed;
-    }
-    return {};
+    return cacheStore.read();
 }
 function writeCache(cache) {
-    try {
-        writeJsonFileAtomic(CACHE_PATH, cache);
-    }
-    catch {
-        // best-effort; cache miss on next read is harmless
-    }
+    cacheStore.write(cache);
 }
 export function readContextCache() {
     return readCache();

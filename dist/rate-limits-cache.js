@@ -1,8 +1,7 @@
-import { join } from 'node:path';
-import { homedir } from 'node:os';
-import { readJsonFile, writeJsonFileAtomic } from './json-file.js';
-const BASE_DIR = join(homedir(), '.claude', 'claude-recall');
-const CACHE_PATH = join(BASE_DIR, 'rate-limits.json');
+import { JsonCache, claudeRecallPath } from './cache-store.js';
+const cacheStore = new JsonCache(claudeRecallPath('rate-limits.json'), (value) => value && typeof value === 'object' && !Array.isArray(value)
+    ? value
+    : null);
 function hasPct(w) {
     return !!w && typeof w.used_percentage === 'number';
 }
@@ -30,7 +29,7 @@ function dataEqual(a, b) {
     return windowsEqual(a.five_hour, b.five_hour) && windowsEqual(a.seven_day, b.seven_day);
 }
 export function readRateLimitsCache(nowMs = Date.now()) {
-    const parsed = readJsonFile(CACHE_PATH);
+    const parsed = cacheStore.read();
     if (!parsed)
         return null;
     const out = {};
@@ -41,12 +40,7 @@ export function readRateLimitsCache(nowMs = Date.now()) {
     return Object.keys(out).length > 0 ? out : null;
 }
 export function writeRateLimitsCache(data) {
-    try {
-        writeJsonFileAtomic(CACHE_PATH, data);
-    }
-    catch {
-        // best-effort; cache miss on next read is harmless
-    }
+    cacheStore.write(data);
 }
 // Field-wise merge within each window: live's used_percentage is authoritative,
 // but resets_at falls back to cache when live omits it. Claude Code sometimes

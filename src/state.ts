@@ -83,29 +83,39 @@ export function getStatePath(sessionId: string): string {
   return join(getStateDir(), `${sessionId}.json`);
 }
 
-export function readState(sessionId: string): SessionState | null {
-  const parsed = readJsonFile<Record<string, unknown>>(getStatePath(sessionId));
-  if (!parsed) return null;
+function stringValue(value: unknown, fallback: string): string {
+  return typeof value === 'string' ? value : fallback;
+}
 
-  if (parsed['focus'] === undefined && typeof parsed['purpose'] === 'string') {
-    parsed['focus'] = parsed['purpose'];
-  }
+function numberValue(value: unknown, fallback: number): number {
+  return typeof value === 'number' ? value : fallback;
+}
 
-  const lastActivityAt = (parsed['lastActivityAt'] as string) ?? new Date().toISOString();
+function normalizeSessionState(parsed: Record<string, unknown>, fallbackSessionId: string): SessionState {
+  const focus = parsed['focus'] === undefined && typeof parsed['purpose'] === 'string'
+    ? parsed['purpose']
+    : parsed['focus'];
+  const lastActivityAt = stringValue(parsed['lastActivityAt'], new Date().toISOString());
+
   return {
-    sessionId: (parsed['sessionId'] as string) ?? sessionId,
-    focus: (parsed['focus'] as string) ?? '',
-    branch: (parsed['branch'] as string) ?? '',
+    sessionId: stringValue(parsed['sessionId'], fallbackSessionId),
+    focus: stringValue(focus, ''),
+    branch: stringValue(parsed['branch'], ''),
     gitStatus: (parsed['gitStatus'] as GitStatus | null) ?? null,
-    cwd: (parsed['cwd'] as string) ?? '',
-    promptCount: (parsed['promptCount'] as number) ?? 0,
-    lastUserPrompt: (parsed['lastUserPrompt'] as string) ?? '',
-    sessionStartedAt: (parsed['sessionStartedAt'] as string) ?? lastActivityAt,
+    cwd: stringValue(parsed['cwd'], ''),
+    promptCount: numberValue(parsed['promptCount'], 0),
+    lastUserPrompt: stringValue(parsed['lastUserPrompt'], ''),
+    sessionStartedAt: stringValue(parsed['sessionStartedAt'], lastActivityAt),
     lastActivityAt,
     lastRefinedAt: (parsed['lastRefinedAt'] as string | null) ?? null,
     refinementError: (parsed['refinementError'] as RefinementError | null) ?? null,
     lastRefinement: (parsed['lastRefinement'] as LastRefinement | null) ?? null,
   };
+}
+
+export function readState(sessionId: string): SessionState | null {
+  const parsed = readJsonFile<Record<string, unknown>>(getStatePath(sessionId));
+  return parsed ? normalizeSessionState(parsed, sessionId) : null;
 }
 
 export function writeState(sessionId: string, state: SessionState): void {

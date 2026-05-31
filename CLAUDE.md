@@ -1,183 +1,51 @@
-# claude-recall
+# claude-recall Agent Guide
 
-Claude Code plugin (v6.4.0) that provides a session awareness statusline.
-Tracks a Haiku-refined focus label, activity, git status, and prompt count for every parallel Claude Code session.
+This file is intentionally limited to instructions for coding agents working in
+this repository. Canonical project facts live in
+[`docs/PROJECT.md`](docs/PROJECT.md).
 
-- **Author**: seungilahn
-- **License**: MIT
-- **Repository**: dkstm95/claude-recall
-- **Install**: `/plugin marketplace add dkstm95/claude-recall`
+## Start Here
 
-## Build
+Before making non-trivial changes, read the relevant sections of
+`docs/PROJECT.md`:
 
-```bash
-npm run build        # TypeScript -> dist/ (tsc)
-npm install          # Install dev dependencies (typescript, @types/node)
-```
+- Architecture and data flow
+- Session state schema
+- Statusline layout and width/drop priority
+- Configuration and hook behavior
+- Key invariants
+- Release rules
 
-- Source: `src/*.ts` -> Output: `dist/*.js`
-- Target: ES2022, Node16 ESM modules
-- Node >= 20.0.0 required
+If this file and `docs/PROJECT.md` conflict, treat `docs/PROJECT.md`
+as the source of truth and update this file to remove the conflict.
 
-## Architecture
+## Working Rules
 
-```
-.claude-plugin/           # Plugin manifest
-  plugin.json             #   Name, version, description, author
-  marketplace.json        #   Marketplace listing metadata
-commands/                 # Slash commands (markdown with frontmatter)
-  setup.md                #   /setup — configure statusline & launcher script
-hooks/
-  hooks.json              # Hook registration (SessionStart, UserPromptSubmit, PreCompact, PostCompact, SessionEnd)
-src/                      # TypeScript source
-  config.ts               #   StatuslineConfig interface, theme colors, config file reader, legacy slot mapping
-  state.ts                #   SessionState interface, read/write JSON, cleanup, async getGitStatus + refreshGitStatus helper (used by both statusline and hooks)
-  format.ts               #   3-line statusline formatter, CJK width, bar renderer, progressive truncation
-  statusline.ts           #   Entry point: stdin JSON -> formatStatusline() -> stdout
-  stdin.ts                #   Async stdin reader utility
-  refine.ts               #   Haiku subprocess wrapper: spawnRefinement + triggerFocusRefinement + launchRefinementWorker (detached) + 5s debounce
-  refine-worker.ts        #   Detached worker entry — runs `triggerFocusRefinement` outside the 10s hook window
-  rate-limits-cache.ts    #   Per-account cache for rate_limits stdin field (omitted on first render)
-  context-window-cache.ts #   Per-session cache for context_window stdin field (omitted on first render)
-  hooks/
-    session-start.ts      #   Initialize/resume session, cleanup old sessions (>7d)
-    prompt-submit.ts      #   Track prompts, update git status, trigger focus refinement at power-of-2 turns
-    trigger-refinement.ts #   Shared entry for PreCompact + PostCompact + SessionEnd — spawns the detached refine-worker
-dist/                     # Compiled JS (committed, do NOT edit directly)
-assets/                   # SVG preview images for marketplace
-```
+- Change `src/` first. Do not edit `dist/` directly.
+- Run `npm run build` after behavior changes and include generated `dist/`
+  updates in the same change.
+- Run `npm test` before handing off when dependencies are available.
+- Keep runtime dependencies out of the plugin unless there is a deliberate
+  project decision to add one.
+- Preserve graceful degradation: hooks should always return `{}`, and
+  statusline failures should not interrupt Claude Code.
+- Preserve user-owned state under `~/.claude/claude-recall/`; do not delete or
+  rewrite user data as part of migrations unless a release note explicitly
+  calls for it.
+- Keep README.md and README.ko.md aligned for user-facing changes.
 
-## Data Flow
+## Change Checklist
 
-```
-SessionStart event -> session-start.ts        -> creates/updates ~/.claude/claude-recall/sessions/{id}.json
-UserPromptSubmit   -> prompt-submit.ts         -> increments promptCount, updates git status, triggers focus refinement at 2^k turns (k>=0, so 1,2,4,8,...)
-PreCompact         -> trigger-refinement.ts    -> fire-and-forget the refine-worker (natural milestone)
-PostCompact        -> trigger-refinement.ts    -> fire-and-forget the refine-worker with compact_summary when present
-SessionEnd         -> trigger-refinement.ts    -> fire-and-forget the refine-worker (final snapshot)
-Statusline render  -> statusline.ts            -> reads session JSON + stdin metrics + refreshes git status directly -> 1-3 line statusline output
-```
+For behavior-affecting changes:
 
-Focus refinement path:
-```
-trigger hook -> refine.ts::launchRefinementWorker (spawn detached refine-worker.js, unref, return immediately)
-             -> refine-worker.ts -> refine.ts::triggerFocusRefinement (5s debounce via lastRefinedAt)
-                -> reads compact_summary when supplied, else transcript tail
-                -> spawn `claude -p --model=haiku --tools "" --no-session-persistence ...`
-                   with env CLAUDE_RECALL_REFINING=1 (prevents recursive plugin hook firing in child)
-                -> 45s timeout; output text -> state.focus OR refinementError (empty transcript = silent skip, not an error)
-```
-Why detached: Claude Code's 10s hook timeout would SIGHUP `claude -p` before Haiku responds (~1-5s typical, up to 45s). The hook returns in <50ms; the worker outlives it and writes state asynchronously.
+1. Update source in `src/`.
+2. Add or adjust focused tests in `test/`.
+3. Run `npm run build`.
+4. Run `npm test`.
+5. Apply the release rules from `docs/PROJECT.md`.
 
-## Session State Schema
+For docs-only changes:
 
-Key fields in `~/.claude/claude-recall/sessions/{sessionId}.json`:
-
-| Field | Type | Description |
-|-------|------|-------------|
-| sessionId | string | Unique session ID |
-| focus | string | AI-refined session description (max 60 chars) |
-| branch | string | Current git branch (fallback from gitStatus.branch) |
-| gitStatus | GitStatus \| null | `{ branch, dirty, ahead, behind, defaultBranch }` |
-| cwd | string | Working directory at session start |
-| promptCount | number | Total user prompts (excludes slash commands) |
-| lastUserPrompt | string | Last prompt text (first 200 chars) |
-| sessionStartedAt | string | ISO timestamp when session was first opened (immutable after SessionStart; drives elapsed fallback) |
-| lastActivityAt | string | ISO timestamp of last activity (drives 7-day cleanup) |
-| lastRefinedAt | string \| null | ISO timestamp of last focus refinement (debounce guard) |
-| refinementError | RefinementError \| null | `{ code: 'timeout' \| 'rate_limit' \| 'auth' \| 'unknown', at, durationMs?, stderrTail? }` |
-| lastRefinement | LastRefinement \| null | Last refinement attempt record: `{ at, status: 'ok' \| 'error', code?, durationMs, transcriptBytes, stdoutBytes?, stderrTail? }` (diagnostics, survives across successes) |
-
-`GitStatus` fields: `branch`, `dirty`, `ahead` (vs origin/default), `behind` (vs origin/default), `defaultBranch`.
-
-## Statusline Layout
-
-```
-Line 1 (stable):   ▍ [focus|error-label]  [worktree] │ [session] │ [agent] │ [PR] │ [branch*↑N↓N] │ [model + effort]
-Line 2 (dynamic):  ▍ [#turn last_prompt]                                          [elapsed]
-Line 3 (opt-out):  ▍ ctx ████░░░░░░ 45% │ 5h ████░░░░░░ 52% (~17:00) │ 7d █░░░░░░░░░ 19% │ $0.03
-```
-
-- Accent bar prefix (`▍`) colored by a deterministic hash of `cwd + current branch` — so parallel tabs on different repos or different feature branches render distinct colors. Note: the color shifts when the branch changes mid-session (by design, to distinguish branch contexts at a glance).
-- Focus: cyan+bold (default theme), replaced by red `⚠ AI <reason>` when `refinementError` is set
-- Prompt: bold — clear visual hierarchy (customizable via theme)
-- Context %: green (<70%), yellow (70-89%), red (≥90%) — rendered on Line 3 as `ctx` bar since v6.1.0
-- Line 1 no longer renders command-style context hints. Context pressure stays in the Line 3 `ctx` bar.
-- Line 2 renders on every entry (with `(awaiting first prompt)` placeholder before the first prompt)
-- `worktree` slot renders `⎇ <basename>` from stdin `worktree.name` / `worktree.path` (legacy fallback: `workspace.git_worktree`) — opt-in via config
-- `session`, `agent`, and `pr` slots render Claude Code's current `session_name`, `agent.name`, and `pr` metadata — opt-in via config
-- `branch` slot renders `branch[*][↑N][↓N]` — dirty flag + ahead/behind vs `origin/<default>`. 0-count arrows suppressed.
-- `model` slot enriches `model.display_name` with version parsed from `model.id` when needed, plus `effort.level` and `thinking.enabled` suffixes when present.
-- `line3` slot renders ctx + rate_limits bars + cost. Hidden when no data. Opt out with `line3: []`.
-- Elapsed source: stdin `cost.total_duration_ms` (wall-clock since session started, per Claude Code docs) when present, else `Date.now() - state.sessionStartedAt` (same semantic)
-- Minimum widths: focus >= 15 cols (truncated with `…`), prompt >= 30 cols (truncated with `…`)
-- Column grid (v6.3.0+): right-zone segments (worktree / session / agent / pr / branch / model / elapsed) left-pad to a uniform 10-col cell; a dim `│` (U+2502) joins them. This anchors `│` positions across renders and aligns Line 2's elapsed left edge with Line 1's model left edge. Long content (e.g. `feature/long-branch-name*`) overflows its cell — alignment is a soft guide, not a hard constraint.
-- Configurable via `~/.claude/claude-recall/config.json` (line1/line2/line3 slots, gitStatus toggles, theme, `separator`). Set `"separator": ""` to disable the grid and fall back to 2-space joiners (pre-v6.3.0 look). Any single glyph works (`"┊"`, `"|"`, etc.); dim color is applied per theme.
-
-### Priority rules (what drops as width shrinks)
-
-Width precedence: `stdout.columns` → `stderr.columns` → `$COLUMNS` → `120` fallback (see `getTerminalWidth()` in `src/format.ts`). Claude Code pipes stdout/stderr for statusline commands, so stream `.columns` values are usually unavailable. Since Claude Code 2.1.153, statusline commands receive `COLUMNS` and `LINES` environment variables, making `$COLUMNS` the normal width source on current versions. Older Claude Code versions and non-Claude invocations still fall back to `120`, which keeps Line 3's full L0 render (~91 cols) visible.
-
-**Line 1** — `focus` always renders (truncated with `…` to min 15 cols). Right-side segments follow config order left-to-right = high-to-low priority, and `progressiveJoin` drops the rightmost segments first. Default `['focus', 'branch', 'model']` means `model` drops before `branch`.
-
-**Line 2** — `#turn` always renders. `last_prompt` truncates with `…` to min 30 cols. Right-side (`elapsed`) drops first if the prompt cannot meet its minimum.
-
-**Line 3** — Priority `ctx > 5h > 7d > cost`. Before dropping whole segments, a compaction ladder shortens each one:
-
-| Level | What changes | Cols saved |
-|-------|--------------|-----------|
-| L0 | Full render (every segment with its reset text) | — |
-| L1 | Drop 7d's `(~M/D HH:MM)` reset | ~14 |
-| L2 | Drop 5h's `(~HH:MM)` reset too | ~10 more |
-| L3 | Drop whole segments right-to-left: `cost` → `7d` → `5h`; `ctx` always survives | variable |
-
-Effect at the 120-col fallback with all four segments populated: L0 (~91 cols) fits comfortably and every segment including 7d's `(~M/D HH:MM)` stays visible. If the effective width drops below ~91 cols, the ladder kicks in — at ~77-90 cols everything except the 7d reset survives (L1); below that, segments drop right-to-left. See `renderLine3()` in `src/format.ts`.
-
-## Key Patterns
-
-- **Atomic writes**: `writeState()` writes to `.tmp` file, then `rename()` (crash-safe)
-- **Graceful degradation**: Hooks always output `{}` even on error; statusline exits silently on missing data
-- **CJK-aware**: `displayWidth()` and `isWide()` in format.ts handle double-width characters
-- **Slash command filtering**: prompt-submit.ts ignores prompts starting with `/`
-- **Lazy cleanup**: Sessions idle for >7 days (by `lastActivityAt`) are cleaned on SessionStart, not continuously
-- **Stdin-first elapsed, consistent semantic**: statusline prefers stdin `cost.total_duration_ms` (wall-clock since session started) and falls back to `Date.now() - state.sessionStartedAt` — both measure the same thing. Older session JSONs without `sessionStartedAt` degrade to `lastActivityAt`.
-- **Single async git path**: `getGitStatus()` is async (`execFile`, `Promise.all` across the 3 independent calls, `--no-optional-locks` on `git status`, 1s per-call timeout). Called from both the statusline (every render — mid-turn `git checkout` visible immediately) and hooks (persist to `state.gitStatus` as a backup for when the live call fails). `refreshGitStatus(state, cwd)` is the single mutation helper used by both. Measured p95 ~21ms on this repo.
-- **Theme system**: `ThemeColors` interface abstracts all color calls; 4 presets (default, light, minimal, vivid). `COLORFGBG`-based auto-select picks `light` on light terminals when `theme` is omitted; `NO_COLOR` strips all ANSI output.
-- **Config-driven statusline**: line1/line2/line3 element arrays control which segments render.
-- **Focus refinement recursion guard**: `refine.ts` sets `CLAUDE_RECALL_REFINING=1` in the child env; all hooks early-return when this env var is set, preventing the spawned `claude -p` from re-triggering the plugin.
-- **PostCompact summary preference**: `trigger-refinement.ts` passes Claude Code's `compact_summary` to the detached worker when present; transcript tail remains the fallback for PreCompact, SessionEnd, and prompt-triggered refinements.
-- **Debounce on refinement**: `shouldRefine()` checks `lastRefinedAt` against a 5s window. Optimistic write of `lastRefinedAt` before the `claude -p` call narrows the concurrent-spawn race window.
-
-## Coding Conventions
-
-- TypeScript strict mode enabled
-- ES module imports with `.js` extension in import paths (Node16 resolution)
-- No external runtime dependencies — only Node.js built-in modules (fs, path, child_process, os) and the system `claude` CLI
-- All async functions use try/catch with `process.exit(0)` on error in hooks
-- Colors via ANSI escape codes (helper functions in format.ts; themed colors in config.ts)
-- State directory: `~/.claude/claude-recall/sessions/`
-
-## Version & Release Rules
-
-**Every change that affects plugin behavior MUST include:**
-1. Version bump in ALL three files: `package.json`, `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`
-2. README.md AND README.ko.md updates (version badge + any affected content)
-3. CHANGELOG.md entry for the new version
-
-Why: Plugin cache uses version to determine updates. Without a bump, `/plugin marketplace update` won't pull new code.
-Do this in the same commit, not as a separate step.
-
-## Hook Configuration
-
-All hooks defined in `hooks/hooks.json`:
-- `SessionStart` / `UserPromptSubmit` / `PreCompact` / `PostCompact` / `SessionEnd` — all **timeout 10s**. Even the refinement triggers finish fast because `launchRefinementWorker` spawns a detached `refine-worker.js` and returns immediately; the worker carries the 45s Haiku budget outside the hook window.
-- Matcher: `"*"` (triggers on all events)
-- Command pattern: `node "${CLAUDE_PLUGIN_ROOT}/dist/hooks/<name>.js"` — `PreCompact`, `PostCompact`, and `SessionEnd` share `trigger-refinement.js`.
-
-## Important Notes
-
-- `dist/` is committed to git (users install from marketplace without building)
-- The statusline launcher script lives at `~/.claude/claude-recall/statusline-launcher.sh`
-- Settings are merged into `~/.claude/settings.json` by `/setup` command
-- Bilingual documentation: English (README.md) + Korean (README.ko.md)
-- Background LLM calls are core behavior; no opt-out config. Uninstall to stop.
+1. Keep canonical project facts in `docs/PROJECT.md`.
+2. Keep `CLAUDE.md` limited to agent workflow guidance.
+3. Update README.md and README.ko.md together when user-facing docs change.
