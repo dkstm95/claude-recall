@@ -1,5 +1,11 @@
 # Changelog
 
+## 6.4.1
+
+### Fixed
+
+- **Accent/session context now follows Claude Code `/cd` moves.** Claude Code 2.1.x exposes `CwdChanged` when a session moves directories; claude-recall now registers that hook, persists the new `cwd`, and refreshes git status for the new location. Existing `SessionStart`, `UserPromptSubmit`, and render-time statusline paths also refresh the in-memory `cwd`, so the accent bar remains keyed to the current directory plus branch instead of the directory where the session first started.
+
 ## 6.4.0
 
 ### Added

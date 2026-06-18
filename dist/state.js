@@ -66,10 +66,11 @@ async function runGit(cwd, args, timeoutMs = 1000) {
     });
     return stdout.trim();
 }
-export async function refreshGitStatus(state, cwd) {
-    const gitStatus = await getGitStatus(cwd, state.gitStatus);
+export async function refreshGitStatus(state, cwd, options = {}) {
+    const fallback = options.useFallback === false ? null : state.gitStatus;
+    const gitStatus = await getGitStatus(cwd, fallback);
     state.gitStatus = gitStatus;
-    state.branch = gitStatus?.branch ?? state.branch;
+    state.branch = gitStatus?.branch ?? (options.useFallback === false ? '' : state.branch);
 }
 // --no-optional-locks avoids blocking a concurrent user `git status`; callers
 // (statusline + hooks) stay within their 1-10s budgets via the per-call timeout.

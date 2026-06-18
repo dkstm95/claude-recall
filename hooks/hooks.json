@@ -9,6 +9,10 @@
       "matcher": "*",
       "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/hooks/prompt-submit.js\"", "timeout": 10 }]
     }],
+    "CwdChanged": [{
+      "matcher": "*",
+      "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/hooks/cwd-changed.js\"", "timeout": 10 }]
+    }],
     "PreCompact": [{
       "matcher": "*",
       "hooks": [{ "type": "command", "command": "node \"${CLAUDE_PLUGIN_ROOT}/dist/hooks/trigger-refinement.js\"", "timeout": 10 }]

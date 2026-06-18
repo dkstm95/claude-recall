@@ -122,10 +122,15 @@ async function runGit(cwd: string, args: string[], timeoutMs = 1000): Promise<st
   return stdout.trim();
 }
 
-export async function refreshGitStatus(state: SessionState, cwd: string): Promise<void> {
-  const gitStatus = await getGitStatus(cwd, state.gitStatus);
+export async function refreshGitStatus(
+  state: SessionState,
+  cwd: string,
+  options: { useFallback?: boolean } = {},
+): Promise<void> {
+  const fallback = options.useFallback === false ? null : state.gitStatus;
+  const gitStatus = await getGitStatus(cwd, fallback);
   state.gitStatus = gitStatus;
-  state.branch = gitStatus?.branch ?? state.branch;
+  state.branch = gitStatus?.branch ?? (options.useFallback === false ? '' : state.branch);
 }
 
 // --no-optional-locks avoids blocking a concurrent user `git status`; callers

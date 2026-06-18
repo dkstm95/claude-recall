@@ -22,6 +22,8 @@ async function handlePromptSubmit(input: HookInput): Promise<void> {
     await refreshGitStatus(state, cwd);
   }
 
+  const cwdChanged = state.cwd !== '' && state.cwd !== cwd;
+  state.cwd = cwd;
   if (prompt.startsWith('/')) {
     state.lastActivityAt = now;
     writeState(sessionId, state);
@@ -33,7 +35,7 @@ async function handlePromptSubmit(input: HookInput): Promise<void> {
   state.lastUserPrompt = prompt.slice(0, 200).replace(/[\n\t\r]/g, ' ');
   state.lastActivityAt = now;
 
-  await refreshGitStatus(state, cwd);
+  await refreshGitStatus(state, cwd, { useFallback: !cwdChanged });
 
   writeState(sessionId, state);
 

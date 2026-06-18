@@ -35,10 +35,12 @@ async function main(): Promise<void> {
   // SessionStart hook may not have flushed state yet on first statusline render.
   const cwd = input.cwd ?? input.workspace?.current_dir ?? input.workspace?.project_dir ?? '';
   const state = readState(input.session_id) ?? createEmptySessionState(input.session_id, cwd);
+  const cwdChanged = Boolean(cwd && state.cwd && state.cwd !== cwd);
+  if (cwd) state.cwd = cwd;
 
   // Render-time refresh: hooks can't see mid-turn checkouts and the first
   // render beats SessionStart's state flush. Mutation is scratch-only — not persisted.
-  if (cwd) await refreshGitStatus(state, cwd);
+  if (cwd) await refreshGitStatus(state, cwd, { useFallback: !cwdChanged });
 
   const builtin: BuiltinData = {
     model: input.model,

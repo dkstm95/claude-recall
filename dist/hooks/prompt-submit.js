@@ -17,6 +17,8 @@ async function handlePromptSubmit(input) {
         state = createEmptySessionState(sessionId, cwd);
         await refreshGitStatus(state, cwd);
     }
+    const cwdChanged = state.cwd !== '' && state.cwd !== cwd;
+    state.cwd = cwd;
     if (prompt.startsWith('/')) {
         state.lastActivityAt = now;
         writeState(sessionId, state);
@@ -26,7 +28,7 @@ async function handlePromptSubmit(input) {
     state.promptCount++;
     state.lastUserPrompt = prompt.slice(0, 200).replace(/[\n\t\r]/g, ' ');
     state.lastActivityAt = now;
-    await refreshGitStatus(state, cwd);
+    await refreshGitStatus(state, cwd, { useFallback: !cwdChanged });
     writeState(sessionId, state);
     // Focus refinement at power-of-2 turns (1, 2, 4, 8, 16, 32, ...).
     // Launched as a detached worker so it survives this hook's 10s timeout.

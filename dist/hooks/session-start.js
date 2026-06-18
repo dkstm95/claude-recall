@@ -16,8 +16,10 @@ async function handleSessionStart(input) {
         writeState(sessionId, state);
     }
     else {
+        const cwdChanged = existing.cwd !== '' && existing.cwd !== cwd;
+        existing.cwd = cwd;
         existing.lastActivityAt = now;
-        await refreshGitStatus(existing, cwd);
+        await refreshGitStatus(existing, cwd, { useFallback: !cwdChanged });
         if (source === 'clear') {
             existing.lastUserPrompt = '';
         }
