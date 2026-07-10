@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { readJsonFile, writeJsonFileAtomic } from './json-file.js';
+import { readJsonFile, withFileLock, writeJsonFileAtomic } from './json-file.js';
 const BASE_DIR = join(homedir(), '.claude', 'claude-recall');
 const CACHE_PATH = join(BASE_DIR, 'rate-limits.json');
 function hasPct(w) {
@@ -40,13 +40,16 @@ export function readRateLimitsCache(nowMs = Date.now()) {
         out.seven_day = parsed.seven_day;
     return Object.keys(out).length > 0 ? out : null;
 }
-export function writeRateLimitsCache(data) {
+function writeRateLimitsCacheUnlocked(data) {
     try {
         writeJsonFileAtomic(CACHE_PATH, data);
     }
     catch {
         // best-effort; cache miss on next read is harmless
     }
+}
+export function writeRateLimitsCache(data) {
+    withFileLock(CACHE_PATH, () => writeRateLimitsCacheUnlocked(data));
 }
 // Field-wise merge within each window: live's used_percentage is authoritative,
 // but resets_at falls back to cache when live omits it. Claude Code sometimes
@@ -89,8 +92,14 @@ export function hasAnyLivePct(live) {
 export function resolveRateLimits(live) {
     const cache = readRateLimitsCache();
     const merged = mergeRateLimits(live, cache);
-    if (hasAnyLivePct(live) && merged && !dataEqual(cache, merged)) {
-        writeRateLimitsCache(merged);
-    }
-    return merged;
+    if (!hasAnyLivePct(live) || !merged || dataEqual(cache, merged))
+        return merged;
+    return withFileLock(CACHE_PATH, () => {
+        const latest = readRateLimitsCache();
+        const latestMerged = mergeRateLimits(live, latest);
+        if (latestMerged && !dataEqual(latest, latestMerged)) {
+            writeRateLimitsCacheUnlocked(latestMerged);
+        }
+        return latestMerged;
+    });
 }

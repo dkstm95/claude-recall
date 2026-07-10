@@ -1,5 +1,21 @@
 # Changelog
 
+## 6.4.2
+
+### Fixed
+
+- **Refinement and hook updates no longer overwrite each other.** Session mutations now use a short per-session filesystem lock and patch the latest state snapshot. A separate single-flight lock covers the full detached Haiku call, preventing duplicate refinements and older results from replacing newer focus labels. The transcript prompt is sent over stdin instead of process arguments, timeout escalates from `SIGTERM` to `SIGKILL`, and worker spawn failures clean up their temporary input.
+- **Slash commands emit exactly one hook response.** The prompt hook now leaves response writing exclusively to the shared hook wrapper, so `/compact` and other slash inputs return one `{}` JSON document instead of two.
+- **State storage is private and path-safe.** Unusual session IDs are hashed before becoming filenames, preventing traversal outside the session directory. State/cache/refinement files are created as `0600` under `0700` directories.
+- **Parallel sessions no longer lose context-cache entries.** Shared context and rate-limit cache updates use the same read-latest-under-lock discipline, so concurrent statusline processes cannot overwrite another session's entry with a stale snapshot.
+- **Statusline text is safe to print.** C0/C1 terminal control characters from prompts, focus text, and Claude metadata are removed before rendering. Git partial failures preserve the last known dirty/ahead/behind values instead of falsely displaying a clean, synchronized branch.
+- **Configuration contracts are honored.** Line 1 right-side elements now render and drop in configured order; `focus` opt-out also hides its refinement error and releases its width; `gitStatus.enabled: false` hides the branch; duplicate slots are removed. An explicit `line3: []` now wins over legacy Line 2 context migration.
+- **Setup works for both marketplace and local plugins.** Documentation now uses the namespaced `/claude-recall:setup` command. Setup persists `${CLAUDE_PLUGIN_ROOT}`, creates the private state directory first, respects `CLAUDE_CODE_PLUGIN_CACHE_DIR`, and prefers a local `--plugin-dir` root over an unrelated cached release.
+
+### Tests
+
+- Added refinement/cache concurrency, state-path/permission, single hook response, config migration/order, opt-out, and terminal-control regression coverage. Total: 88 → 99 tests.
+
 ## 6.4.1
 
 ### Fixed

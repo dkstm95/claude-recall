@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -87,6 +87,47 @@ test('prompt-submit hook: missing session_id is a no-op response', async () => {
   assert.equal(result.code, 0);
   assert.equal(result.stdout, '{}\n');
   assert.equal(result.stderr, '');
+});
+
+test('prompt-submit hook: slash commands emit exactly one response and do not count as prompts', async () => {
+  const result = await runHookWithHome(
+    'dist/hooks/prompt-submit.js',
+    JSON.stringify({ session_id: 'slash-session', cwd: ROOT, user_prompt: '/compact' }),
+  );
+  try {
+    assert.equal(result.code, 0);
+    assert.equal(result.stdout, '{}\n');
+    assert.equal(result.stderr, '');
+    const statePath = join(result.tmpHome, '.claude', 'claude-recall', 'sessions', 'slash-session.json');
+    const state = JSON.parse(readFileSync(statePath, 'utf-8'));
+    assert.equal(state.promptCount, 0);
+    assert.equal(state.lastUserPrompt, '');
+  } finally {
+    rmSync(result.tmpHome, { recursive: true, force: true });
+  }
+});
+
+test('cwd-changed hook: unusual session ids cannot escape the state directory', async () => {
+  const sessionId = '../../../escaped';
+  const result = await runHookWithHome(
+    'dist/hooks/cwd-changed.js',
+    JSON.stringify({ session_id: sessionId, new_cwd: ROOT }),
+  );
+  try {
+    assert.equal(result.code, 0);
+    assert.equal(result.stdout, '{}\n');
+    assert.equal(existsSync(join(result.tmpHome, 'escaped.json')), false);
+    const stateDir = join(result.tmpHome, '.claude', 'claude-recall', 'sessions');
+    const stateFiles = readdirSync(stateDir).filter((name) => name.endsWith('.json'));
+    assert.equal(stateFiles.length, 1);
+    const statePath = join(stateDir, stateFiles[0]);
+    const state = JSON.parse(readFileSync(statePath, 'utf-8'));
+    assert.equal(state.sessionId, sessionId);
+    assert.equal(statSync(stateDir).mode & 0o777, 0o700);
+    assert.equal(statSync(statePath).mode & 0o777, 0o600);
+  } finally {
+    rmSync(result.tmpHome, { recursive: true, force: true });
+  }
 });
 
 test('session-start hook: refinement subprocess env skips hook work before parsing stdin', async () => {

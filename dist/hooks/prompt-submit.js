@@ -1,4 +1,4 @@
-import { readState, writeState, refreshGitStatus, createEmptySessionState } from '../state.js';
+import { readState, updateState, refreshGitStatus, createEmptySessionState } from '../state.js';
 import { launchRefinementWorker } from '../refine.js';
 import { getString, runHook } from './common.js';
 function isPowerOfTwo(n) {
@@ -15,25 +15,29 @@ async function handlePromptSubmit(input) {
     let state = readState(sessionId);
     if (!state) {
         state = createEmptySessionState(sessionId, cwd);
-        await refreshGitStatus(state, cwd);
     }
     const cwdChanged = state.cwd !== '' && state.cwd !== cwd;
     state.cwd = cwd;
     if (prompt.startsWith('/')) {
-        state.lastActivityAt = now;
-        writeState(sessionId, state);
-        process.stdout.write('{}\n');
+        updateState(sessionId, (fresh) => {
+            fresh.cwd = cwd;
+            fresh.lastActivityAt = now;
+        }, state);
         return;
     }
-    state.promptCount++;
-    state.lastUserPrompt = prompt.slice(0, 200).replace(/[\n\t\r]/g, ' ');
-    state.lastActivityAt = now;
     await refreshGitStatus(state, cwd, { useFallback: !cwdChanged });
-    writeState(sessionId, state);
+    const committed = updateState(sessionId, (fresh) => {
+        fresh.cwd = cwd;
+        fresh.promptCount++;
+        fresh.lastUserPrompt = prompt.slice(0, 200).replace(/[\n\t\r]/g, ' ');
+        fresh.lastActivityAt = now;
+        fresh.gitStatus = state.gitStatus;
+        fresh.branch = state.branch;
+    }, state);
     // Focus refinement at power-of-2 turns (1, 2, 4, 8, 16, 32, ...).
     // Launched as a detached worker so it survives this hook's 10s timeout.
     // First-prompt transcript-flush race is handled inside triggerFocusRefinement.
-    if (transcriptPath && isPowerOfTwo(state.promptCount)) {
+    if (transcriptPath && committed && isPowerOfTwo(committed.promptCount)) {
         launchRefinementWorker(sessionId, transcriptPath);
     }
 }

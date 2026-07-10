@@ -47,12 +47,18 @@ export function stripAnsi(s: string): string {
   return s.replace(/\x1b\[[0-9;]*m/g, '');
 }
 
+export function sanitizeDisplayText(text: string): string {
+  return text
+    .replace(/[\n\t\r]/g, ' ')
+    .replace(/[\u0000-\u001F\u007F-\u009F]/g, '');
+}
+
 function visibleWidth(s: string): number {
   return displayWidth(stripAnsi(s));
 }
 
 export function truncate(text: string, maxCols: number): string {
-  const clean = text.replace(/[\n\t\r]/g, ' ');
+  const clean = sanitizeDisplayText(text);
   if (displayWidth(clean) <= maxCols) return clean;
   let result = '';
   let rc = 0;
@@ -145,8 +151,10 @@ export const FOCUS_PLACEHOLDER = '(no focus yet)';
 export const PROMPT_PLACEHOLDER = '(awaiting first prompt)';
 
 export function makeJoiner(separator: string, tc: ThemeColors): Joiner {
-  if (!separator) return DEFAULT_JOINER;
-  return { text: ` ${tc.dim(separator)} `, width: 1 + displayWidth(separator) + 1 };
+  const clean = sanitizeDisplayText(separator);
+  const glyph = [...clean][0] ?? '';
+  if (!glyph) return DEFAULT_JOINER;
+  return { text: ` ${tc.dim(glyph)} `, width: 1 + displayWidth(glyph) + 1 };
 }
 
 export function padSegmentLeft(seg: Segment, minWidth: number): Segment {
@@ -178,9 +186,9 @@ function basenameOf(p: string): string {
 
 function worktreeName(builtin: BuiltinData | undefined): string | undefined {
   const modern = builtin?.worktree?.name ?? builtin?.worktree?.path;
-  if (modern) return basenameOf(modern);
+  if (modern) return sanitizeDisplayText(basenameOf(modern));
   const legacy = builtin?.workspace?.git_worktree;
-  return legacy ? basenameOf(legacy) : undefined;
+  return legacy ? sanitizeDisplayText(basenameOf(legacy)) : undefined;
 }
 
 const ERROR_LABELS: Record<RefinementError['code'], string> = {
@@ -191,7 +199,7 @@ const ERROR_LABELS: Record<RefinementError['code'], string> = {
 };
 
 function renderGitText(gs: GitStatus, cfg: StatuslineConfig['gitStatus']): string {
-  let text = gs.branch;
+  let text = sanitizeDisplayText(gs.branch);
   if (cfg.showDirty && gs.dirty) text += '*';
   if (cfg.showAheadBehind) {
     if (gs.ahead > 0) text += `\u2191${gs.ahead}`;
@@ -358,12 +366,13 @@ function displayHasVersion(displayName: string): boolean {
 function modelDisplay(builtin: BuiltinData | undefined): string | undefined {
   const displayName = builtin?.model?.display_name;
   const idName = modelNameFromId(builtin?.model?.id);
-  const base = displayName && displayHasVersion(displayName) ? displayName : (idName ?? displayName);
+  const rawBase = displayName && displayHasVersion(displayName) ? displayName : (idName ?? displayName);
+  const base = rawBase ? sanitizeDisplayText(rawBase) : undefined;
   if (!base) return undefined;
 
   const suffixes: string[] = [];
   const effort = builtin?.effort?.level;
-  if (effort) suffixes.push(effort);
+  if (effort) suffixes.push(sanitizeDisplayText(effort));
   if (builtin?.thinking?.enabled) suffixes.push('thinking');
 
   return suffixes.length > 0 ? `${base} · ${suffixes.join(' · ')}` : base;
@@ -378,47 +387,43 @@ function prDisplay(pr: BuiltinData['pr']): string | undefined {
 function buildLine1RightSegments(ctx: RenderContext): Segment[] {
   const l1 = ctx.cfg.line1;
   const segs: Segment[] = [];
-
-  const wtName = l1.includes('worktree') ? worktreeName(ctx.builtin) : undefined;
-  if (wtName) {
-    segs.push(makeRightSegment(ctx.tc.worktree('\u2387 ' + wtName), ctx.gridOn));
-  }
-
-  if (l1.includes('session') && ctx.builtin?.session_name) {
-    segs.push(makeRightSegment(ctx.tc.worktree('\u00A7 ' + truncate(ctx.builtin.session_name, 24)), ctx.gridOn));
-  }
-
-  if (l1.includes('agent') && ctx.builtin?.agent?.name) {
-    segs.push(makeRightSegment(ctx.tc.model('@' + truncate(ctx.builtin.agent.name, 24)), ctx.gridOn));
-  }
-
-  if (l1.includes('pr')) {
-    const prText = prDisplay(ctx.builtin?.pr);
-    if (prText) segs.push(makeRightSegment(ctx.tc.branch(prText), ctx.gridOn));
-  }
-
-  if (l1.includes('branch') && ctx.cfg.gitStatus.enabled && ctx.state.gitStatus?.branch) {
-    const gitText = renderGitText(ctx.state.gitStatus, ctx.cfg.gitStatus);
-    segs.push(makeRightSegment(ctx.tc.branch(gitText), ctx.gridOn));
-  } else if (l1.includes('branch') && ctx.state.branch) {
-    segs.push(makeRightSegment(ctx.tc.branch(ctx.state.branch), ctx.gridOn));
-  }
-
-  const modelText = l1.includes('model') ? modelDisplay(ctx.builtin) : undefined;
-  if (modelText) {
-    segs.push(makeRightSegment(ctx.tc.model(modelText), ctx.gridOn));
+  const seen = new Set<string>();
+  for (const slot of l1) {
+    if (slot === 'focus' || seen.has(slot)) continue;
+    seen.add(slot);
+    if (slot === 'worktree') {
+      const wtName = worktreeName(ctx.builtin);
+      if (wtName) segs.push(makeRightSegment(ctx.tc.worktree('\u2387 ' + wtName), ctx.gridOn));
+    } else if (slot === 'session' && ctx.builtin?.session_name) {
+      segs.push(makeRightSegment(ctx.tc.worktree('\u00A7 ' + truncate(ctx.builtin.session_name, 24)), ctx.gridOn));
+    } else if (slot === 'agent' && ctx.builtin?.agent?.name) {
+      segs.push(makeRightSegment(ctx.tc.model('@' + truncate(ctx.builtin.agent.name, 24)), ctx.gridOn));
+    } else if (slot === 'pr') {
+      const prText = prDisplay(ctx.builtin?.pr);
+      if (prText) segs.push(makeRightSegment(ctx.tc.branch(prText), ctx.gridOn));
+    } else if (slot === 'branch' && ctx.cfg.gitStatus.enabled) {
+      if (ctx.state.gitStatus?.branch) {
+        const gitText = renderGitText(ctx.state.gitStatus, ctx.cfg.gitStatus);
+        segs.push(makeRightSegment(ctx.tc.branch(gitText), ctx.gridOn));
+      } else if (ctx.state.branch) {
+        segs.push(makeRightSegment(ctx.tc.branch(sanitizeDisplayText(ctx.state.branch)), ctx.gridOn));
+      }
+    } else if (slot === 'model') {
+      const modelText = modelDisplay(ctx.builtin);
+      if (modelText) segs.push(makeRightSegment(ctx.tc.model(modelText), ctx.gridOn));
+    }
   }
 
   return segs;
 }
 
 function renderLine1Left(ctx: RenderContext, availLeft: number): Segment {
-  if (ctx.state.refinementError) {
-    return makeSegment(ctx.tc.red(ERROR_LABELS[ctx.state.refinementError.code]));
-  }
-
   if (!ctx.cfg.line1.includes('focus')) {
     return { text: '', width: 0 };
+  }
+
+  if (ctx.state.refinementError) {
+    return makeSegment(ctx.tc.red(ERROR_LABELS[ctx.state.refinementError.code]));
   }
 
   if (ctx.state.focus) {
@@ -429,10 +434,11 @@ function renderLine1Left(ctx: RenderContext, availLeft: number): Segment {
 }
 
 function renderLine1(ctx: RenderContext): string {
+  const minLeft = ctx.cfg.line1.includes('focus') ? MIN_FOCUS_COLS : 0;
   const rightJoined = progressiveJoin(
     buildLine1RightSegments(ctx),
     ctx.termWidth - ctx.prefixWidth,
-    MIN_FOCUS_COLS,
+    minLeft,
     ctx.joiner,
   );
   const spaceForRight = rightJoined.width > 0 ? rightJoined.width + 2 : 0;
@@ -485,8 +491,10 @@ export function formatStatusline(
 ): string {
   const cfg = config ?? DEFAULT_FORMAT_CONFIG;
   const tc = getThemeColors(cfg.theme);
-  const joiner = makeJoiner(cfg.separator, tc);
-  const gridOn = cfg.separator !== '';
+  const rawSeparator = typeof cfg.separator === 'string' ? cfg.separator : DEFAULT_FORMAT_CONFIG.separator;
+  const separator = [...sanitizeDisplayText(rawSeparator)][0] ?? '';
+  const joiner = makeJoiner(separator, tc);
+  const gridOn = separator !== '';
   // Fallback uses sessionStartedAt (not lastActivityAt) to match stdin's
   // "wall-clock since session started" semantic.
   const elapsed = builtin?.cost?.total_duration_ms != null

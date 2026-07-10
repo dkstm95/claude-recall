@@ -1,4 +1,4 @@
-import { readState, writeState, cleanupOldSessions, refreshGitStatus, createEmptySessionState } from '../state.js';
+import { readState, replaceState, updateState, cleanupOldSessions, refreshGitStatus, createEmptySessionState } from '../state.js';
 import { getString, runHook } from './common.js';
 async function handleSessionStart(input) {
     const sessionId = getString(input, 'session_id');
@@ -13,7 +13,7 @@ async function handleSessionStart(input) {
         const state = createEmptySessionState(sessionId, cwd);
         await refreshGitStatus(state, cwd);
         state.lastActivityAt = now;
-        writeState(sessionId, state);
+        replaceState(sessionId, state);
     }
     else {
         const cwdChanged = existing.cwd !== '' && existing.cwd !== cwd;
@@ -23,7 +23,14 @@ async function handleSessionStart(input) {
         if (source === 'clear') {
             existing.lastUserPrompt = '';
         }
-        writeState(sessionId, existing);
+        updateState(sessionId, (fresh) => {
+            fresh.cwd = cwd;
+            fresh.lastActivityAt = now;
+            fresh.gitStatus = existing.gitStatus;
+            fresh.branch = existing.branch;
+            if (source === 'clear')
+                fresh.lastUserPrompt = '';
+        }, existing);
     }
 }
 await runHook('session-start', handleSessionStart);

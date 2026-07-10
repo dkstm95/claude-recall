@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   displayWidth,
+  sanitizeDisplayText,
   truncate,
   progressiveJoin,
   getTerminalWidth,
@@ -43,6 +44,10 @@ test('truncate: mixed-width does not straddle the last column', () => {
 
 test('truncate: replaces newline/tab/cr with spaces before measuring', () => {
   assert.equal(truncate('a\nb\tc\rd', 10), 'a b c d');
+});
+
+test('sanitizeDisplayText: removes terminal control characters but keeps readable spacing', () => {
+  assert.equal(sanitizeDisplayText('a\x1b]52;c;payload\x07\nb\x00'), 'a]52;c;payload b');
 });
 
 test('progressiveJoin: drops rightmost segments when budget tight', () => {

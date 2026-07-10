@@ -1,11 +1,11 @@
 import { spawn } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { chmodSync, mkdirSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { open } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 import { homedir } from 'node:os';
 import { randomUUID } from 'node:crypto';
-import { readState, writeState, type RefinementError } from './state.js';
+import { getStatePath, readState, updateState, type RefinementError } from './state.js';
 
 // Budget: claude CLI carries a ~9s fixed startup overhead on systems with many
 // MCP servers, so 45s leaves Haiku ~36s of headroom — covers observed p99 on
@@ -16,6 +16,7 @@ const TIMEOUT_MS = 45_000;
 const TRANSCRIPT_TAIL_BYTES = 12_000;
 const DEBOUNCE_MS = 5_000;
 const FOCUS_MAX_CHARS = 60;
+const REFINEMENT_LOCK_STALE_MS = TIMEOUT_MS + 15_000;
 
 export const REFINING_ENV_VAR = 'CLAUDE_RECALL_REFINING';
 export const REFINING_ENV_VALUE = '1';
@@ -121,11 +122,10 @@ export async function spawnRefinement(
       '--disable-slash-commands',
       '--no-session-persistence',
       '--append-system-prompt', SYSTEM_PROMPT,
-      userPrompt,
     ];
 
     const child = spawn('claude', args, {
-      stdio: ['ignore', 'pipe', 'pipe'],
+      stdio: ['pipe', 'pipe', 'pipe'],
       env: { ...process.env, [REFINING_ENV_VAR]: REFINING_ENV_VALUE },
     });
 
@@ -146,20 +146,31 @@ export async function spawnRefinement(
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      try { child.kill('SIGTERM'); } catch { /* ignore */ }
+      if (child.exitCode === null && child.signalCode === null) {
+        try { child.kill('SIGTERM'); } catch { /* ignore */ }
+        const forceKill = setTimeout(() => {
+          try { child.kill('SIGKILL'); } catch { /* ignore */ }
+        }, 1_000);
+        forceKill.unref();
+        child.once('close', () => clearTimeout(forceKill));
+      }
       resolve(result);
     };
 
     const timer = setTimeout(() => finish(errorResult('timeout')), TIMEOUT_MS);
 
     child.stdout.on('data', (d: Buffer) => {
-      if (stdout.length < STDOUT_MAX_BUF) stdout += d.toString('utf-8');
+      if (stdout.length < STDOUT_MAX_BUF) {
+        stdout = (stdout + d.toString('utf-8')).slice(0, STDOUT_MAX_BUF);
+      }
     });
     child.stderr.on('data', (d: Buffer) => {
       stderr = (stderr + d.toString('utf-8')).slice(-STDERR_MAX_BUF);
     });
     child.on('error', () => finish(errorResult('unknown')));
-    child.on('exit', (exitCode) => {
+    child.stdin.on('error', () => { /* EPIPE is reported through child exit/error */ });
+    child.stdin.end(userPrompt);
+    child.on('close', (exitCode) => {
       if (exitCode !== 0) {
         finish(errorResult(classifyError(exitCode, stderr)));
         return;
@@ -186,73 +197,88 @@ export async function triggerFocusRefinement(
 ): Promise<void> {
   if (isRefiningSubprocess()) return;
 
-  const state = readState(sessionId);
-  if (!state) return;
-  if (!shouldRefine(state.lastRefinedAt)) return;
+  const releaseRefinement = tryAcquireRefinementLock(sessionId);
+  if (!releaseRefinement) return;
+  try {
+    const state = readState(sessionId);
+    if (!state || !shouldRefine(state.lastRefinedAt)) return;
 
-  // Prefer the JSONL transcript tail; fall back to the persisted last user prompt
-  // when the file is missing or empty (typical on the first prompt, where Claude
-  // Code's transcript flush hasn't completed by the time UserPromptSubmit fires).
-  let transcript = preferredTranscript?.trim() ? `Compaction summary:\n${preferredTranscript}` : '';
-  if (!transcript && transcriptPath) {
-    try {
-      transcript = await readTranscriptTail(transcriptPath);
-    } catch {
-      /* fall through to fallback */
+    // Prefer the JSONL transcript tail; fall back to the persisted last user prompt
+    // when the file is missing or empty (typical on the first prompt, where Claude
+    // Code's transcript flush hasn't completed by the time UserPromptSubmit fires).
+    let transcript = preferredTranscript?.trim() ? `Compaction summary:\n${preferredTranscript}` : '';
+    if (!transcript && transcriptPath) {
+      try {
+        transcript = await readTranscriptTail(transcriptPath);
+      } catch {
+        /* fall through to fallback */
+      }
     }
+    if (!transcript.trim() && state.lastUserPrompt.trim()) {
+      transcript = `User: ${state.lastUserPrompt}`;
+    }
+
+    const result = await spawnRefinement(transcript, state.focus);
+    if (result.status === 'skip') return;
+
+    const now = new Date().toISOString();
+    updateState(sessionId, (fresh) => {
+      if (result.status === 'ok') {
+        fresh.focus = result.focus;
+        fresh.refinementError = null;
+        fresh.lastRefinement = {
+          at: now,
+          status: 'ok',
+          durationMs: result.durationMs,
+          transcriptBytes: result.transcriptBytes,
+        };
+      } else {
+        fresh.refinementError = {
+          code: result.code,
+          at: now,
+          durationMs: result.durationMs,
+          stderrTail: result.stderrTail,
+        };
+        fresh.lastRefinement = {
+          at: now,
+          status: 'error',
+          code: result.code,
+          durationMs: result.durationMs,
+          transcriptBytes: result.transcriptBytes,
+          stdoutBytes: result.stdoutBytes,
+          stderrTail: result.stderrTail,
+        };
+      }
+      fresh.lastRefinedAt = now;
+    });
+  } finally {
+    releaseRefinement();
   }
-  if (!transcript.trim() && state.lastUserPrompt.trim()) {
-    transcript = `User: ${state.lastUserPrompt}`;
+}
+
+function tryAcquireRefinementLock(sessionId: string): (() => void) | null {
+  const lockPath = `${getStatePath(sessionId)}.refining`;
+  const acquire = (): (() => void) | null => {
+    try {
+      mkdirSync(lockPath, { mode: 0o700 });
+      return () => {
+        try { rmSync(lockPath, { recursive: true, force: true }); } catch { /* best effort */ }
+      };
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'EEXIST') return null;
+      return null;
+    }
+  };
+
+  const first = acquire();
+  if (first) return first;
+  try {
+    if (Date.now() - statSync(lockPath).mtimeMs <= REFINEMENT_LOCK_STALE_MS) return null;
+    rmSync(lockPath, { recursive: true, force: true });
+  } catch {
+    return null;
   }
-
-  // Optimistic write narrows the concurrent-spawn window during the subprocess call.
-  const previousRefinedAt = state.lastRefinedAt;
-  state.lastRefinedAt = new Date().toISOString();
-  writeState(sessionId, state);
-
-  const result = await spawnRefinement(transcript, state.focus);
-
-  // Re-read so we don't clobber fields another hook may have updated during the spawn window.
-  const fresh = readState(sessionId);
-  if (!fresh) return;
-
-  if (result.status === 'skip') {
-    // Roll back the optimistic debounce write — we never actually called Haiku.
-    fresh.lastRefinedAt = previousRefinedAt;
-    writeState(sessionId, fresh);
-    return;
-  }
-
-  const now = new Date().toISOString();
-
-  if (result.status === 'ok') {
-    fresh.focus = result.focus;
-    fresh.refinementError = null;
-    fresh.lastRefinement = {
-      at: now,
-      status: 'ok',
-      durationMs: result.durationMs,
-      transcriptBytes: result.transcriptBytes,
-    };
-  } else {
-    fresh.refinementError = {
-      code: result.code,
-      at: now,
-      durationMs: result.durationMs,
-      stderrTail: result.stderrTail,
-    };
-    fresh.lastRefinement = {
-      at: now,
-      status: 'error',
-      code: result.code,
-      durationMs: result.durationMs,
-      transcriptBytes: result.transcriptBytes,
-      stdoutBytes: result.stdoutBytes,
-      stderrTail: result.stderrTail,
-    };
-  }
-  fresh.lastRefinedAt = now;
-  writeState(sessionId, fresh);
+  return acquire();
 }
 
 /**
@@ -264,9 +290,10 @@ export async function triggerFocusRefinement(
 function writeWorkerInput(text: string | undefined): string | undefined {
   if (!text?.trim()) return undefined;
   const dir = join(homedir(), '.claude', 'claude-recall', 'refine-inputs');
-  mkdirSync(dir, { recursive: true });
+  mkdirSync(dir, { recursive: true, mode: 0o700 });
+  try { chmodSync(dir, 0o700); } catch { /* best effort on non-POSIX filesystems */ }
   const path = join(dir, `${randomUUID()}.txt`);
-  writeFileSync(path, text, 'utf-8');
+  writeFileSync(path, text, { encoding: 'utf-8', mode: 0o600 });
   return path;
 }
 
@@ -289,6 +316,11 @@ export function launchRefinementWorker(
   const child = spawn(process.execPath, [workerPath, sessionId, transcriptPath ?? '', inputPath ?? ''], {
     detached: true,
     stdio: 'ignore',
+  });
+  child.once('error', () => {
+    if (inputPath) {
+      try { unlinkSync(inputPath); } catch { /* best-effort cleanup */ }
+    }
   });
   child.unref();
 }

@@ -1,6 +1,6 @@
 # claude-recall
 
-Claude Code plugin (v6.4.1) that provides a session awareness statusline.
+Claude Code plugin (v6.4.2) that provides a session awareness statusline.
 Tracks a Haiku-refined focus label, activity, git status, and prompt count for every parallel Claude Code session.
 
 - **Author**: seungilahn
@@ -26,7 +26,7 @@ npm install          # Install dev dependencies (typescript, @types/node)
   plugin.json             #   Name, version, description, author
   marketplace.json        #   Marketplace listing metadata
 commands/                 # Slash commands (markdown with frontmatter)
-  setup.md                #   /setup — configure statusline & launcher script
+  setup.md                #   /claude-recall:setup — configure statusline & launcher script
 hooks/
   hooks.json              # Hook registration (SessionStart, UserPromptSubmit, CwdChanged, PreCompact, PostCompact, SessionEnd)
 src/                      # TypeScript source
@@ -137,7 +137,7 @@ Effect at the 120-col fallback with all four segments populated: L0 (~91 cols) f
 
 ## Key Patterns
 
-- **Atomic writes**: `writeState()` writes to `.tmp` file, then `rename()` (crash-safe)
+- **Atomic state patches**: `updateState()` takes a short per-session filesystem lock, reads the latest snapshot, applies a field patch, then atomically renames a private `0600` temp file. This prevents detached refinement and hooks from reverting each other's fields.
 - **Graceful degradation**: Hooks always output `{}` even on error; statusline exits silently on missing data
 - **CJK-aware**: `displayWidth()` and `isWide()` in format.ts handle double-width characters
 - **Slash command filtering**: prompt-submit.ts ignores prompts starting with `/`
@@ -148,7 +148,7 @@ Effect at the 120-col fallback with all four segments populated: L0 (~91 cols) f
 - **Config-driven statusline**: line1/line2/line3 element arrays control which segments render.
 - **Focus refinement recursion guard**: `refine.ts` sets `CLAUDE_RECALL_REFINING=1` in the child env; all hooks early-return when this env var is set, preventing the spawned `claude -p` from re-triggering the plugin.
 - **PostCompact summary preference**: `trigger-refinement.ts` passes Claude Code's `compact_summary` to the detached worker when present; transcript tail remains the fallback for PreCompact, SessionEnd, and prompt-triggered refinements.
-- **Debounce on refinement**: `shouldRefine()` checks `lastRefinedAt` against a 5s window. Optimistic write of `lastRefinedAt` before the `claude -p` call narrows the concurrent-spawn race window.
+- **Single-flight refinement + debounce**: a per-session refinement lock excludes overlapping workers for the full Haiku call; stale locks recover after the timeout budget. `shouldRefine()` then applies a 5s cooldown from the last completed attempt.
 
 ## Coding Conventions
 
@@ -180,6 +180,6 @@ All hooks defined in `hooks/hooks.json`:
 
 - `dist/` is committed to git (users install from marketplace without building)
 - The statusline launcher script lives at `~/.claude/claude-recall/statusline-launcher.sh`
-- Settings are merged into `~/.claude/settings.json` by `/setup` command
+- Settings are merged into `~/.claude/settings.json` by `/claude-recall:setup`
 - Bilingual documentation: English (README.md) + Korean (README.ko.md)
 - Background LLM calls are core behavior; no opt-out config. Uninstall to stop.

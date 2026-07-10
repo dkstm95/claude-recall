@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-6.4.1-blue?style=flat-square" alt="version">
+  <img src="https://img.shields.io/badge/version-6.4.2-blue?style=flat-square" alt="version">
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="license">
   <img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen?style=flat-square&logo=node.js&logoColor=white" alt="node">
   <img src="https://img.shields.io/badge/Claude_Code-Plugin-blueviolet?style=flat-square" alt="Claude Code Plugin">
@@ -58,11 +58,11 @@ Plus: rich git status (dirty + ahead/behind vs `origin/<default>`), rate-limit b
 /plugin install claude-recall@claude-recall
 
 # 3. Configure statusline
-/setup
+/claude-recall:setup
 ```
 
 > [!IMPORTANT]
-> **Restart Claude Code** after `/setup` to activate the statusline and new hooks.
+> **Restart Claude Code** after `/claude-recall:setup` to activate the statusline and new hooks.
 
 ## Usage
 
@@ -70,7 +70,7 @@ Everything works automatically after install. There are no focus-management comm
 
 | Command | Description |
 |---------|-------------|
-| `/setup` | Reconfigure statusline / verify installation |
+| `/claude-recall:setup` | Reconfigure statusline / verify installation |
 
 For context management, use Claude Code's native commands: `/compact` (manual compaction for long-running tasks), `/clear` (switch to unrelated task), `/resume` (pick up a prior session).
 
@@ -93,10 +93,10 @@ Create `~/.claude/claude-recall/config.json`:
 }
 ```
 
-- **line1** — Choose from: `focus`, `branch`, `model`, `worktree`, `session`, `agent`, `pr`
+- **line1** — Choose from: `focus`, `branch`, `model`, `worktree`, `session`, `agent`, `pr`. Right-side order is significant: earlier entries have higher keep priority on narrow terminals.
 - **line2** — Choose from: `turn`, `prompt`, `elapsed`
 - **line3** — Choose from: `context`, `rate_limits`, `seven_day`, `cost`. Set `line3: []` to force a 2-line statusline.
-- **gitStatus** — Toggle dirty flag and ahead/behind independently.
+- **gitStatus** — Set `enabled: false` to hide the branch slot; dirty and ahead/behind decorations can be toggled independently.
 - **separator** *(v6.3.0+)* — Character drawn between right-zone segments on Line 1 and between all segments on Line 3. Default `"│"` (U+2502, dim). Right-zone segments also left-pad to a 10-col cell, so `│` positions stay stable across renders. Set to `""` to disable both the separator and the padding (flat 2-space joiner, pre-v6.3.0 look). Any single glyph works — `"┊"` dotted, `"|"` ASCII, etc.
 - **theme** — `default` (cyan/bold, dark terminals), `light` (blue/dark-orange, white terminals), `minimal` (subdued, monochrome — severity via reverse-video), `vivid` (bright/high contrast)
   - When `theme` is omitted and the terminal exports `COLORFGBG`, claude-recall auto-selects `light` for light backgrounds (`bg=7` or `bg=15`) and `default` otherwise. An explicit `theme` value always wins.
@@ -115,7 +115,7 @@ Create `~/.claude/claude-recall/config.json`:
 | **model** | Line 1, right | Active Claude model, enriched with model version from `model.id`, effort level, and thinking state when present | Claude Code built-in |
 | **turn** | Line 2, left | Current prompt number (`#12`) | claude-recall |
 | **last prompt** | Line 2, left | The last prompt you typed | claude-recall |
-| **elapsed** | Line 2, right | Time since session start / last activity | claude-recall |
+| **elapsed** | Line 2, right | Wall-clock time since session start | claude-recall |
 | **ctx bar** | Line 3 | Context window usage — `ctx ████░░░░░░ 45%` — green (<70%), yellow (70-89%), red (≥90%) | Claude Code built-in |
 | **5h rate limit bar** | Line 3 | 5-hour usage + reset time — `5h ████░░░░░░ 45% (~16:59)` | Claude Code built-in |
 | **7d rate limit bar** | Line 3 | 7-day usage + reset date/time — `7d ██░░░░░░░░ 20% (~4/25 13:59)` | Claude Code built-in |
@@ -123,11 +123,11 @@ Create `~/.claude/claude-recall/config.json`:
 | **worktree** *(opt-in)* | Line 1, right | `⎇ <name>` from Claude Code's `worktree.name` / `worktree.path` fields when inside a linked git worktree | Claude Code built-in |
 | **session** *(opt-in)* | Line 1, right | Session display name from Claude Code's `session_name` field | Claude Code built-in |
 | **agent** *(opt-in)* | Line 1, right | Active agent name from Claude Code's `agent.name` field | Claude Code built-in |
-| **pr** *(opt-in)* | Line 1, right | Active PR number/title from Claude Code's `pr` field | Claude Code built-in |
+| **pr** *(opt-in)* | Line 1, right | Active PR number from Claude Code's `pr` field | Claude Code built-in |
 | **refinement error** | Line 1, left | Red `⚠ AI <reason>` label replaces focus when a background refinement fails | claude-recall |
 
 Notes:
-- Line 3 renders when any of `ctx` / `rate_limits` / `seven_day` / `cost` has data. API-key-only users with no rate-limits still get the `ctx` bar once the context window starts filling; the line is hidden only until there's something to show.
+- With the default config, Line 3 renders `ctx 0%` from the first frame, then replaces it with live or cached context usage. Set `line3: []` to opt out; explicit empty arrays are never overridden by legacy migration.
 - **`5h` / `7d` bars require Claude.ai Pro/Max.** Claude Code omits the `rate_limits` stdin field for Claude API key users, so the two rate-limit bars never populate on API-key setups (no error — just absent). The `ctx` and `$cost` segments still render normally.
 - **First-entry cache.** Claude Code omits `rate_limits` and `context_window` from stdin until the first API call, so claude-recall caches the last-seen values under `~/.claude/claude-recall/` and restores them on first render — the bars show up immediately instead of waiting for the first prompt. See CHANGELOG v6.1.4 / v6.1.5 for details.
 - On narrow terminals, Line 3 drops `cost` first, then `7d`, then `5h`, keeping `ctx` visible the longest — context exhaustion is the most urgent signal.

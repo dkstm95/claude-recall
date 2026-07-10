@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, readFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { spawn } from 'node:child_process';
 
 // Redirect HOME before importing so the cache module writes to a temp dir
 // instead of the real ~/.claude/claude-recall/context-windows.json.
@@ -122,6 +124,26 @@ test('resolveContextWindow: parallel sessions do not contaminate each other', ()
   const b = resolveContextWindow('session-b', undefined);
   assert.equal(a.used_percentage, 10);
   assert.equal(b.used_percentage, 80);
+  cleanupCache();
+});
+
+test('resolveContextWindow: concurrent processes preserve every session entry', async () => {
+  cleanupCache();
+  const moduleUrl = pathToFileURL(join(process.cwd(), 'dist', 'context-window-cache.js')).href;
+  const writes = Array.from({ length: 12 }, (_, index) => new Promise((resolve, reject) => {
+    const script = `const { resolveContextWindow } = await import(${JSON.stringify(moduleUrl)}); resolveContextWindow(${JSON.stringify(`parallel-${index}`)}, { used_percentage: ${index} });`;
+    const child = spawn(process.execPath, ['--input-type=module', '--eval', script], {
+      env: { ...process.env, HOME: tmpHome, USERPROFILE: tmpHome },
+      stdio: 'ignore',
+    });
+    child.on('error', reject);
+    child.on('close', (code) => code === 0 ? resolve() : reject(new Error(`child exited ${code}`)));
+  }));
+  await Promise.all(writes);
+  const cache = readContextCache();
+  for (let index = 0; index < 12; index++) {
+    assert.equal(cache[`parallel-${index}`]?.used_percentage, index);
+  }
   cleanupCache();
 });
 

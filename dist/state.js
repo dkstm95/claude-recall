@@ -1,10 +1,11 @@
-import { mkdirSync, readFileSync, readdirSync, unlinkSync } from 'node:fs';
+import { chmodSync, mkdirSync, readFileSync, readdirSync, unlinkSync } from 'node:fs';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { join } from 'node:path';
 import { homedir } from 'node:os';
+import { createHash } from 'node:crypto';
 import { cleanupContextCache } from './context-window-cache.js';
-import { readJsonFile, writeJsonFileAtomic } from './json-file.js';
+import { readJsonFile, withFileLock, writeJsonFileAtomic } from './json-file.js';
 const execFileAsync = promisify(execFile);
 export function createEmptySessionState(sessionId, cwd) {
     const now = new Date().toISOString();
@@ -25,11 +26,23 @@ export function createEmptySessionState(sessionId, cwd) {
 }
 export function getStateDir() {
     const dir = join(homedir(), '.claude', 'claude-recall', 'sessions');
-    mkdirSync(dir, { recursive: true });
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
+    try {
+        chmodSync(dir, 0o700);
+    }
+    catch { /* best effort on non-POSIX filesystems */ }
     return dir;
 }
+function stateFileStem(sessionId) {
+    // Claude Code currently emits UUID-like IDs. Keep those filenames readable,
+    // but hash every unusual/oversized value so hook input can never traverse out
+    // of the private sessions directory or exceed filesystem component limits.
+    if (/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(sessionId))
+        return sessionId;
+    return `session-${createHash('sha256').update(sessionId).digest('hex')}`;
+}
 export function getStatePath(sessionId) {
-    return join(getStateDir(), `${sessionId}.json`);
+    return join(getStateDir(), `${stateFileStem(sessionId)}.json`);
 }
 export function readState(sessionId) {
     const parsed = readJsonFile(getStatePath(sessionId));
@@ -56,6 +69,26 @@ export function readState(sessionId) {
 }
 export function writeState(sessionId, state) {
     writeJsonFileAtomic(getStatePath(sessionId), state);
+}
+/**
+ * Apply a short, synchronous field update to the latest state snapshot.
+ * Expensive work must happen before this call so hooks never hold the lock
+ * while running git or Haiku.
+ */
+export function updateState(sessionId, mutate, initialState) {
+    return withFileLock(getStatePath(sessionId), () => {
+        const state = readState(sessionId) ?? initialState ?? null;
+        if (!state)
+            return null;
+        mutate(state);
+        writeState(sessionId, state);
+        return state;
+    });
+}
+export function replaceState(sessionId, state) {
+    withFileLock(getStatePath(sessionId), () => {
+        writeState(sessionId, state);
+    });
 }
 async function runGit(cwd, args, timeoutMs = 1000) {
     const { stdout } = await execFileAsync('git', args, {
@@ -87,8 +120,9 @@ export async function getGitStatus(cwd, fallback) {
         if (branch === 'HEAD') {
             branch = await runGit(cwd, ['rev-parse', '--short', 'HEAD']).catch(() => 'HEAD');
         }
-        const dirty = dirtyR !== null && dirtyR.length > 0;
-        let defaultBranch = 'main';
+        const sameBranchFallback = fallback?.branch === branch ? fallback : null;
+        const dirty = dirtyR !== null ? dirtyR.length > 0 : (sameBranchFallback?.dirty ?? false);
+        let defaultBranch = sameBranchFallback?.defaultBranch ?? 'main';
         if (defaultR) {
             defaultBranch = defaultR.replace(/^origin\//, '');
         }
@@ -97,8 +131,8 @@ export async function getGitStatus(cwd, fallback) {
             if (master !== null)
                 defaultBranch = 'master';
         }
-        let ahead = 0;
-        let behind = 0;
+        let ahead = sameBranchFallback?.ahead ?? 0;
+        let behind = sameBranchFallback?.behind ?? 0;
         const revOut = await runGit(cwd, [
             'rev-list', '--left-right', '--count', `origin/${defaultBranch}...HEAD`,
         ]).catch(() => null);
@@ -136,7 +170,7 @@ export function cleanupOldSessions() {
                 unlinkSync(join(dir, f));
             }
             else {
-                kept.add(f.replace(/\.json$/, ''));
+                kept.add(typeof state.sessionId === 'string' ? state.sessionId : f.replace(/\.json$/, ''));
             }
         }
         catch {

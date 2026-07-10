@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { readJsonFile, writeJsonFileAtomic } from './json-file.js';
+import { readJsonFile, withFileLock, writeJsonFileAtomic } from './json-file.js';
 
 export interface RateLimitWindow {
   used_percentage?: number;
@@ -51,12 +51,16 @@ export function readRateLimitsCache(nowMs: number = Date.now()): RateLimitsData 
   return Object.keys(out).length > 0 ? out : null;
 }
 
-export function writeRateLimitsCache(data: RateLimitsData): void {
+function writeRateLimitsCacheUnlocked(data: RateLimitsData): void {
   try {
     writeJsonFileAtomic(CACHE_PATH, data);
   } catch {
     // best-effort; cache miss on next read is harmless
   }
+}
+
+export function writeRateLimitsCache(data: RateLimitsData): void {
+  withFileLock(CACHE_PATH, () => writeRateLimitsCacheUnlocked(data));
 }
 
 // Field-wise merge within each window: live's used_percentage is authoritative,
@@ -105,8 +109,14 @@ export function hasAnyLivePct(live: RateLimitsData | undefined): boolean {
 export function resolveRateLimits(live: RateLimitsData | undefined): RateLimitsData | undefined {
   const cache = readRateLimitsCache();
   const merged = mergeRateLimits(live, cache);
-  if (hasAnyLivePct(live) && merged && !dataEqual(cache, merged)) {
-    writeRateLimitsCache(merged);
-  }
-  return merged;
+  if (!hasAnyLivePct(live) || !merged || dataEqual(cache, merged)) return merged;
+
+  return withFileLock(CACHE_PATH, () => {
+    const latest = readRateLimitsCache();
+    const latestMerged = mergeRateLimits(live, latest);
+    if (latestMerged && !dataEqual(latest, latestMerged)) {
+      writeRateLimitsCacheUnlocked(latestMerged);
+    }
+    return latestMerged;
+  });
 }

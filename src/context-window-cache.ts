@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { homedir } from 'node:os';
-import { readJsonFile, writeJsonFileAtomic } from './json-file.js';
+import { readJsonFile, withFileLock, writeJsonFileAtomic } from './json-file.js';
 
 export interface ContextWindowData {
   used_percentage?: number;
@@ -24,7 +24,7 @@ function readCache(): ContextCache {
   return {};
 }
 
-function writeCache(cache: ContextCache): void {
+function writeCacheUnlocked(cache: ContextCache): void {
   try {
     writeJsonFileAtomic(CACHE_PATH, cache);
   } catch {
@@ -37,7 +37,7 @@ export function readContextCache(): ContextCache {
 }
 
 export function writeContextCache(cache: ContextCache): void {
-  writeCache(cache);
+  withFileLock(CACHE_PATH, () => writeCacheUnlocked(cache));
 }
 
 // Claude Code omits `context_window` from statusline stdin until the first
@@ -55,10 +55,13 @@ export function resolveContextWindow(
   const cache = readCache();
   const livePct = live?.used_percentage;
   if (typeof livePct === 'number') {
-    const cachedPct = cache[sessionId]?.used_percentage;
-    if (cachedPct !== livePct) {
-      cache[sessionId] = { used_percentage: livePct, at: new Date().toISOString() };
-      writeCache(cache);
+    if (cache[sessionId]?.used_percentage !== livePct) {
+      withFileLock(CACHE_PATH, () => {
+        const latest = readCache();
+        if (latest[sessionId]?.used_percentage === livePct) return;
+        latest[sessionId] = { used_percentage: livePct, at: new Date().toISOString() };
+        writeCacheUnlocked(latest);
+      });
     }
     return { used_percentage: livePct };
   }
@@ -70,13 +73,15 @@ export function resolveContextWindow(
 }
 
 export function cleanupContextCache(keptSessionIds: Set<string>): void {
-  const cache = readCache();
-  let changed = false;
-  for (const id of Object.keys(cache)) {
-    if (!keptSessionIds.has(id)) {
-      delete cache[id];
-      changed = true;
+  withFileLock(CACHE_PATH, () => {
+    const cache = readCache();
+    let changed = false;
+    for (const id of Object.keys(cache)) {
+      if (!keptSessionIds.has(id)) {
+        delete cache[id];
+        changed = true;
+      }
     }
-  }
-  if (changed) writeCache(cache);
+    if (changed) writeCacheUnlocked(cache);
+  });
 }

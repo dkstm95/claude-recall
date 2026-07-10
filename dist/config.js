@@ -81,7 +81,7 @@ function sanitizeLine(raw, valid, fallback) {
     if (!Array.isArray(raw))
         return fallback;
     const mapped = raw.map((s) => (typeof s === 'string' ? mapLegacySlot(s) : ''));
-    return mapped.filter((s) => valid.includes(s));
+    return [...new Set(mapped.filter((s) => valid.includes(s)))];
 }
 function sanitizeGitStatus(raw) {
     const def = DEFAULT_CONFIG.gitStatus;
@@ -114,7 +114,7 @@ export function readConfig() {
         const line3 = sanitizeLine(parsed['line3'], VALID_LINE3, DEFAULT_CONFIG.line3);
         // Legacy: 'context' moved from L2 to L3 in v6.1.0 — migrate if user had it in L2.
         const rawL2 = parsed['line2'];
-        if (Array.isArray(rawL2) && rawL2.includes('context') && !line3.includes('context')) {
+        if (parsed['line3'] === undefined && Array.isArray(rawL2) && rawL2.includes('context') && !line3.includes('context')) {
             line3.unshift('context');
         }
         const rawSep = parsed['separator'];

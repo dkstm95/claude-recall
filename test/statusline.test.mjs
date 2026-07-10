@@ -166,6 +166,48 @@ test('formatStatusline: session, agent, and pr slots render from current statusl
   assert.ok(clean1.includes('Sonnet 4.6'), `model id should fill missing version, got "${clean1}"`);
 });
 
+test('formatStatusline: Line 1 right-side order follows config priority', () => {
+  const state = emptyState();
+  state.gitStatus = { branch: 'main', dirty: false, ahead: 0, behind: 0, defaultBranch: 'main' };
+  const cfg = { ...BASE_CFG, line1: ['focus', 'model', 'branch'] };
+  const clean1 = stripAnsi(formatStatusline(state, 140, {
+    model: { display_name: 'Sonnet 4.6' },
+  }, cfg).split('\n')[0]);
+  assert.ok(clean1.indexOf('Sonnet 4.6') < clean1.indexOf('main'), `config order must be preserved: "${clean1}"`);
+});
+
+test('formatStatusline: focus opt-out also hides refinement errors and releases left-side budget', () => {
+  const state = emptyState();
+  state.refinementError = { code: 'auth', at: new Date().toISOString() };
+  state.gitStatus = { branch: 'main', dirty: false, ahead: 0, behind: 0, defaultBranch: 'main' };
+  const cfg = { ...BASE_CFG, line1: ['branch'] };
+  const clean1 = stripAnsi(formatStatusline(state, 30, {}, cfg).split('\n')[0]);
+  assert.ok(!clean1.includes('AI auth failed'), `focus opt-out should hide its error label: "${clean1}"`);
+  assert.ok(clean1.includes('main'), `right-side metadata should retain the released budget: "${clean1}"`);
+});
+
+test('formatStatusline: external text cannot emit terminal control sequences', () => {
+  const state = emptyState();
+  state.focus = 'safe\x1b]52;c;clipboard\x07';
+  state.lastUserPrompt = 'prompt\x1b[2J';
+  const cfg = { ...BASE_CFG, theme: 'minimal' };
+  const out = formatStatusline(state, 140, {
+    model: { display_name: 'Sonnet\x1b[2J' },
+    session_name: 'name\x07',
+  }, { ...cfg, line1: ['focus', 'session', 'model'] });
+  const withoutThemeAnsi = stripAnsi(out);
+  assert.doesNotMatch(withoutThemeAnsi, /[\u0000-\u0009\u000B-\u001F\u007F-\u009F]/);
+});
+
+test('formatStatusline: disabling gitStatus hides the branch slot', () => {
+  const state = emptyState();
+  state.branch = 'main';
+  state.gitStatus = { branch: 'main', dirty: true, ahead: 1, behind: 2, defaultBranch: 'main' };
+  const cfg = { ...BASE_CFG, gitStatus: { ...BASE_CFG.gitStatus, enabled: false } };
+  const clean1 = stripAnsi(formatStatusline(state, 120, {}, cfg).split('\n')[0]);
+  assert.ok(!clean1.includes('main'), `disabled gitStatus should hide branch output: "${clean1}"`);
+});
+
 // =============================================================================
 // Line 3 compaction ladder (priority: ctx > 5h > 7d > cost; reset texts drop
 // before whole segments do).
