@@ -1,5 +1,62 @@
 # Changelog
 
+## 6.4.3
+
+### Security
+
+- **Background refinement no longer resolves `claude` from runtime PATH.** `/claude-recall:setup` discovers and verifies a native Claude Code executable once, then stores its stable absolute launcher path in private `runtime.json`. Refinement executes only that pinned path with `shell: false`; a missing, relative, script-based, or broken pin fails closed as `⚠ AI setup required` instead of falling back to a project-influenced PATH.
+- **Stable launchers keep following Claude Code updates without a symlink race.** Setup stores the lexical launcher path (for example `~/.local/bin/claude`), then each refinement snapshots its current real target, verifies that captured target with `--version`, and spawns the same realpath. Legitimate native/package-manager retargets apply on the next call, while a broken, non-Claude, or concurrently swapped symlink never receives transcript input.
+
+### Changed
+
+- **Marketplace installs use a runtime-only plugin root.** The marketplace source is now `./plugin`, containing only the manifest, command, hooks, compiled JavaScript, ESM marker, and license. Development `package.json`, TypeScript, source, tests, and scripts stay outside the installed plugin cache, avoiding Claude Code's automatic installation of root development dependencies.
+- **Builds synchronize a checked runtime mirror.** `npm run build` compiles root `dist/` and regenerates `plugin/`; `npm run check:dist` independently byte-compares both `src → dist` and canonical runtime files → `plugin/` so a stale marketplace bundle cannot be released.
+- **Setup is implemented by a bundled helper.** The helper validates the plugin, preserves unrelated settings, writes private runtime state atomically, installs the registry-aware launcher, and reports every selected path. It checks only the existing private pin and official native default automatically; PATH is never scanned, and non-default package-manager launchers require an explicit user-selected absolute path.
+- **Windows statusline setup stays cross-shell and injection-safe.** Windows paths are embedded only inside a UTF-16LE PowerShell `EncodedCommand`, with literal single-quote escaping and explicit UTF-8 stdio; the outer Git Bash/PowerShell command contains ASCII flags and Base64 only. Claude executable selection remains independently pinned and never uses PATH.
+
+### Tests
+
+- Added package-layout and installed-cache coverage proving the runtime bundle has no root `package.json`, `node_modules`, source, or tests and still loads as ESM. An isolated install succeeds even with an invalid npm registry and shrinks the observed cache from roughly 26 MB to under 200 KB.
+- Added executable-pin coverage for poisoned PATH, missing pins, script rejection, absence of automatic PATH discovery, project/temp candidate exclusion, stable-symlink retargeting, private file modes, settings preservation, symlinked setup paths, and setup-required rendering.
+
+### Migration
+
+- **Existing users must run setup once after updating.** Run `/reload-plugins`, then `/claude-recall:setup`, and restart Claude Code. This creates the required executable pin and switches the install to the lightweight runtime root. Older version caches may remain for Claude Code's normal grace period while already-running sessions finish.
+
+## 6.4.2
+
+### Security
+
+- **Statusline text is terminal-safe.** Focus, prompts, branch names, and Claude metadata are normalized as grapheme clusters and stripped of OSC/CSI, control, and bidirectional override sequences before rendering. Custom separators must now be an empty string or one printable grapheme.
+- **Private session storage.** Recall directories and JSON/refinement-input files are hardened to `0700`/`0600` where the filesystem supports POSIX modes. Unsafe `session_id` values are mapped to SHA-256 filenames instead of being interpolated into paths.
+- **Background prompts no longer appear in process arguments.** Transcript and compaction-summary content is bounded and sent to `claude -p` over stdin. The child runs from the private recall directory with user/project/local setting sources, hooks, tools, slash commands, persistence, and non-explicit MCP configuration disabled; timeout cleanup escalates from `SIGTERM` to `SIGKILL` for the whole POSIX process group.
+
+### Fixed
+
+- **Concurrent hooks no longer lose state.** Session, context-window, and rate-limit read-modify-write operations use generation-unique bakery-lock claims, avoiding stale-owner ABA races. Parallel prompt hooks preserve every increment, late SessionStart work cannot roll back newer prompt state, and cache cleanup follows the same discipline.
+- **Refinement claims are single-flight and generation-safe.** A per-session attempt UUID plus a lease prevents duplicate Haiku calls and stops an older worker from overwriting a newer result or error.
+- **Narrow layouts stay within the terminal width.** Line 1/2 may drop all right-side segments, omit unused trailing gaps, honor configured Line 1 priority order, and truncate unbounded metadata. Line 3 still keeps context as its highest-priority segment.
+- **Unicode width and truncation are grapheme-aware.** Combining marks, decomposed Hangul, emoji, variation selectors, and ZWJ sequences are measured and truncated without splitting a visible character.
+- **Malformed statusline input degrades field-by-field.** Invalid nested metadata, percentages, duration/cost values, reset timestamps, and terminal widths are ignored or bounded instead of blanking the entire statusline.
+- **Partial git failures preserve known values.** A timed-out dirty or ahead/behind probe no longer falsely replaces the last same-branch status with clean zeroes.
+- **Slash-command prompt hooks emit exactly one response.** Ignored slash commands now rely on the shared hook response path instead of printing `{}` twice.
+- **Detached worker and transcript edge cases are contained.** Spawn errors are handled, short transcript reads use `bytesRead`, stale worker results are rejected, and temporary compaction inputs are cleaned up.
+
+### Changed
+
+- **Claude paths respect their supported overrides.** State, caches, config, settings, and setup output follow `CLAUDE_CONFIG_DIR`, while plugin registry lookup also follows `CLAUDE_CODE_PLUGIN_CACHE_DIR`; `~/.claude` remains the default configuration root.
+- **Setup uses a project-aware registry Node launcher.** `/claude-recall:setup` installs a cross-platform `.mjs` launcher that follows the exact active `installPath` in `installed_plugins.json`, filters project/local entries against the immutable launch root, and uses the current plugin root only as the `--plugin-dir` fallback.
+- **Plugin installation docs use the namespaced command.** The documented flow now reloads plugins after installation and runs `/claude-recall:setup`.
+
+### Tests
+
+- Added real multi-process hook/cache races, lock ownership/ABA coverage, refinement single-flight and argv privacy checks, unsafe-session-path tests, malformed stdin integration coverage, Unicode/control-sequence and width-boundary cases, and launcher registry/custom-config/project-scope tests.
+- `npm test` now runs a non-mutating temporary TypeScript build and byte-compares it with committed `dist/`, so stale marketplace artifacts fail instead of being silently overwritten by the test command.
+
+### Migration
+
+- **Existing installations must replace the legacy launcher once.** After updating from 6.4.1 or earlier, run `/reload-plugins`, then `/claude-recall:setup`, and restart Claude Code. This switches `statusLine.command` from `statusline-launcher.sh` to the new registry-aware `.mjs` launcher; subsequent ordinary plugin updates are discovered automatically.
+
 ## 6.4.1
 
 ### Fixed

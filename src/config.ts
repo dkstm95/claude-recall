@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { homedir } from 'node:os';
+import { getClaudeConfigDir } from './paths.js';
 
 export interface GitStatusConfig {
   enabled: boolean;
@@ -135,9 +135,9 @@ function mapLegacySlot(slot: string): string {
 }
 
 function sanitizeLine(raw: unknown, valid: string[], fallback: string[]): string[] {
-  if (!Array.isArray(raw)) return fallback;
+  if (!Array.isArray(raw)) return [...fallback];
   const mapped = raw.map((s) => (typeof s === 'string' ? mapLegacySlot(s) : ''));
-  return mapped.filter((s) => valid.includes(s));
+  return [...new Set(mapped.filter((s) => valid.includes(s)))];
 }
 
 function sanitizeGitStatus(raw: unknown): GitStatusConfig {
@@ -163,7 +163,7 @@ export function detectBackgroundTheme(): 'default' | 'light' {
 export function readConfig(): StatuslineConfig {
   const fallbackTheme = detectBackgroundTheme();
   try {
-    const configPath = join(homedir(), '.claude', 'claude-recall', 'config.json');
+    const configPath = join(getClaudeConfigDir(), 'claude-recall', 'config.json');
     const raw = readFileSync(configPath, 'utf-8');
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     const requested = parsed['theme'];

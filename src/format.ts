@@ -2,6 +2,14 @@ import type { SessionState, RefinementError, GitStatus } from './state.js';
 import type { StatuslineConfig, ThemeColors } from './config.js';
 import type { RateLimitsData } from './rate-limits-cache.js';
 import { getThemeColors } from './config.js';
+import { normalizeEpochSeconds, normalizeNonNegativeNumber, normalizePercentage } from './metrics.js';
+import {
+  graphemes,
+  graphemeWidth,
+  sanitizeTerminalText,
+  stripTerminalSequences,
+  terminalTextWidth,
+} from './terminal-text.js';
 
 export interface BuiltinData {
   model?: { display_name?: string; id?: string };
@@ -17,34 +25,12 @@ export interface BuiltinData {
   rate_limits?: RateLimitsData;
 }
 
-// CJK / fullwidth ranges occupy 2 terminal columns
-function isWide(code: number): boolean {
-  return (
-    (code >= 0x1100 && code <= 0x115f) ||
-    (code >= 0x2e80 && code <= 0x303e) ||
-    (code >= 0x3040 && code <= 0x33bf) ||
-    (code >= 0x3400 && code <= 0x4dbf) ||
-    (code >= 0x4e00 && code <= 0xa4cf) ||
-    (code >= 0xac00 && code <= 0xd7af) ||
-    (code >= 0xf900 && code <= 0xfaff) ||
-    (code >= 0xfe30 && code <= 0xfe4f) ||
-    (code >= 0xff01 && code <= 0xff60) ||
-    (code >= 0xffe0 && code <= 0xffe6) ||
-    (code >= 0x20000 && code <= 0x2fffd) ||
-    (code >= 0x30000 && code <= 0x3fffd)
-  );
-}
-
 export function displayWidth(str: string): number {
-  let w = 0;
-  for (const ch of str) {
-    w += isWide(ch.codePointAt(0)!) ? 2 : 1;
-  }
-  return w;
+  return terminalTextWidth(str);
 }
 
 export function stripAnsi(s: string): string {
-  return s.replace(/\x1b\[[0-9;]*m/g, '');
+  return stripTerminalSequences(s);
 }
 
 function visibleWidth(s: string): number {
@@ -52,12 +38,13 @@ function visibleWidth(s: string): number {
 }
 
 export function truncate(text: string, maxCols: number): string {
-  const clean = text.replace(/[\n\t\r]/g, ' ');
+  if (!Number.isFinite(maxCols) || maxCols <= 0) return '';
+  const clean = sanitizeTerminalText(text);
   if (displayWidth(clean) <= maxCols) return clean;
   let result = '';
   let rc = 0;
-  for (const c of clean) {
-    const cw = isWide(c.codePointAt(0)!) ? 2 : 1;
+  for (const c of graphemes(clean)) {
+    const cw = graphemeWidth(c);
     if (rc + cw > maxCols - 1) break;
     result += c;
     rc += cw;
@@ -91,14 +78,25 @@ export function formatElapsedMs(ms: number): string {
 // non-Claude invocations still fall back to 120. That fallback keeps Line 3's
 // full L0 render (~91 cols) visible when no reliable width is propagated.
 const WIDTH_FALLBACK = 120;
+const WIDTH_MAX = 10_000;
+
+function validWidth(value: unknown): value is number {
+  return typeof value === 'number'
+    && Number.isSafeInteger(value)
+    && value > 0
+    && value <= WIDTH_MAX;
+}
 
 export function getTerminalWidth(): number {
   const stdout = process.stdout.columns;
-  if (typeof stdout === 'number' && stdout > 0) return stdout;
+  if (validWidth(stdout)) return stdout;
   const stderr = process.stderr.columns;
-  if (typeof stderr === 'number' && stderr > 0) return stderr;
-  const env = parseInt(process.env.COLUMNS ?? '', 10);
-  if (!isNaN(env) && env > 0) return env;
+  if (validWidth(stderr)) return stderr;
+  const rawEnv = process.env['COLUMNS'] ?? '';
+  if (/^[1-9]\d*$/.test(rawEnv)) {
+    const env = Number(rawEnv);
+    if (validWidth(env)) return env;
+  }
   return WIDTH_FALLBACK;
 }
 
@@ -145,8 +143,15 @@ export const FOCUS_PLACEHOLDER = '(no focus yet)';
 export const PROMPT_PLACEHOLDER = '(awaiting first prompt)';
 
 export function makeJoiner(separator: string, tc: ThemeColors): Joiner {
-  if (!separator) return DEFAULT_JOINER;
-  return { text: ` ${tc.dim(separator)} `, width: 1 + displayWidth(separator) + 1 };
+  const clean = sanitizeSeparator(separator);
+  if (!clean) return DEFAULT_JOINER;
+  return { text: ` ${tc.dim(clean)} `, width: 1 + displayWidth(clean) + 1 };
+}
+
+function sanitizeSeparator(separator: unknown): string {
+  if (typeof separator !== 'string' || separator === '') return '';
+  const clean = sanitizeTerminalText(separator).trim();
+  return graphemes(clean)[0] ?? '';
 }
 
 export function padSegmentLeft(seg: Segment, minWidth: number): Segment {
@@ -164,7 +169,7 @@ export function progressiveJoin(
     const used = segments.slice(0, count);
     const text = used.map((s) => s.text).join(joiner.text);
     const w = used.reduce((sum, s) => sum + s.width, 0) + (used.length - 1) * joiner.width;
-    if (budget - w >= minLeft || count === 1) {
+    if (budget - w >= minLeft) {
       return { text, width: w };
     }
   }
@@ -178,15 +183,16 @@ function basenameOf(p: string): string {
 
 function worktreeName(builtin: BuiltinData | undefined): string | undefined {
   const modern = builtin?.worktree?.name ?? builtin?.worktree?.path;
-  if (modern) return basenameOf(modern);
+  if (typeof modern === 'string' && modern) return basenameOf(modern);
   const legacy = builtin?.workspace?.git_worktree;
-  return legacy ? basenameOf(legacy) : undefined;
+  return typeof legacy === 'string' && legacy ? basenameOf(legacy) : undefined;
 }
 
 const ERROR_LABELS: Record<RefinementError['code'], string> = {
   timeout: '\u26A0 AI timeout',
   rate_limit: '\u26A0 AI rate limited',
   auth: '\u26A0 AI auth failed',
+  setup_required: '\u26A0 AI setup required',
   unknown: '\u26A0 AI refinement failed',
 };
 
@@ -214,7 +220,7 @@ function renderBar(
   tc: ThemeColors,
   th: BarThresholds = DEFAULT_THRESHOLDS,
 ): string {
-  const clamped = Math.max(0, Math.min(100, pct));
+  const clamped = normalizePercentage(pct) ?? 0;
   const filled = Math.round((clamped / 100) * width);
   const empty = width - filled;
   const bar = '\u2588'.repeat(filled) + '\u2591'.repeat(empty);
@@ -247,9 +253,10 @@ function formatUsageSegment(
   th: BarThresholds = DEFAULT_THRESHOLDS,
 ): { text: string; width: number } {
   const bar = renderBar(pct, 10, tc, th);
-  const pctText = `${Math.round(pct)}%`;
+  const normalizedPct = normalizePercentage(pct) ?? 0;
+  const pctText = `${Math.round(normalizedPct)}%`;
   const labelColored = tc.dim(label);
-  const pctColored = pct >= th.red ? tc.red(pctText) : pct >= th.yellow ? tc.yellow(pctText) : tc.green(pctText);
+  const pctColored = normalizedPct >= th.red ? tc.red(pctText) : normalizedPct >= th.yellow ? tc.yellow(pctText) : tc.green(pctText);
   const resetPart = resetText ? ` ${tc.dim(resetText)}` : '';
   const text = `${labelColored} ${bar} ${pctColored}${resetPart}`;
   return { text, width: visibleWidth(text) };
@@ -263,26 +270,31 @@ function buildLine3Segments(
   compactLevel: 0 | 1 | 2,
 ): Segment[] {
   const segs: Segment[] = [];
-  if (l3.includes('context') && ctxPct != null) {
-    segs.push(formatUsageSegment('ctx', ctxPct, tc, undefined, CTX_THRESHOLDS));
+  const normalizedCtx = normalizePercentage(ctxPct);
+  if (l3.includes('context') && normalizedCtx != null) {
+    segs.push(formatUsageSegment('ctx', normalizedCtx, tc, undefined, CTX_THRESHOLDS));
   }
   const fiveHour = builtin?.rate_limits?.five_hour;
-  if (l3.includes('rate_limits') && fiveHour?.used_percentage != null) {
-    const resetText = compactLevel < 2 && fiveHour.resets_at != null
-      ? formatFiveHourReset(fiveHour.resets_at)
+  const fiveHourPct = normalizePercentage(fiveHour?.used_percentage);
+  if (l3.includes('rate_limits') && fiveHourPct != null) {
+    const resetsAt = normalizeEpochSeconds(fiveHour?.resets_at);
+    const resetText = compactLevel < 2 && resetsAt != null
+      ? formatFiveHourReset(resetsAt)
       : undefined;
-    segs.push(formatUsageSegment('5h', fiveHour.used_percentage, tc, resetText));
+    segs.push(formatUsageSegment('5h', fiveHourPct, tc, resetText));
   }
   const sevenDay = builtin?.rate_limits?.seven_day;
   // 7d's reset text ("(~M/D HH:MM)") is ~14 cols, 5h's ~10, so 7d's drops first.
-  if (l3.includes('seven_day') && sevenDay?.used_percentage != null) {
-    const resetText = compactLevel < 1 && sevenDay.resets_at != null
-      ? formatSevenDayReset(sevenDay.resets_at)
+  const sevenDayPct = normalizePercentage(sevenDay?.used_percentage);
+  if (l3.includes('seven_day') && sevenDayPct != null) {
+    const resetsAt = normalizeEpochSeconds(sevenDay?.resets_at);
+    const resetText = compactLevel < 1 && resetsAt != null
+      ? formatSevenDayReset(resetsAt)
       : undefined;
-    segs.push(formatUsageSegment('7d', sevenDay.used_percentage, tc, resetText));
+    segs.push(formatUsageSegment('7d', sevenDayPct, tc, resetText));
   }
-  if (l3.includes('cost') && builtin?.cost?.total_cost_usd != null) {
-    const cost = builtin.cost.total_cost_usd;
+  const cost = normalizeNonNegativeNumber(builtin?.cost?.total_cost_usd);
+  if (l3.includes('cost') && cost != null) {
     const s = tc.dim(cost < 0.01 ? '$0.00' : `$${cost.toFixed(2)}`);
     segs.push({ text: s, width: visibleWidth(s) });
   }
@@ -315,7 +327,8 @@ function renderLine3(
 
   // Even fully compacted (L2) exceeds the budget: drop segments right-to-left.
   // progressiveJoin keeps at least one, so ctx always survives when present.
-  return progressiveJoin(segs, budget, 0, joiner).text;
+  const compacted = progressiveJoin(segs, budget, 0, joiner).text;
+  return compacted || segs[0]!.text;
 }
 
 interface RenderContext {
@@ -345,7 +358,7 @@ function titleCase(s: string): string {
 }
 
 function modelNameFromId(id: string | undefined): string | undefined {
-  if (!id) return undefined;
+  if (typeof id !== 'string' || !id) return undefined;
   const match = id.match(/claude-(opus|sonnet|haiku)-(\d+)-(\d+)/i);
   if (!match) return id;
   return `${titleCase(match[1]!)} ${match[2]}.${match[3]}`;
@@ -356,65 +369,64 @@ function displayHasVersion(displayName: string): boolean {
 }
 
 function modelDisplay(builtin: BuiltinData | undefined): string | undefined {
-  const displayName = builtin?.model?.display_name;
+  const rawDisplayName = builtin?.model?.display_name;
+  const displayName = typeof rawDisplayName === 'string' ? rawDisplayName : undefined;
   const idName = modelNameFromId(builtin?.model?.id);
   const base = displayName && displayHasVersion(displayName) ? displayName : (idName ?? displayName);
   if (!base) return undefined;
 
   const suffixes: string[] = [];
   const effort = builtin?.effort?.level;
-  if (effort) suffixes.push(effort);
+  if (typeof effort === 'string' && effort) suffixes.push(effort);
   if (builtin?.thinking?.enabled) suffixes.push('thinking');
 
   return suffixes.length > 0 ? `${base} · ${suffixes.join(' · ')}` : base;
 }
 
 function prDisplay(pr: BuiltinData['pr']): string | undefined {
-  if (!pr) return undefined;
-  if (typeof pr.number === 'number') return `PR #${pr.number}`;
-  return pr.title ? `PR ${truncate(pr.title, 24)}` : undefined;
+  if (!pr || typeof pr !== 'object') return undefined;
+  if (typeof pr.number === 'number' && Number.isFinite(pr.number)) return `PR #${Math.trunc(pr.number)}`;
+  return typeof pr.title === 'string' && pr.title ? `PR ${truncate(pr.title, 24)}` : undefined;
 }
 
 function buildLine1RightSegments(ctx: RenderContext): Segment[] {
-  const l1 = ctx.cfg.line1;
   const segs: Segment[] = [];
+  const seen = new Set<string>();
 
-  const wtName = l1.includes('worktree') ? worktreeName(ctx.builtin) : undefined;
-  if (wtName) {
-    segs.push(makeRightSegment(ctx.tc.worktree('\u2387 ' + wtName), ctx.gridOn));
-  }
+  for (const slot of ctx.cfg.line1) {
+    if (slot === 'focus' || seen.has(slot)) continue;
+    seen.add(slot);
+    let text: string | undefined;
 
-  if (l1.includes('session') && ctx.builtin?.session_name) {
-    segs.push(makeRightSegment(ctx.tc.worktree('\u00A7 ' + truncate(ctx.builtin.session_name, 24)), ctx.gridOn));
-  }
+    if (slot === 'worktree') {
+      const wtName = worktreeName(ctx.builtin);
+      if (wtName) text = ctx.tc.worktree('\u2387 ' + truncate(wtName, 24));
+    } else if (slot === 'session' && typeof ctx.builtin?.session_name === 'string') {
+      text = ctx.tc.worktree('\u00A7 ' + truncate(ctx.builtin.session_name, 24));
+    } else if (slot === 'agent' && typeof ctx.builtin?.agent?.name === 'string') {
+      text = ctx.tc.model('@' + truncate(ctx.builtin.agent.name, 24));
+    } else if (slot === 'pr') {
+      const prText = prDisplay(ctx.builtin?.pr);
+      if (prText) text = ctx.tc.branch(prText);
+    } else if (slot === 'branch' && ctx.cfg.gitStatus.enabled && ctx.state.gitStatus?.branch) {
+      text = ctx.tc.branch(truncate(renderGitText(ctx.state.gitStatus, ctx.cfg.gitStatus), 48));
+    } else if (slot === 'branch' && typeof ctx.state.branch === 'string' && ctx.state.branch) {
+      text = ctx.tc.branch(truncate(ctx.state.branch, 48));
+    } else if (slot === 'model') {
+      const modelText = modelDisplay(ctx.builtin);
+      if (modelText) text = ctx.tc.model(truncate(modelText, 40));
+    }
 
-  if (l1.includes('agent') && ctx.builtin?.agent?.name) {
-    segs.push(makeRightSegment(ctx.tc.model('@' + truncate(ctx.builtin.agent.name, 24)), ctx.gridOn));
-  }
-
-  if (l1.includes('pr')) {
-    const prText = prDisplay(ctx.builtin?.pr);
-    if (prText) segs.push(makeRightSegment(ctx.tc.branch(prText), ctx.gridOn));
-  }
-
-  if (l1.includes('branch') && ctx.cfg.gitStatus.enabled && ctx.state.gitStatus?.branch) {
-    const gitText = renderGitText(ctx.state.gitStatus, ctx.cfg.gitStatus);
-    segs.push(makeRightSegment(ctx.tc.branch(gitText), ctx.gridOn));
-  } else if (l1.includes('branch') && ctx.state.branch) {
-    segs.push(makeRightSegment(ctx.tc.branch(ctx.state.branch), ctx.gridOn));
-  }
-
-  const modelText = l1.includes('model') ? modelDisplay(ctx.builtin) : undefined;
-  if (modelText) {
-    segs.push(makeRightSegment(ctx.tc.model(modelText), ctx.gridOn));
+    if (text) segs.push(makeRightSegment(text, ctx.gridOn));
   }
 
   return segs;
 }
 
 function renderLine1Left(ctx: RenderContext, availLeft: number): Segment {
+  if (availLeft <= 0) return { text: '', width: 0 };
   if (ctx.state.refinementError) {
-    return makeSegment(ctx.tc.red(ERROR_LABELS[ctx.state.refinementError.code]));
+    return makeSegment(ctx.tc.red(truncate(ERROR_LABELS[ctx.state.refinementError.code], availLeft)));
   }
 
   if (!ctx.cfg.line1.includes('focus')) {
@@ -422,23 +434,29 @@ function renderLine1Left(ctx: RenderContext, availLeft: number): Segment {
   }
 
   if (ctx.state.focus) {
-    return makeSegment(ctx.tc.focus(truncate(ctx.state.focus, Math.max(availLeft, MIN_FOCUS_COLS))));
+    return makeSegment(ctx.tc.focus(truncate(ctx.state.focus, availLeft)));
   }
 
-  return makeSegment(ctx.tc.dim(FOCUS_PLACEHOLDER));
+  return makeSegment(ctx.tc.dim(truncate(FOCUS_PLACEHOLDER, availLeft)));
 }
 
 function renderLine1(ctx: RenderContext): string {
+  const contentBudget = Math.max(0, ctx.termWidth - ctx.prefixWidth);
+  const hasLeft = !!ctx.state.refinementError || ctx.cfg.line1.includes('focus');
+  const leftMinimum = ctx.state.refinementError
+    ? displayWidth(ERROR_LABELS[ctx.state.refinementError.code])
+    : hasLeft ? MIN_FOCUS_COLS : 0;
   const rightJoined = progressiveJoin(
     buildLine1RightSegments(ctx),
-    ctx.termWidth - ctx.prefixWidth,
-    MIN_FOCUS_COLS,
+    contentBudget,
+    leftMinimum + (hasLeft ? 1 : 0),
     ctx.joiner,
   );
-  const spaceForRight = rightJoined.width > 0 ? rightJoined.width + 2 : 0;
-  const availLeft = ctx.termWidth - ctx.prefixWidth - spaceForRight;
+  const minimumGap = hasLeft && rightJoined.width > 0 ? 1 : 0;
+  const availLeft = Math.max(0, contentBudget - rightJoined.width - minimumGap);
   const left = renderLine1Left(ctx, availLeft);
-  const gap = Math.max(1, ctx.termWidth - ctx.prefixWidth - left.width - rightJoined.width);
+  const remaining = Math.max(0, contentBudget - left.width - rightJoined.width);
+  const gap = rightJoined.width > 0 ? Math.max(minimumGap, remaining) : 0;
   return ctx.prefix + left.text + ' '.repeat(gap) + rightJoined.text;
 }
 
@@ -448,10 +466,10 @@ function renderPromptSegment(ctx: RenderContext, maxPromptCols: number): Segment
   }
 
   if (ctx.state.lastUserPrompt) {
-    return makeSegment(ctx.tc.prompt(truncate(ctx.state.lastUserPrompt, Math.max(maxPromptCols, MIN_PROMPT_COLS))));
+    return makeSegment(ctx.tc.prompt(truncate(ctx.state.lastUserPrompt, maxPromptCols)));
   }
 
-  return makeSegment(ctx.tc.dim(PROMPT_PLACEHOLDER));
+  return makeSegment(ctx.tc.dim(truncate(PROMPT_PLACEHOLDER, maxPromptCols)));
 }
 
 function renderLine2(ctx: RenderContext): string | null {
@@ -464,15 +482,24 @@ function renderLine2(ctx: RenderContext): string | null {
   }
 
   const hasTurn = l2.includes('turn');
-  const turnRaw = `#${ctx.state.promptCount}  `;
+  const turnRaw = `#${Number.isSafeInteger(ctx.state.promptCount) ? Math.max(0, ctx.state.promptCount) : 0}  `;
   const turnLabel = hasTurn ? ctx.tc.dim(turnRaw) : '';
-  const turnWidth = hasTurn ? turnRaw.length : 0;
-
-  const line2Budget = ctx.termWidth - ctx.prefixWidth - turnWidth;
-  const rightJoined = progressiveJoin(line2Right, line2Budget, MIN_PROMPT_COLS, ctx.joiner);
-  const spaceForRight = rightJoined.width > 0 ? rightJoined.width + 2 : 0;
-  const prompt = renderPromptSegment(ctx, line2Budget - spaceForRight);
-  const gap = Math.max(1, ctx.termWidth - ctx.prefixWidth - turnWidth - prompt.width - rightJoined.width);
+  const turnWidth = hasTurn ? displayWidth(turnRaw) : 0;
+  const hasPrompt = l2.includes('prompt');
+  const hasLeft = hasTurn || hasPrompt;
+  const desiredLeft = turnWidth + (hasPrompt ? MIN_PROMPT_COLS : 0);
+  const contentBudget = Math.max(0, ctx.termWidth - ctx.prefixWidth);
+  const rightJoined = progressiveJoin(
+    line2Right,
+    contentBudget,
+    desiredLeft + (hasLeft ? 1 : 0),
+    ctx.joiner,
+  );
+  const minimumGap = hasLeft && rightJoined.width > 0 ? 1 : 0;
+  const promptBudget = Math.max(0, contentBudget - turnWidth - rightJoined.width - minimumGap);
+  const prompt = renderPromptSegment(ctx, promptBudget);
+  const remaining = Math.max(0, contentBudget - turnWidth - prompt.width - rightJoined.width);
+  const gap = rightJoined.width > 0 ? Math.max(minimumGap, remaining) : 0;
 
   return ctx.prefix + turnLabel + prompt.text + ' '.repeat(gap) + rightJoined.text;
 }
@@ -483,24 +510,31 @@ export function formatStatusline(
   builtin?: BuiltinData,
   config?: StatuslineConfig,
 ): string {
+  const safeTermWidth = validWidth(termWidth) ? termWidth : WIDTH_FALLBACK;
   const cfg = config ?? DEFAULT_FORMAT_CONFIG;
   const tc = getThemeColors(cfg.theme);
-  const joiner = makeJoiner(cfg.separator, tc);
-  const gridOn = cfg.separator !== '';
+  const separator = sanitizeSeparator(cfg.separator);
+  const joiner = makeJoiner(separator, tc);
+  const gridOn = separator !== '';
   // Fallback uses sessionStartedAt (not lastActivityAt) to match stdin's
   // "wall-clock since session started" semantic.
-  const elapsed = builtin?.cost?.total_duration_ms != null
-    ? formatElapsedMs(builtin.cost.total_duration_ms)
+  const durationMs = normalizeNonNegativeNumber(builtin?.cost?.total_duration_ms);
+  const elapsed = durationMs != null
+    ? formatElapsedMs(durationMs)
     : formatElapsed(state.sessionStartedAt);
   const prefixWidth = 3;
 
-  const accent = sessionColor(state.cwd, state.branch, tc.accents);
+  const accent = sessionColor(
+    typeof state.cwd === 'string' ? state.cwd : '',
+    typeof state.branch === 'string' ? state.branch : '',
+    tc.accents,
+  );
   const prefix = ' ' + accent('\u258D') + ' ';
 
   const ctxPct = builtin?.context_window?.used_percentage;
   const renderCtx: RenderContext = {
     state,
-    termWidth,
+    termWidth: safeTermWidth,
     builtin,
     cfg,
     tc,
@@ -515,7 +549,7 @@ export function formatStatusline(
   const line2 = renderLine2(renderCtx);
 
   // Line 3 priority: ctx > 5h > 7d > cost. See renderLine3() for the compaction ladder.
-  const line3Body = renderLine3(cfg.line3, builtin, ctxPct, tc, termWidth - prefixWidth, joiner);
+  const line3Body = renderLine3(cfg.line3, builtin, ctxPct, tc, safeTermWidth - prefixWidth, joiner);
   const line3 = line3Body !== null ? prefix + line3Body : null;
 
   const parts: string[] = [line1];

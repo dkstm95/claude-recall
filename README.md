@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-6.4.1-blue?style=flat-square" alt="version">
+  <img src="https://img.shields.io/badge/version-6.4.3-blue?style=flat-square" alt="version">
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="license">
   <img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen?style=flat-square&logo=node.js&logoColor=white" alt="node">
   <img src="https://img.shields.io/badge/Claude_Code-Plugin-blueviolet?style=flat-square" alt="Claude Code Plugin">
@@ -57,12 +57,21 @@ Plus: rich git status (dirty + ahead/behind vs `origin/<default>`), rate-limit b
 # 2. Install plugin
 /plugin install claude-recall@claude-recall
 
-# 3. Configure statusline
-/setup
+# 3. Reload installed plugin commands
+/reload-plugins
+
+# 4. Configure statusline
+/claude-recall:setup
 ```
 
 > [!IMPORTANT]
-> **Restart Claude Code** after `/setup` to activate the statusline and new hooks.
+> **Restart Claude Code** after `/claude-recall:setup` to activate the statusline and new hooks.
+
+> [!TIP]
+> Setup never searches PATH automatically. The official native launcher (`~/.local/bin/claude`, or `%USERPROFILE%\.local\bin\claude.exe` on Windows) is detected directly. For Homebrew or another package manager, confirm its stable absolute launcher and pass it explicitly, for example `/claude-recall:setup /opt/homebrew/bin/claude`.
+
+> [!NOTE]
+> **Upgrading from 6.4.2 or earlier:** run `/reload-plugins`, then `/claude-recall:setup`, and restart Claude Code once. Setup now pins a verified, stable absolute Claude Code launcher in the private recall directory; background refinement intentionally has no runtime PATH fallback. The update also moves installed runtime files into a lightweight plugin-only bundle. Ordinary updates after this migration do not require setup again unless a release explicitly says otherwise.
 
 ## Usage
 
@@ -70,13 +79,13 @@ Everything works automatically after install. There are no focus-management comm
 
 | Command | Description |
 |---------|-------------|
-| `/setup` | Reconfigure statusline / verify installation |
+| `/claude-recall:setup` | Reconfigure statusline / verify installation |
 
 For context management, use Claude Code's native commands: `/compact` (manual compaction for long-running tasks), `/clear` (switch to unrelated task), `/resume` (pick up a prior session).
 
 ## Customization
 
-Create `~/.claude/claude-recall/config.json`:
+Create `~/.claude/claude-recall/config.json`. If `CLAUDE_CONFIG_DIR` is set, replace `~/.claude` with that directory:
 
 ```json
 {
@@ -93,11 +102,11 @@ Create `~/.claude/claude-recall/config.json`:
 }
 ```
 
-- **line1** — Choose from: `focus`, `branch`, `model`, `worktree`, `session`, `agent`, `pr`
+- **line1** — Choose from: `focus`, `branch`, `model`, `worktree`, `session`, `agent`, `pr`. Right-side priority follows this order; lower-priority entries drop first as width shrinks.
 - **line2** — Choose from: `turn`, `prompt`, `elapsed`
 - **line3** — Choose from: `context`, `rate_limits`, `seven_day`, `cost`. Set `line3: []` to force a 2-line statusline.
 - **gitStatus** — Toggle dirty flag and ahead/behind independently.
-- **separator** *(v6.3.0+)* — Character drawn between right-zone segments on Line 1 and between all segments on Line 3. Default `"│"` (U+2502, dim). Right-zone segments also left-pad to a 10-col cell, so `│` positions stay stable across renders. Set to `""` to disable both the separator and the padding (flat 2-space joiner, pre-v6.3.0 look). Any single glyph works — `"┊"` dotted, `"|"` ASCII, etc.
+- **separator** *(v6.3.0+)* — Character drawn between right-zone segments on Line 1 and between all segments on Line 3. Default `"│"` (U+2502, dim). Right-zone segments also left-pad to a 10-col cell, so `│` positions stay stable across renders. Set to `""` to disable both the separator and the padding (flat 2-space joiner, pre-v6.3.0 look). Any single printable grapheme works — `"┊"` dotted, `"|"` ASCII, etc.
 - **theme** — `default` (cyan/bold, dark terminals), `light` (blue/dark-orange, white terminals), `minimal` (subdued, monochrome — severity via reverse-video), `vivid` (bright/high contrast)
   - When `theme` is omitted and the terminal exports `COLORFGBG`, claude-recall auto-selects `light` for light backgrounds (`bg=7` or `bg=15`) and `default` otherwise. An explicit `theme` value always wins.
   - Setting the `NO_COLOR` environment variable (any value, per [no-color.org](https://no-color.org)) suppresses all ANSI color output regardless of theme.
@@ -115,7 +124,7 @@ Create `~/.claude/claude-recall/config.json`:
 | **model** | Line 1, right | Active Claude model, enriched with model version from `model.id`, effort level, and thinking state when present | Claude Code built-in |
 | **turn** | Line 2, left | Current prompt number (`#12`) | claude-recall |
 | **last prompt** | Line 2, left | The last prompt you typed | claude-recall |
-| **elapsed** | Line 2, right | Time since session start / last activity | claude-recall |
+| **elapsed** | Line 2, right | Wall-clock time since session start | claude-recall |
 | **ctx bar** | Line 3 | Context window usage — `ctx ████░░░░░░ 45%` — green (<70%), yellow (70-89%), red (≥90%) | Claude Code built-in |
 | **5h rate limit bar** | Line 3 | 5-hour usage + reset time — `5h ████░░░░░░ 45% (~16:59)` | Claude Code built-in |
 | **7d rate limit bar** | Line 3 | 7-day usage + reset date/time — `7d ██░░░░░░░░ 20% (~4/25 13:59)` | Claude Code built-in |
@@ -129,7 +138,7 @@ Create `~/.claude/claude-recall/config.json`:
 Notes:
 - Line 3 renders when any of `ctx` / `rate_limits` / `seven_day` / `cost` has data. API-key-only users with no rate-limits still get the `ctx` bar once the context window starts filling; the line is hidden only until there's something to show.
 - **`5h` / `7d` bars require Claude.ai Pro/Max.** Claude Code omits the `rate_limits` stdin field for Claude API key users, so the two rate-limit bars never populate on API-key setups (no error — just absent). The `ctx` and `$cost` segments still render normally.
-- **First-entry cache.** Claude Code omits `rate_limits` and `context_window` from stdin until the first API call, so claude-recall caches the last-seen values under `~/.claude/claude-recall/` and restores them on first render — the bars show up immediately instead of waiting for the first prompt. See CHANGELOG v6.1.4 / v6.1.5 for details.
+- **First-entry cache.** Claude Code omits `rate_limits` and `context_window` from stdin until the first API call, so claude-recall caches the last-seen values under the Claude config directory (`~/.claude/claude-recall/` by default) and restores them on first render — the bars show up immediately instead of waiting for the first prompt. See CHANGELOG v6.1.4 / v6.1.5 for details.
 - On narrow terminals, Line 3 drops `cost` first, then `7d`, then `5h`, keeping `ctx` visible the longest — context exhaustion is the most urgent signal.
 - Line 1 no longer renders command-style context hints. Context pressure remains visible through the `ctx` bar on Line 3 when enabled.
 - Ahead/behind counts reflect your last `git fetch`. Run `git fetch` periodically to keep the `↓N` indicator honest.
@@ -145,13 +154,16 @@ Triggers (OR):
 - **PostCompact** — after compaction, use Claude Code's compact summary when available.
 - **SessionEnd** — final snapshot before the session closes.
 
-Each trigger spawns `claude -p --model=haiku` as a subprocess with the compact summary when available, otherwise the last 12KB of the transcript. The subprocess:
-- Disables tools (`--tools ""`), disables slash commands, disables session persistence
-- Carries `CLAUDE_RECALL_REFINING=1` in env so claude-recall's own hooks skip in the child (no recursion)
+Each trigger claims one refinement lease and spawns the setup-pinned Claude Code launcher with `-p --model=haiku`, using the compact summary when available or otherwise the last 12KB of the transcript. The subprocess:
+- Uses only the verified absolute Claude Code launcher pinned by `/claude-recall:setup`; it never resolves `claude` from runtime PATH
+- Snapshots the pinned launcher's current real target, verifies that captured target with `--version`, and spawns the same realpath; valid symlink-based updates apply on the next call while broken or concurrently swapped retargets fail closed
+- Receives bounded transcript content over stdin, never in process arguments
+- Runs from the private recall directory and disables user/project/local setting sources, hooks, tools (`--tools ""`), slash commands, session persistence, and non-explicit MCP configuration
+- Carries `CLAUDE_RECALL_REFINING=1` in env as an additional recursion guard
 - Emits only the focus text in the transcript's language
-- Has a 45-second timeout and 5-second debounce
+- Has a 45-second timeout, 5-second debounce, and a per-session attempt token so stale workers cannot overwrite newer results
 
-On failure, Line 1's focus is replaced by a red label (`⚠ AI timeout`, `⚠ AI rate limited`, `⚠ AI auth failed`, or `⚠ AI refinement failed`) until the next successful refinement clears it.
+On failure, Line 1's focus is replaced by a red label (`⚠ AI timeout`, `⚠ AI rate limited`, `⚠ AI auth failed`, `⚠ AI setup required`, or `⚠ AI refinement failed`) until the next successful refinement clears it. `setup required` means the private executable pin is absent or no longer executable; rerun `/claude-recall:setup`.
 
 </details>
 
@@ -168,6 +180,8 @@ On failure, Line 1's focus is replaced by a red label (`⚠ AI timeout`, `⚠ AI
 rm -rf ~/.claude/claude-recall/
 ```
 
+If `CLAUDE_CONFIG_DIR` is set, remove `statusLine` and optional recall data from that directory instead.
+
 <details>
 <summary><strong>Development</strong></summary>
 
@@ -176,6 +190,7 @@ git clone https://github.com/dkstm95/claude-recall.git
 cd claude-recall
 npm install
 npm run build
+npm test
 ```
 
 Local testing:

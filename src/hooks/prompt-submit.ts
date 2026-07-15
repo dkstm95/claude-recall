@@ -1,4 +1,10 @@
-import { readState, writeState, refreshGitStatus, createEmptySessionState } from '../state.js';
+import {
+  applyGitStatus,
+  createEmptySessionState,
+  getGitStatus,
+  readState,
+  updateState,
+} from '../state.js';
 import { launchRefinementWorker } from '../refine.js';
 import { getString, runHook, type HookInput } from './common.js';
 
@@ -15,34 +21,34 @@ async function handlePromptSubmit(input: HookInput): Promise<void> {
   const transcriptPath = getString(input, 'transcript_path');
 
   const now = new Date().toISOString();
-  let state = readState(sessionId);
-
-  if (!state) {
-    state = createEmptySessionState(sessionId, cwd);
-    await refreshGitStatus(state, cwd);
-  }
-
-  const cwdChanged = state.cwd !== '' && state.cwd !== cwd;
-  state.cwd = cwd;
   if (prompt.startsWith('/')) {
-    state.lastActivityAt = now;
-    writeState(sessionId, state);
-    process.stdout.write('{}\n');
+    await updateState(sessionId, (current) => {
+      const state = current ?? createEmptySessionState(sessionId, cwd);
+      state.cwd = cwd;
+      state.lastActivityAt = now;
+      return { state, value: undefined };
+    });
     return;
   }
 
-  state.promptCount++;
-  state.lastUserPrompt = prompt.slice(0, 200).replace(/[\n\t\r]/g, ' ');
-  state.lastActivityAt = now;
-
-  await refreshGitStatus(state, cwd, { useFallback: !cwdChanged });
-
-  writeState(sessionId, state);
+  const snapshot = readState(sessionId);
+  const cwdChanged = !!snapshot && snapshot.cwd !== '' && snapshot.cwd !== cwd;
+  const useFallback = !cwdChanged;
+  const gitStatus = await getGitStatus(cwd, useFallback ? snapshot?.gitStatus ?? null : null);
+  const promptCount = await updateState(sessionId, (current) => {
+    const state = current ?? createEmptySessionState(sessionId, cwd);
+    state.cwd = cwd;
+    state.promptCount++;
+    state.lastUserPrompt = prompt.slice(0, 200).replace(/[\n\t\r]/g, ' ');
+    state.lastActivityAt = now;
+    applyGitStatus(state, gitStatus, { useFallback });
+    return { state, value: state.promptCount };
+  });
 
   // Focus refinement at power-of-2 turns (1, 2, 4, 8, 16, 32, ...).
   // Launched as a detached worker so it survives this hook's 10s timeout.
   // First-prompt transcript-flush race is handled inside triggerFocusRefinement.
-  if (transcriptPath && isPowerOfTwo(state.promptCount)) {
+  if (transcriptPath && isPowerOfTwo(promptCount)) {
     launchRefinementWorker(sessionId, transcriptPath);
   }
 

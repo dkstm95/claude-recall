@@ -140,18 +140,18 @@ test('hasAnyLivePct: true when any window has used_percentage', () => {
   assert.equal(hasAnyLivePct({ five_hour: { resets_at: 123 } }), false);
 });
 
-test('resolveRateLimits: persists new live data to the cache', () => {
+test('resolveRateLimits: persists new live data to the cache', async () => {
   cleanupCache();
   const nowSec = Math.floor(Date.now() / 1000);
   const live = { five_hour: { used_percentage: 25, resets_at: nowSec + 3600 } };
-  const out = resolveRateLimits(live);
+  const out = await resolveRateLimits(live);
   assert.equal(out.five_hour.used_percentage, 25);
   const onDisk = JSON.parse(readFileSync(cachePath, 'utf-8'));
   assert.equal(onDisk.five_hour.used_percentage, 25);
   cleanupCache();
 });
 
-test('resolveRateLimits: skips write when live matches cache (no-op guard)', () => {
+test('resolveRateLimits: skips write when live matches cache (no-op guard)', async () => {
   cleanupCache();
   const nowSec = Math.floor(Date.now() / 1000);
   const data = { five_hour: { used_percentage: 40, resets_at: nowSec + 3600 } };
@@ -160,19 +160,32 @@ test('resolveRateLimits: skips write when live matches cache (no-op guard)', () 
   // Sleep briefly so mtime granularity would reflect any rewrite.
   const spin = Date.now() + 20;
   while (Date.now() < spin) { /* busy-wait 20ms */ }
-  resolveRateLimits(data);
+  await resolveRateLimits(data);
   const mtimeAfter = statSync(cachePath).mtimeMs;
   assert.equal(mtimeAfter, mtimeBefore, 'cache file must not be rewritten when content is unchanged');
   cleanupCache();
 });
 
-test('resolveRateLimits: writes when live brings a different percentage than cache', () => {
+test('resolveRateLimits: writes when live brings a different percentage than cache', async () => {
   cleanupCache();
   const nowSec = Math.floor(Date.now() / 1000);
   writeRateLimitsCache({ five_hour: { used_percentage: 30, resets_at: nowSec + 3600 } });
-  const out = resolveRateLimits({ five_hour: { used_percentage: 55, resets_at: nowSec + 3600 } });
+  const out = await resolveRateLimits({ five_hour: { used_percentage: 55, resets_at: nowSec + 3600 } });
   assert.equal(out.five_hour.used_percentage, 55);
   const onDisk = JSON.parse(readFileSync(cachePath, 'utf-8'));
   assert.equal(onDisk.five_hour.used_percentage, 55);
+  cleanupCache();
+});
+
+test('resolveRateLimits: concurrent partial windows do not lose one another', async () => {
+  cleanupCache();
+  const nowSec = Math.floor(Date.now() / 1000);
+  await Promise.all([
+    resolveRateLimits({ five_hour: { used_percentage: 25, resets_at: nowSec + 3600 } }),
+    resolveRateLimits({ seven_day: { used_percentage: 50, resets_at: nowSec + 86400 } }),
+  ]);
+  const cached = readRateLimitsCache();
+  assert.equal(cached.five_hour.used_percentage, 25);
+  assert.equal(cached.seven_day.used_percentage, 50);
   cleanupCache();
 });

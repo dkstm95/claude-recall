@@ -1,4 +1,11 @@
-import { readState, writeState, cleanupOldSessions, refreshGitStatus, createEmptySessionState } from '../state.js';
+import {
+  applyGitStatus,
+  cleanupOldSessions,
+  createEmptySessionState,
+  getGitStatus,
+  readState,
+  updateState,
+} from '../state.js';
 import { getString, runHook, type HookInput } from './common.js';
 
 async function handleSessionStart(input: HookInput): Promise<void> {
@@ -9,27 +16,44 @@ async function handleSessionStart(input: HookInput): Promise<void> {
   const source = getString(input, 'source') ?? 'startup';
   const now = new Date().toISOString();
 
-  cleanupOldSessions();
+  await cleanupOldSessions();
 
   const existing = readState(sessionId);
+  const existingSnapshot = existing ? JSON.stringify(existing) : null;
+  const reset = source === 'startup' || !existing;
+  const cwdChanged = !!existing && existing.cwd !== '' && existing.cwd !== cwd;
+  const useFallback = !reset && !cwdChanged;
+  const gitStatus = await getGitStatus(cwd, useFallback ? existing?.gitStatus ?? null : null);
 
-  if (source === 'startup' || !existing) {
-    const state = createEmptySessionState(sessionId, cwd);
-    await refreshGitStatus(state, cwd);
-    state.lastActivityAt = now;
-    writeState(sessionId, state);
-  } else {
-    const cwdChanged = existing.cwd !== '' && existing.cwd !== cwd;
-    existing.cwd = cwd;
-    existing.lastActivityAt = now;
-    await refreshGitStatus(existing, cwd, { useFallback: !cwdChanged });
-
-    if (source === 'clear') {
-      existing.lastUserPrompt = '';
+  await updateState(sessionId, (current) => {
+    const changedSinceSnapshot = !!current && (
+      existingSnapshot === null || JSON.stringify(current) !== existingSnapshot
+    );
+    if (!current || (source === 'startup' && !changedSinceSnapshot)) {
+      const state = createEmptySessionState(sessionId, cwd);
+      applyGitStatus(state, gitStatus, { useFallback: false });
+      state.lastActivityAt = now;
+      return { state, value: undefined };
     }
 
-    writeState(sessionId, existing);
-  }
+    // A prompt/refinement hook may have committed while SessionStart was
+    // doing cleanup or git I/O. Do not overwrite any of its newer cwd/time/git
+    // fields with this event's stale snapshot.
+    if (source === 'startup' && changedSinceSnapshot) {
+      return { value: undefined };
+    }
+
+    const state = current;
+    state.cwd = cwd;
+    state.lastActivityAt = now;
+    applyGitStatus(state, gitStatus, { useFallback });
+
+    if (source === 'clear') {
+      state.lastUserPrompt = '';
+    }
+
+    return { state, value: undefined };
+  });
 }
 
 await runHook('session-start', handleSessionStart);

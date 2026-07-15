@@ -1,6 +1,7 @@
 import { join } from 'node:path';
-import { homedir } from 'node:os';
-import { readJsonFile, writeJsonFileAtomic } from './json-file.js';
+import { readJsonFile, withFileLock, writeJsonFileAtomic } from './json-file.js';
+import { normalizeEpochSeconds, normalizePercentage } from './metrics.js';
+import { getRecallDir } from './paths.js';
 
 export interface RateLimitWindow {
   used_percentage?: number;
@@ -12,11 +13,20 @@ export interface RateLimitsData {
   seven_day?: RateLimitWindow;
 }
 
-const BASE_DIR = join(homedir(), '.claude', 'claude-recall');
+const BASE_DIR = getRecallDir();
 const CACHE_PATH = join(BASE_DIR, 'rate-limits.json');
 
 function hasPct(w: RateLimitWindow | undefined): w is RateLimitWindow {
-  return !!w && typeof w.used_percentage === 'number';
+  return !!w && normalizePercentage(w.used_percentage) !== undefined;
+}
+
+function normalizeWindow(w: RateLimitWindow | undefined): RateLimitWindow | undefined {
+  const usedPercentage = normalizePercentage(w?.used_percentage);
+  if (usedPercentage === undefined) return undefined;
+  const resetsAt = normalizeEpochSeconds(w?.resets_at);
+  return resetsAt === undefined
+    ? { used_percentage: usedPercentage }
+    : { used_percentage: usedPercentage, resets_at: resetsAt };
 }
 
 // A window is "fresh" only while its reset hasn't fired — once the window rolls
@@ -43,11 +53,14 @@ function dataEqual(
 }
 
 export function readRateLimitsCache(nowMs: number = Date.now()): RateLimitsData | null {
-  const parsed = readJsonFile<RateLimitsData>(CACHE_PATH);
-  if (!parsed) return null;
+  const raw = readJsonFile<unknown>(CACHE_PATH);
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const parsed = raw as RateLimitsData;
+  const fiveHour = normalizeWindow(parsed.five_hour);
+  const sevenDay = normalizeWindow(parsed.seven_day);
   const out: RateLimitsData = {};
-  if (isFresh(parsed.five_hour, nowMs)) out.five_hour = parsed.five_hour;
-  if (isFresh(parsed.seven_day, nowMs)) out.seven_day = parsed.seven_day;
+  if (isFresh(fiveHour, nowMs)) out.five_hour = fiveHour;
+  if (isFresh(sevenDay, nowMs)) out.seven_day = sevenDay;
   return Object.keys(out).length > 0 ? out : null;
 }
 
@@ -70,14 +83,16 @@ function mergeWindow(
   live: RateLimitWindow | undefined,
   cache: RateLimitWindow | undefined,
 ): RateLimitWindow | undefined {
-  if (hasPct(live)) {
-    if (typeof live.resets_at === 'number') return live;
-    if (typeof cache?.resets_at === 'number') {
-      return { used_percentage: live.used_percentage, resets_at: cache.resets_at };
+  const normalizedLive = normalizeWindow(live);
+  const normalizedCache = normalizeWindow(cache);
+  if (hasPct(normalizedLive)) {
+    if (typeof normalizedLive.resets_at === 'number') return normalizedLive;
+    if (typeof normalizedCache?.resets_at === 'number') {
+      return { used_percentage: normalizedLive.used_percentage, resets_at: normalizedCache.resets_at };
     }
-    return live;
+    return normalizedLive;
   }
-  if (hasPct(cache)) return cache;
+  if (hasPct(normalizedCache)) return normalizedCache;
   return undefined;
 }
 
@@ -102,11 +117,24 @@ export function hasAnyLivePct(live: RateLimitsData | undefined): boolean {
 // immediately on session entry. Cache writes are skipped when no live data
 // arrived or the merged value is unchanged, so this stays cheap at the ~300ms
 // render cadence.
-export function resolveRateLimits(live: RateLimitsData | undefined): RateLimitsData | undefined {
-  const cache = readRateLimitsCache();
-  const merged = mergeRateLimits(live, cache);
-  if (hasAnyLivePct(live) && merged && !dataEqual(cache, merged)) {
-    writeRateLimitsCache(merged);
+export async function resolveRateLimits(live: RateLimitsData | undefined): Promise<RateLimitsData | undefined> {
+  const snapshot = readRateLimitsCache();
+  const initialMerged = mergeRateLimits(live, snapshot);
+  if (!hasAnyLivePct(live) || !initialMerged || dataEqual(snapshot, initialMerged)) {
+    return initialMerged;
   }
-  return merged;
+  try {
+    return await withFileLock(CACHE_PATH, () => {
+      const cache = readRateLimitsCache();
+      const merged = mergeRateLimits(live, cache);
+      if (hasAnyLivePct(live) && merged && !dataEqual(cache, merged)) {
+        writeRateLimitsCache(merged);
+      }
+      return merged;
+    });
+  } catch {
+    // Cache contention or a read-only config directory should degrade to the
+    // current live/cached view, not suppress the whole statusline.
+    return initialMerged;
+  }
 }

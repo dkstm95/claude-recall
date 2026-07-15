@@ -23,6 +23,13 @@ test('displayWidth: CJK punctuation range', () => {
   assert.equal(displayWidth('、。'), 4);
 });
 
+test('displayWidth: grapheme clusters match terminal cells', () => {
+  assert.equal(displayWidth('e\u0301'), 1, 'combining accent');
+  assert.equal(displayWidth('\u1100\u1161'), 2, 'decomposed Hangul Jamo');
+  assert.equal(displayWidth('😀'), 2, 'emoji presentation');
+  assert.equal(displayWidth('👩‍💻'), 2, 'ZWJ emoji sequence');
+});
+
 test('truncate: appends ellipsis when over budget', () => {
   const out = truncate('abcdefghij', 5);
   assert.ok(out.endsWith('\u2026'), `expected ellipsis, got "${out}"`);
@@ -45,6 +52,18 @@ test('truncate: replaces newline/tab/cr with spaces before measuring', () => {
   assert.equal(truncate('a\nb\tc\rd', 10), 'a b c d');
 });
 
+test('truncate: never splits a grapheme cluster', () => {
+  assert.equal(truncate('👩‍💻XYZ', 3), '👩‍💻…');
+  assert.equal(truncate('\u1100\u1161ABC', 3), '\u1100\u1161…');
+});
+
+test('truncate: strips terminal and bidi controls from external text', () => {
+  const text = 'safe\x1b[2Jclear\x1b]0;PWNED\x07end\u202etext';
+  const out = truncate(text, 100);
+  assert.ok(!/[\x00-\x1f\x7f-\x9f\u202a-\u202e]/.test(out), JSON.stringify(out));
+  assert.equal(out, 'safeclearendtext');
+});
+
 test('progressiveJoin: drops rightmost segments when budget tight', () => {
   const segs = [
     { text: 'keep', width: 4 },
@@ -55,12 +74,13 @@ test('progressiveJoin: drops rightmost segments when budget tight', () => {
   assert.equal(out.width, 4);
 });
 
-test('progressiveJoin: keeps at least one segment even if minLeft cannot be satisfied', () => {
+test('progressiveJoin: may drop every right segment to preserve the left budget', () => {
   const segs = [
     { text: 'single', width: 6 },
   ];
   const out = progressiveJoin(segs, 5, 10);
-  assert.equal(out.text, 'single');
+  assert.equal(out.text, '');
+  assert.equal(out.width, 0);
 });
 
 function withStreamColumns(values, fn) {
@@ -142,5 +162,15 @@ test('getTerminalWidth: rejects zero-column streams (piped/non-TTY)', () => {
     withEnvColumns('140', () => {
       assert.equal(getTerminalWidth(), 140);
     });
+  });
+});
+
+test('getTerminalWidth: rejects partial, exponential, infinite, and excessive widths', () => {
+  withStreamColumns({ stdout: Infinity, stderr: undefined }, () => {
+    for (const invalid of ['80px', '1e3', '9'.repeat(400), '10001']) {
+      withEnvColumns(invalid, () => {
+        assert.equal(getTerminalWidth(), 120, `must reject COLUMNS=${invalid.slice(0, 20)}`);
+      });
+    }
   });
 });

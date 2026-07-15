@@ -1,4 +1,9 @@
-import { readState, writeState, refreshGitStatus, createEmptySessionState } from '../state.js';
+import {
+  applyGitStatus,
+  createEmptySessionState,
+  getGitStatus,
+  updateState,
+} from '../state.js';
 import { getString, runHook, type HookInput } from './common.js';
 
 async function handleCwdChanged(input: HookInput): Promise<void> {
@@ -7,13 +12,14 @@ async function handleCwdChanged(input: HookInput): Promise<void> {
 
   const cwd = getString(input, 'new_cwd') ?? getString(input, 'cwd') ?? process.cwd();
   const now = new Date().toISOString();
-  const state = readState(sessionId) ?? createEmptySessionState(sessionId, cwd);
-
-  state.cwd = cwd;
-  state.lastActivityAt = now;
-  await refreshGitStatus(state, cwd, { useFallback: false });
-
-  writeState(sessionId, state);
+  const gitStatus = await getGitStatus(cwd, null);
+  await updateState(sessionId, (current) => {
+    const state = current ?? createEmptySessionState(sessionId, cwd);
+    state.cwd = cwd;
+    state.lastActivityAt = now;
+    applyGitStatus(state, gitStatus, { useFallback: false });
+    return { state, value: undefined };
+  });
 }
 
 await runHook('cwd-changed', handleCwdChanged);

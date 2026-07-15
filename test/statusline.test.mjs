@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   formatStatusline,
+  displayWidth,
   stripAnsi,
   FOCUS_PLACEHOLDER,
   PROMPT_PLACEHOLDER,
@@ -15,6 +16,7 @@ const BASE_CFG = {
   line3: ['context', 'rate_limits', 'seven_day', 'cost'],
   gitStatus: { enabled: true, showDirty: true, showAheadBehind: true },
   theme: 'default',
+  separator: '│',
 };
 
 function emptyState() {
@@ -76,6 +78,13 @@ test('formatStatusline: refinementError suppresses focus placeholder (error wins
   const clean1 = stripAnsi(out.split('\n')[0]);
   assert.ok(clean1.includes('AI timeout'), `Line 1 should show error label, got "${clean1}"`);
   assert.ok(!clean1.includes(FOCUS_PLACEHOLDER), `placeholder should yield to error label`);
+});
+
+test('formatStatusline: missing executable pin has an actionable label', () => {
+  const state = emptyState();
+  state.refinementError = { code: 'setup_required', at: new Date().toISOString() };
+  const clean1 = stripAnsi(formatStatusline(state, 120, {}, BASE_CFG).split('\n')[0]);
+  assert.ok(clean1.includes('AI setup required'));
 });
 
 test('formatStatusline: ctx bar renders on Line 3 when context_window present', () => {
@@ -164,6 +173,76 @@ test('formatStatusline: session, agent, and pr slots render from current statusl
   assert.ok(clean1.includes('@reviewer'), `agent name should render, got "${clean1}"`);
   assert.ok(clean1.includes('PR #42'), `PR number should render, got "${clean1}"`);
   assert.ok(clean1.includes('Sonnet 4.6'), `model id should fill missing version, got "${clean1}"`);
+});
+
+test('formatStatusline: Line 1 honors configured right-slot priority', () => {
+  const state = emptyState();
+  state.focus = 'review';
+  state.branch = 'feature';
+  state.gitStatus = { branch: 'feature', dirty: false, ahead: 0, behind: 0, defaultBranch: 'main' };
+  const cfg = { ...BASE_CFG, line1: ['focus', 'model', 'branch'], line2: [], line3: [] };
+  const clean = stripAnsi(formatStatusline(
+    state,
+    40,
+    { model: { display_name: 'Opus 4.8' } },
+    cfg,
+  ));
+  assert.ok(clean.includes('Opus 4.8'), `higher-priority model must survive: ${JSON.stringify(clean)}`);
+  assert.ok(!clean.includes('feature'), `lower-priority branch must drop: ${JSON.stringify(clean)}`);
+  assert.ok(displayWidth(clean) <= 40, `Line 1 width ${displayWidth(clean)} > 40`);
+});
+
+test('formatStatusline: disabled focus does not reserve an invisible 15-column budget', () => {
+  const state = emptyState();
+  state.branch = 'main';
+  state.gitStatus = { branch: 'main', dirty: false, ahead: 0, behind: 0, defaultBranch: 'main' };
+  const cfg = { ...BASE_CFG, line1: ['branch', 'model'], line2: [], line3: [] };
+  const clean = stripAnsi(formatStatusline(state, 35, { model: { display_name: 'Opus 4.8' } }, cfg));
+  assert.ok(clean.includes('main'), clean);
+  assert.ok(clean.includes('Opus 4.8'), clean);
+  assert.ok(displayWidth(clean) <= 35, `Line 1 width ${displayWidth(clean)} > 35`);
+});
+
+test('formatStatusline: long branch and prompt stay within the terminal budget', () => {
+  const state = emptyState();
+  state.focus = 'focus';
+  state.lastUserPrompt = 'p'.repeat(200);
+  state.branch = 'b'.repeat(140);
+  state.gitStatus = { branch: state.branch, dirty: false, ahead: 0, behind: 0, defaultBranch: 'main' };
+  const out = formatStatusline(state, 45, {
+    model: { display_name: 'Opus 4.8' },
+    cost: { total_duration_ms: 3_600_000 },
+  }, BASE_CFG);
+  for (const line of out.split('\n')) {
+    const clean = stripAnsi(line);
+    assert.ok(displayWidth(clean) <= 45, `width ${displayWidth(clean)} > 45: ${JSON.stringify(clean)}`);
+  }
+  assert.ok(!stripAnsi(out.split('\n')[1]).includes('1h 0m'), 'elapsed must drop before prompt shrinks below 30 cols');
+});
+
+test('formatStatusline: dynamic metadata cannot emit terminal controls', () => {
+  const state = emptyState();
+  state.focus = 'focus\x1b[2Jclear';
+  state.lastUserPrompt = 'prompt\x1b]52;c;YQ==\x07done';
+  const cfg = { ...BASE_CFG, line1: ['focus', 'session', 'agent', 'model'], separator: '\n\x1b[2J' };
+  const out = stripAnsi(formatStatusline(state, 120, {
+    session_name: 'name\x1b[31mred',
+    agent: { name: 'agent\x07bell' },
+    model: { display_name: 'Opus\x1b]0;title\x07' },
+  }, cfg));
+  assert.ok(!/[\x00-\x1f\x7f-\x9f]/.test(out.replace(/\n/g, '')), JSON.stringify(out));
+  assert.equal(out.split('\n').length, 2, 'separator input must not inject extra lines');
+});
+
+test('formatStatusline: percentages are clamped to 0..100', () => {
+  const out = stripAnsi(formatStatusline(emptyState(), 120, {
+    context_window: { used_percentage: 150 },
+    rate_limits: { five_hour: { used_percentage: -5 } },
+  }, BASE_CFG));
+  const line3 = out.split('\n')[2];
+  assert.ok(line3.includes('100%'), line3);
+  assert.ok(line3.includes('0%'), line3);
+  assert.ok(!line3.includes('150%') && !line3.includes('-5%'), line3);
 });
 
 // =============================================================================

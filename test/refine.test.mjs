@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import {
   readTranscriptTail,
   classifyError,
+  classifySpawnError,
   shouldRefine,
 } from '../dist/refine.js';
 
@@ -88,6 +89,13 @@ test('classifyError: falls back to unknown', () => {
   assert.equal(classifyError(1, 'random error message'), 'unknown');
 });
 
+test('classifySpawnError: unusable pinned executables require setup', () => {
+  for (const code of ['ENOENT', 'EACCES', 'ENOEXEC', 'ENOTDIR', 'EPERM']) {
+    assert.equal(classifySpawnError(code), 'setup_required');
+  }
+  assert.equal(classifySpawnError('EIO'), 'unknown');
+});
+
 test('shouldRefine: recent refinement within 5s window is debounced', () => {
   const justNow = new Date(Date.now() - 1000).toISOString();
   assert.equal(shouldRefine(justNow), false);
@@ -96,4 +104,8 @@ test('shouldRefine: recent refinement within 5s window is debounced', () => {
 test('shouldRefine: past the 5s window allows refresh', () => {
   const sixSecondsAgo = new Date(Date.now() - 6000).toISOString();
   assert.equal(shouldRefine(sixSecondsAgo), true);
+});
+
+test('shouldRefine: a future timestamp does not suppress refinement indefinitely', () => {
+  assert.equal(shouldRefine(new Date(Date.now() + 86_400_000).toISOString()), true);
 });
