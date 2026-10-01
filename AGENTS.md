@@ -1,6 +1,6 @@
 # claude-recall
 
-Claude Code plugin (v6.5.1) that provides a session awareness statusline.
+Claude Code plugin (v6.5.2) that provides a session awareness statusline.
 Tracks a Haiku-refined focus label, activity, git status, and prompt count for every parallel Claude Code session.
 
 - **Author**: seungilahn
@@ -168,7 +168,7 @@ Effect at the 120-col fallback with all four segments populated: L0 (~91 cols) f
 - **Lazy cleanup**: Sessions idle for >7 days (by `lastActivityAt`) are cleaned on SessionStart, not continuously
 - **Stdin-first elapsed**: prefer accumulated `cost.total_duration_ms`. The fallback is explicitly labelled `age` because creation age includes downtime. Older state falls back to `lastActivityAt` for that age only.
 - **Single async git path**: `getGitStatus()` is async (`execFile`, `Promise.all` across the 3 independent calls, `--no-optional-locks` on `git status`, 1s per-call timeout). Called from both the statusline (every render — mid-turn `git checkout` visible immediately) and hooks (persist to `state.gitStatus` as a backup for when the live call fails). `refreshGitStatus(state, cwd)` is the single mutation helper used by SessionStart, UserPromptSubmit, CwdChanged, and statusline render-time refresh. Measured p95 ~21ms on this repo.
-- **Theme system**: `ThemeColors` interface abstracts all color calls; 4 presets (default, light, minimal, vivid). `COLORFGBG`-based auto-select picks `light` on light terminals when `theme` is omitted; `NO_COLOR` strips all ANSI output.
+- **Theme system**: `ThemeColors` interface abstracts all color calls; 4 presets (default, light, minimal, vivid). Default/light use fixed 24-bit RGB foregrounds, matching the generated README previews; minimal/vivid use terminal palette colors. `COLORFGBG`-based auto-select picks `light` on light terminals when `theme` is omitted; `NO_COLOR` strips all ANSI output.
 - **Config-driven statusline**: line1/line2/line3 element arrays control which segments render.
 - **Focus refinement isolation**: the private prompt goes over stdin; the child runs from the recall directory and disables setting sources, hooks, tools, slash commands, persistence, and non-explicit MCP config. `CLAUDE_RECALL_REFINING=1` remains an additional recursion guard.
 - **Pinned Claude executable**: `/claude-recall:setup` checks the existing pin or official native default (non-default launchers require an explicit absolute path), verifies the native binary, and atomically stores its stable lexical path in private `runtime.json`. Neither setup nor refinement scans PATH; every refinement snapshots the current real target, verifies that captured target with `--version`, then spawns the same realpath with `shell: false`. Keeping the lexical pin lets legitimate native/Homebrew retargets apply on the next call without a verify/spawn symlink race.

@@ -67,13 +67,30 @@ interface ThemeCodes {
   accents: string[];
 }
 
+// Fixed 24-bit foreground colors keep these themes independent of the
+// terminal's 16-color palette. The terminal still owns its background.
+function rgb(hex: string): string {
+  return `38;2;${[1, 3, 5].map((offset) => parseInt(hex.slice(offset, offset + 2), 16)).join(';')}`;
+}
+
+function colorTheme(palette: {
+  text: string; dim: string; cyan: string; purple: string;
+  blue: string; yellow: string; green: string; red: string;
+}): ThemeCodes {
+  return {
+    focus: `1;${rgb(palette.cyan)}`, branch: rgb(palette.cyan),
+    model: rgb(palette.yellow), worktree: rgb(palette.purple),
+    prompt: `1;${rgb(palette.text)}`, dim: rgb(palette.dim),
+    green: rgb(palette.green), yellow: rgb(palette.yellow), red: rgb(palette.red),
+    accents: [palette.cyan, palette.purple, palette.blue, palette.yellow, palette.green, palette.red].map(rgb),
+  };
+}
+
 const THEME_CODES: Record<Theme, ThemeCodes> = {
-  default: {
-    focus: '1;36', branch: '36', model: '33', worktree: '35',
-    prompt: '1', dim: '38;5;245',
-    green: '32', yellow: '33', red: '31',
-    accents: ['36', '35', '34', '33', '32', '31'],
-  },
+  default: colorTheme({
+    text: '#c0caf5', dim: '#8b90a8', cyan: '#7dcfff', purple: '#bb9af7',
+    blue: '#7aa2f7', yellow: '#e0af68', green: '#9ece6a', red: '#f7768e',
+  }),
   minimal: {
     focus: '1', branch: '2', model: '2', worktree: '2',
     prompt: '', dim: '2',
@@ -86,12 +103,10 @@ const THEME_CODES: Record<Theme, ThemeCodes> = {
     green: '92', yellow: '93', red: '91',
     accents: ['96', '95', '94', '93', '92', '91'],
   },
-  light: {
-    focus: '1;34', branch: '34', model: '35', worktree: '35',
-    prompt: '1', dim: '38;5;244',
-    green: '32', yellow: '38;5;166', red: '31',
-    accents: ['36', '35', '34', '32', '31'],
-  },
+  light: colorTheme({
+    text: '#343b58', dim: '#626b87', cyan: '#006c86', purple: '#7847a1',
+    blue: '#2458a6', yellow: '#925500', green: '#3f6818', red: '#b83251',
+  }),
 };
 
 function buildTheme(codes: ThemeCodes): ThemeColors {

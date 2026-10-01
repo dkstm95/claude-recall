@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-6.5.1-blue?style=flat-square" alt="version">
+  <img src="https://img.shields.io/badge/version-6.5.2-blue?style=flat-square" alt="version">
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="license">
   <img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen?style=flat-square&logo=node.js&logoColor=white" alt="node">
   <img src="https://img.shields.io/badge/Claude_Code-Plugin-blueviolet?style=flat-square" alt="Claude Code Plugin">
@@ -29,10 +29,24 @@ claude-recall은 모든 세션에 대해 두 가지 질문을 한눈에 답합�
 </p>
 
 <details>
+<summary><strong>라이트 테마 보기</strong></summary>
+
+<p align="center">
+  <img src="assets/statusline-preview-light.svg" alt="claude-recall light theme" width="720">
+</p>
+
+</details>
+
+예시 데이터로 실제 formatter와 RGB 색상 출력에서 생성한 미리보기입니다. 배경·테두리는 예시 터미널이며, 플러그인은 터미널 배경을 바꾸지 않습니다.
+
+<details>
 <summary><strong>분할 패널(split-pane) 레이아웃에서 보기</strong></summary>
 
 <p align="center">
-  <img src="assets/split-panes-preview.svg" alt="claude-recall 4개 tmux 패널에서 렌더된 statusline" width="800">
+  <picture>
+    <source media="(prefers-color-scheme: light)" srcset="assets/split-panes-preview-light.svg">
+    <img src="assets/split-panes-preview.svg" alt="claude-recall 4개 tmux 패널에서 렌더된 statusline" width="800">
+  </picture>
 </p>
 
 </details>
@@ -73,7 +87,7 @@ claude-recall은 모든 세션에 대해 두 가지 질문을 한눈에 답합�
 > setup은 PATH를 자동 탐색하지 않습니다. 공식 native launcher(`~/.local/bin/claude`, Windows는 `%USERPROFILE%\.local\bin\claude.exe`)는 직접 감지합니다. Homebrew 등 다른 패키지 관리자를 쓴다면 stable launcher의 절대 경로를 확인한 뒤 명시적으로 전달하세요. 예: `/claude-recall:setup /opt/homebrew/bin/claude`.
 
 > [!NOTE]
-> **6.5.1으로 업그레이드:** `/reload-plugins` 다음 `/claude-recall:setup`을 한 번 실행해 설치된 launcher를 교체하세요. 훅은 세션별로 실제 로드된 플러그인 경로를 기록하므로 `--plugin-dir` 우선순위와 `/cd` 이동을 반영합니다. 첫 훅 실행 전에는 명시적인 개발 경로나 현재 프로젝트의 설치 레지스트리를 사용합니다.
+> **6.5.2으로 업그레이드:** `/reload-plugins` 다음 `/claude-recall:setup`을 한 번 실행해 설치된 launcher를 교체하세요. 훅은 세션별로 실제 로드된 플러그인 경로를 기록하므로 `--plugin-dir` 우선순위와 `/cd` 이동을 반영합니다. 첫 훅 실행 전에는 명시적인 개발 경로나 현재 프로젝트의 설치 레지스트리를 사용합니다.
 
 ## 사용법
 
@@ -109,7 +123,9 @@ claude-recall은 모든 세션에 대해 두 가지 질문을 한눈에 답합�
 - **line3** — 선택: `context`, `rate_limits`, `seven_day`, `spend_limit`, `prompt_cache`, `cost`. `line3: []`로 설정하면 2줄로 고정됩니다.
 - **gitStatus** — dirty 플래그와 앞섬/뒤처짐을 독립 토글.
 - **separator** *(v6.3.0+)* — Line 1 우측 존(worktree/session/agent/pr/branch/model)과 Line 3 세그먼트 사이에 그려지는 구분자. 기본값 `"│"` (U+2502, 흐린 색). 우측 존 세그먼트는 10 col 셀로 좌측 패딩되어 `│` 위치가 매 렌더링마다 같은 열에 떨어집니다. `""` (빈 문자열)로 설정하면 구분자와 셀 패딩이 모두 꺼지고 기존 2-스페이스 조이너로 돌아갑니다 (v6.3.0 이전 모습). `"┊"` (점선), `"|"` (ASCII) 등 출력 가능한 단일 grapheme을 사용할 수 있습니다.
-- **theme** — `default` (시안/볼드, 다크 터미널), `light` (블루/다크오렌지, 밝은 터미널), `minimal` (차분한 단색 — 위험도는 reverse-video로 구분), `vivid` (밝은/고대비)
+- **theme** — `default` (파스텔 시안·보라·골드, 다크 터미널), `light` (딥 틸·보라·앰버, 밝은 터미널), `minimal` (차분한 단색 — 위험도는 reverse-video로 구분), `vivid` (밝은/고대비)
+  - `default`와 `light`는 24-bit RGB 색상을 직접 출력해 truecolor 터미널에서 README와 같은 전경색을 사용합니다. 라이트는 밝은 배경에서 읽기 쉽게 더 짙은 색을 사용합니다. 16색 터미널에서는 `minimal` 또는 `vivid`를 사용하세요.
+  - 밝은 터미널에서 자동 선택이 되지 않으면 위 설정의 `"theme"`을 `"light"`로 지정하세요. GitHub의 화면 모드와 터미널 테마는 별개입니다.
   - `theme`을 생략하면 `COLORFGBG` 환경변수를 읽어 밝은 배경(`bg=7` 또는 `bg=15`)일 때 자동으로 `light`를, 그 외에는 `default`를 선택합니다. 명시적으로 지정한 `theme` 값은 항상 우선합니다.
   - `NO_COLOR` 환경변수가 설정되어 있으면([no-color.org](https://no-color.org) 스펙) 값에 상관없이 모든 ANSI 색이 제거됩니다.
 
@@ -201,7 +217,7 @@ npm install
 npm run build
 npm test
 npm run check:claude # 실제 CLI/manifest 검증, 모델 호출 없음
-npm run preview      # 실제 formatter로 SVG 두 개 재생성
+npm run preview      # 실제 formatter로 다크·라이트 SVG 네 개 재생성
 ```
 
 상태 파일을 원자적으로 교체할 때 Windows의 일시적인 파일 공유 오류를 최대 1초 동안 재시도하며, 기존 파일을 먼저 삭제하지 않습니다.

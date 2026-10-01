@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-6.5.1-blue?style=flat-square" alt="version">
+  <img src="https://img.shields.io/badge/version-6.5.2-blue?style=flat-square" alt="version">
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="license">
   <img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen?style=flat-square&logo=node.js&logoColor=white" alt="node">
   <img src="https://img.shields.io/badge/Claude_Code-Plugin-blueviolet?style=flat-square" alt="Claude Code Plugin">
@@ -29,10 +29,24 @@ claude-recall answers two questions for every session, at a glance:
 </p>
 
 <details>
+<summary><strong>See the light theme</strong></summary>
+
+<p align="center">
+  <img src="assets/statusline-preview-light.svg" alt="claude-recall light theme" width="720">
+</p>
+
+</details>
+
+Previews use sample data and the actual formatter and RGB color output. Backgrounds and borders illustrate a terminal; the plugin does not change your terminal background.
+
+<details>
 <summary><strong>See it in a split-pane layout</strong></summary>
 
 <p align="center">
-  <img src="assets/split-panes-preview.svg" alt="claude-recall statusline in four tmux split panes" width="800">
+  <picture>
+    <source media="(prefers-color-scheme: light)" srcset="assets/split-panes-preview-light.svg">
+    <img src="assets/split-panes-preview.svg" alt="claude-recall statusline in four tmux split panes" width="800">
+  </picture>
 </p>
 
 </details>
@@ -73,7 +87,7 @@ Requires **Node.js 20+** and **native Claude Code 2.1.286+**. Setup checks the C
 > Setup never searches PATH automatically. The official native launcher (`~/.local/bin/claude`, or `%USERPROFILE%\.local\bin\claude.exe` on Windows) is detected directly. For Homebrew or another package manager, confirm its stable absolute launcher and pass it explicitly, for example `/claude-recall:setup /opt/homebrew/bin/claude`.
 
 > [!NOTE]
-> **Upgrading to 6.5.1:** run `/reload-plugins`, then `/claude-recall:setup` once to replace the installed launcher. Hooks record the actual loaded plugin root per session, including `--plugin-dir` overrides and `/cd` changes. Until a hook records it, the launcher uses the explicit development root or current-project registry fallback.
+> **Upgrading to 6.5.2:** run `/reload-plugins`, then `/claude-recall:setup` once to replace the installed launcher. Hooks record the actual loaded plugin root per session, including `--plugin-dir` overrides and `/cd` changes. Until a hook records it, the launcher uses the explicit development root or current-project registry fallback.
 
 ## Usage
 
@@ -109,7 +123,9 @@ Create `~/.claude/claude-recall/config.json`. If `CLAUDE_CONFIG_DIR` is set, rep
 - **line3** — Choose from: `context`, `rate_limits`, `seven_day`, `spend_limit`, `prompt_cache`, `cost`. Set `line3: []` to force a 2-line statusline.
 - **gitStatus** — Toggle dirty flag and ahead/behind independently.
 - **separator** *(v6.3.0+)* — Character drawn between right-zone segments on Line 1 and between all segments on Line 3. Default `"│"` (U+2502, dim). Right-zone segments also left-pad to a 10-col cell, so `│` positions stay stable across renders. Set to `""` to disable both the separator and the padding (flat 2-space joiner, pre-v6.3.0 look). Any single printable grapheme works — `"┊"` dotted, `"|"` ASCII, etc.
-- **theme** — `default` (cyan/bold, dark terminals), `light` (blue/dark-orange, white terminals), `minimal` (subdued, monochrome — severity via reverse-video), `vivid` (bright/high contrast)
+- **theme** — `default` (pastel cyan/purple/gold, dark terminals), `light` (deep teal/purple/amber, light terminals), `minimal` (subdued, monochrome — severity via reverse-video), `vivid` (bright/high contrast)
+  - `default` and `light` emit fixed 24-bit RGB foreground colors matching the README on truecolor terminals. Light colors are darker for readability on bright backgrounds. Use `minimal` or `vivid` for 16-color terminals.
+  - If your light terminal is not detected, set `"theme": "light"` in the configuration above. GitHub appearance and terminal theme are independent.
   - When `theme` is omitted and the terminal exports `COLORFGBG`, claude-recall auto-selects `light` for light backgrounds (`bg=7` or `bg=15`) and `default` otherwise. An explicit `theme` value always wins.
   - Setting the `NO_COLOR` environment variable (any value, per [no-color.org](https://no-color.org)) suppresses all ANSI color output regardless of theme.
 
@@ -202,7 +218,7 @@ npm install
 npm run build
 npm test
 npm run check:claude # real CLI/manifest validation; no model request
-npm run preview      # regenerate both SVGs from the actual formatter
+npm run preview      # regenerate four dark/light SVGs from the actual formatter
 ```
 
 Atomic state writes retry transient Windows file-sharing errors for up to one second without deleting the existing file.

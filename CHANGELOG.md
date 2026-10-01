@@ -1,5 +1,18 @@
 # Changelog
 
+## 6.5.2
+
+### Changed
+
+- Give the default dark theme fixed pastel RGB colors matching the README previews, and the light theme a complementary deep teal, purple, amber, green, and rose palette. Both themes use truecolor foregrounds; terminal backgrounds remain unchanged.
+- Generate dark and light README previews by decoding the actual foreground RGB and bold sequences, removing the independent preview color substitutions.
+- Keep `COLORFGBG` auto-selection and `NO_COLOR`; `minimal` and `vivid` remain terminal-palette themes.
+
+### Tests
+
+- Check every dark/light theme color against the illustrated backgrounds and black/white, requiring at least 4.5:1 contrast.
+- Verify truecolor SVG conversion and byte-for-byte freshness of all four README previews during `npm test`.
+
 ## 6.5.1
 
 ### Fixed

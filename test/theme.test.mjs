@@ -48,14 +48,32 @@ test('getThemeColors: vivid prompt is not bright-white (invisible on light bg)',
   });
 });
 
-test('getThemeColors: light theme exists and avoids yellow-on-white', () => {
+test('getThemeColors: dark and light colors remain readable on their preview backgrounds', () => {
+  function luminance(rgb) {
+    const channels = rgb.map((v) => {
+      const s = v / 255;
+      return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
+    });
+    return channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+  }
   withEnv({ NO_COLOR: undefined }, () => {
-    const tc = getThemeColors('light');
-    const y = tc.yellow('Y');
-    // light yellow should route through 256-color orange (38;5;166), NOT 16-color yellow (33)
-    assert.ok(y.includes('38;5;166'), `light yellow should be 256-color orange, got ${JSON.stringify(y)}`);
-    const m = tc.model('M');
-    assert.ok(!m.includes('\x1b[33m'), `light model must not use plain yellow 33m, got ${JSON.stringify(m)}`);
+    for (const [theme, backgrounds] of [
+      ['default', [[26, 27, 38], [0, 0, 0]]],
+      ['light', [[245, 246, 250], [255, 255, 255]]],
+    ]) {
+      const tc = getThemeColors(theme);
+      for (const [role, color] of Object.entries(tc).flatMap(([name, value]) =>
+        Array.isArray(value) ? value.map((fn, i) => [`${name}[${i}]`, fn]) : [[name, value]])) {
+        const match = color('text').match(/38;2;(\d+);(\d+);(\d+)m/);
+        assert.ok(match, `${theme}.${role} must emit truecolor`);
+        const fg = luminance(match.slice(1).map(Number));
+        for (const background of backgrounds) {
+          const bg = luminance(background);
+          const contrast = (Math.max(fg, bg) + 0.05) / (Math.min(fg, bg) + 0.05);
+          assert.ok(contrast >= 4.5, `${theme}.${role}: contrast ${contrast.toFixed(2)}`);
+        }
+      }
+    }
   });
 });
 
@@ -112,4 +130,3 @@ test('detectBackgroundTheme: malformed input falls back to default', () => {
     assert.equal(detectBackgroundTheme(), 'default');
   });
 });
-
