@@ -3,6 +3,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
+import { cleanupRateLimitsCache } from './rate-limits-cache.js';
 import { cleanupContextCache } from './context-window-cache.js';
 import {
   ensurePrivateDir,
@@ -26,6 +27,7 @@ export interface RefinementError {
   code: 'timeout' | 'rate_limit' | 'auth' | 'setup_required' | 'unknown';
   at: string;
   durationMs?: number;
+  // Legacy key: bounded failure diagnostics from stderr and stdout.
   stderrTail?: string;
 }
 
@@ -39,6 +41,7 @@ export interface LastRefinement {
   durationMs: number;
   transcriptBytes: number;
   stdoutBytes?: number;
+  // Legacy key: bounded failure diagnostics from stderr and stdout.
   stderrTail?: string;
 }
 
@@ -49,11 +52,10 @@ export interface SessionState {
   gitStatus: GitStatus | null;
   cwd: string;
   promptCount: number;
+  activePluginRoot?: string;
+  pendingRefinement?: { transcriptPath?: string; summary?: string };
   lastUserPrompt: string;
-  // Wall-clock timestamp when the session was first opened. Set once at
-  // SessionStart (startup source) and never overwritten, so it pairs with
-  // stdin `cost.total_duration_ms` (also wall-clock since session started)
-  // when that field is absent.
+  // Creation time used only for the explicitly labelled age fallback.
   sessionStartedAt: string;
   lastActivityAt: string;
   lastRefinedAt: string | null;
@@ -125,6 +127,8 @@ export function readState(sessionId: string): SessionState | null {
   return {
     sessionId: stringValue('sessionId', sessionId),
     focus: stringValue('focus'),
+    activePluginRoot: typeof parsed['activePluginRoot'] === 'string' ? parsed['activePluginRoot'] : undefined,
+    pendingRefinement: parsePendingRefinement(parsed['pendingRefinement']),
     branch: stringValue('branch'),
     gitStatus,
     cwd: stringValue('cwd'),
@@ -141,6 +145,13 @@ export function readState(sessionId: string): SessionState | null {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
+function parsePendingRefinement(value: unknown): SessionState['pendingRefinement'] {
+  if (!isRecord(value)) return undefined;
+  const transcriptPath = typeof value['transcriptPath'] === 'string' ? value['transcriptPath'] : undefined;
+  const summary = typeof value['summary'] === 'string' ? value['summary'].slice(0, 48_000) : undefined;
+  return transcriptPath || summary ? { transcriptPath, summary } : undefined;
 }
 
 function finiteNumber(value: unknown): number | undefined {
@@ -255,7 +266,7 @@ export function applyGitStatus(
 export async function getGitStatus(cwd: string, fallback: GitStatus | null): Promise<GitStatus | null> {
   try {
     const [branchR, dirtyR, defaultR] = await Promise.all([
-      runGit(cwd, ['rev-parse', '--abbrev-ref', 'HEAD']).catch(() => null),
+      runGit(cwd, ['symbolic-ref', '--short', 'HEAD']).catch(() => runGit(cwd, ['rev-parse', '--abbrev-ref', 'HEAD']).catch(() => null)),
       runGit(cwd, ['--no-optional-locks', 'status', '--porcelain']).catch(() => null),
       runGit(cwd, ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD']).catch(() => null),
     ]);
@@ -305,6 +316,7 @@ export async function getGitStatus(cwd: string, fallback: GitStatus | null): Pro
 const CLEANUP_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 
 export async function cleanupOldSessions(): Promise<void> {
+  await cleanupRateLimitsCache();
   const dir = getStateDir();
   const now = Date.now();
   let files: string[];

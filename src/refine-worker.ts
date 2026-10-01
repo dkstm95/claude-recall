@@ -18,7 +18,7 @@ async function main(): Promise<void> {
   const preferredTranscriptPath = process.argv[4];
   if (!sessionId || (!transcriptPath && !preferredTranscriptPath)) process.exit(0);
   const preferredTranscript = await readPreferredTranscript(preferredTranscriptPath);
-  await triggerFocusRefinement(sessionId, transcriptPath || undefined, preferredTranscript);
+  await triggerFocusRefinement(sessionId, transcriptPath || undefined, preferredTranscript, { milestone: process.argv[5] === 'milestone' });
 }
 
 main().catch((err) => {

@@ -19,10 +19,10 @@ node "${CLAUDE_PLUGIN_ROOT}/dist/setup.js" --claude-executable "$ARGUMENTS"
 The helper performs the complete setup transaction. It:
 
 - validates the current plugin installation,
-- verifies the existing private pin or the official native default launcher,
+- verifies the existing private pin or the official native default launcher and requires Claude Code 2.1.286+,
 - stores its stable absolute launcher path in the private
   `${CLAUDE_CONFIG_DIR:-~/.claude}/claude-recall/runtime.json`,
-- installs the registry-aware statusline launcher, and
+- installs the session-aware statusline launcher with a registry fallback, and
 - merges `statusLine` into the existing Claude settings without replacing
   unrelated settings.
 
@@ -43,5 +43,7 @@ bare `claude` command. If verification fails, report the helper's error and
 leave the existing settings intact.
 
 On success, report the selected Claude executable, runtime pin, launcher, and
-settings paths printed by the helper. Tell the user to **restart Claude Code**
-so the updated launcher and hooks take effect.
+settings paths printed by the helper. Statusline settings reload automatically.
+Tell the user to run `/reload-plugins` for updated hooks; restart only if an
+older session still uses the previous launcher. Existing users upgrading to
+6.5.0 must run this helper once to replace the copied launcher.

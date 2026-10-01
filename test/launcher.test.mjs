@@ -1,3 +1,4 @@
+import { isolatedEnv } from './helpers/environment.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -8,7 +9,7 @@ import { join } from 'node:path';
 const ROOT = process.cwd();
 
 function runLauncher(configDir, fallbackRoot, input, pluginsDir) {
-  const env = { ...process.env, CLAUDE_CONFIG_DIR: configDir };
+  const env = isolatedEnv(configDir, { CLAUDE_CONFIG_DIR: configDir });
   if (pluginsDir) env.CLAUDE_CODE_PLUGIN_CACHE_DIR = pluginsDir;
   else delete env.CLAUDE_CODE_PLUGIN_CACHE_DIR;
   const child = spawn(process.execPath, [join(ROOT, 'dist/launcher.js'), fallbackRoot], {
@@ -47,7 +48,7 @@ test('launcher follows the exact installed-plugin registry path', async () => {
     },
   }));
   try {
-    const result = await runLauncher(configDir, fallbackRoot, '{}');
+    const result = await runLauncher(configDir, installedRoot, '{}');
     assert.equal(result.code, 0);
     assert.equal(result.stdout, 'installed\n');
   } finally {
@@ -78,7 +79,7 @@ test('launcher respects CLAUDE_CODE_PLUGIN_CACHE_DIR as the plugins root', async
     },
   }));
   try {
-    const result = await runLauncher(configDir, fallbackRoot, '{}', pluginsDir);
+    const result = await runLauncher(configDir, installedRoot, '{}', pluginsDir);
     assert.equal(result.code, 0);
     assert.equal(result.stdout, 'custom-plugin-root\n');
   } finally {
@@ -150,7 +151,7 @@ test('launcher selects a matching project-scoped install', async () => {
   }
 });
 
-test('launcher does not change plugin scope after /cd into another project', async () => {
+test('launcher uses current project after /cd before a hook records the active root', async () => {
   const root = mkdtempSync(join(tmpdir(), 'claude-recall-launcher-cd-scope-'));
   const configDir = join(root, 'config');
   const pluginsDir = join(configDir, 'plugins');
@@ -179,7 +180,7 @@ test('launcher does not change plugin scope after /cd into another project', asy
     });
     const result = await runLauncher(configDir, '', input);
     assert.equal(result.code, 0);
-    assert.equal(result.stdout, 'user\n');
+    assert.equal(result.stdout, 'cd-local\n');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -198,4 +199,26 @@ test('launcher falls back to the setup-time plugin root for local development', 
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('hook-recorded loaded root wins over newer registry and setup fallback', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'recall-active-launcher-'));
+  const config = join(root, 'config');
+  const loaded = join(root, 'loaded');
+  const updated = join(root, 'updated');
+  const development = join(root, 'development');
+  for (const [path, text] of [[loaded, 'loaded'], [updated, 'updated'], [development, 'development']]) {
+    mkdirSync(join(path, 'dist'), { recursive: true });
+    writeFileSync(join(path, 'dist', 'statusline.js'), `process.stdout.write('${text}');`);
+  }
+  mkdirSync(join(config, 'plugins'), { recursive: true });
+  mkdirSync(join(config, 'claude-recall', 'sessions'), { recursive: true });
+  writeFileSync(join(config, 'plugins', 'installed_plugins.json'), JSON.stringify({ plugins: { 'claude-recall@claude-recall': [{ scope: 'user', installPath: updated }] } }));
+  writeFileSync(join(config, 'claude-recall', 'sessions', 'active.json'), JSON.stringify({ activePluginRoot: loaded }));
+  try {
+    assert.equal((await runLauncher(config, development, '{"session_id":"active"}')).stdout, 'loaded');
+    assert.equal((await runLauncher(config, development, '{}')).stdout, 'development');
+    writeFileSync(join(config, 'claude-recall', 'sessions', 'active.json'), JSON.stringify({ activePluginRoot: join(root, 'missing') }));
+    assert.equal((await runLauncher(config, development, '{"session_id":"active"}')).stdout, '');
+  } finally { rmSync(root, { recursive: true, force: true }); }
 });

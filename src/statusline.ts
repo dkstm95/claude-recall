@@ -18,7 +18,9 @@ interface StatuslineInput {
   thinking?: { enabled?: boolean };
   session_name?: string;
   agent?: { name?: string };
-  pr?: { number?: number; title?: string; url?: string };
+  pr?: { number?: number; title?: string; url?: string; kind?: string; review_state?: string };
+  fast_mode?: boolean;
+  prompt_cache?: { warm?: boolean; hit_ratio?: number };
   rate_limits?: RateLimitsData;
 }
 
@@ -53,7 +55,7 @@ function normalizeRateLimits(value: Record<string, unknown> | undefined): RateLi
   const normalizeWindow = (key: string) => {
     const raw = recordAt(value, key);
     if (!raw) return undefined;
-    const usedPercentage = normalizePercentage(raw['used_percentage']);
+    const usedPercentage = (key === 'spend_limit' ? normalizeNonNegativeNumber : normalizePercentage)(raw['used_percentage']);
     const resetsAt = normalizeNonNegativeNumber(raw['resets_at']);
     if (usedPercentage === undefined) return undefined;
     return resetsAt === undefined
@@ -62,8 +64,9 @@ function normalizeRateLimits(value: Record<string, unknown> | undefined): RateLi
   };
   const fiveHour = normalizeWindow('five_hour');
   const sevenDay = normalizeWindow('seven_day');
-  return fiveHour || sevenDay
-    ? { five_hour: fiveHour, seven_day: sevenDay }
+  const spendLimit = normalizeWindow('spend_limit');
+  return fiveHour || sevenDay || spendLimit
+    ? { five_hour: fiveHour, seven_day: sevenDay, spend_limit: spendLimit }
     : undefined;
 }
 
@@ -78,6 +81,8 @@ function normalizeInput(value: unknown): StatuslineInput | null {
   const effortRaw = recordAt(value, 'effort');
   const thinkingRaw = recordAt(value, 'thinking');
   const prRaw = recordAt(value, 'pr');
+  const cacheRaw = recordAt(value, 'prompt_cache');
+  const hitRatio = normalizeNonNegativeNumber(cacheRaw?.['hit_ratio']);
   const costUsd = normalizeNonNegativeNumber(costRaw?.['total_cost_usd']);
   const durationMs = normalizeNonNegativeNumber(costRaw?.['total_duration_ms']);
   const contextPct = normalizePercentage(contextRaw?.['used_percentage']);
@@ -102,8 +107,15 @@ function normalizeInput(value: unknown): StatuslineInput | null {
           number: prNumber === undefined ? undefined : Math.trunc(prNumber),
           title: typeof prRaw?.['title'] === 'string' ? prRaw['title'] : undefined,
           url: typeof prRaw?.['url'] === 'string' ? prRaw['url'] : undefined,
+          kind: stringAt(prRaw ?? {}, 'kind'),
+          review_state: stringAt(prRaw ?? {}, 'review_state'),
         }
       : undefined,
+    fast_mode: typeof value['fast_mode'] === 'boolean' ? value['fast_mode'] : undefined,
+    prompt_cache: cacheRaw ? {
+      warm: typeof cacheRaw['warm'] === 'boolean' ? cacheRaw['warm'] : undefined,
+      hit_ratio: hitRatio === undefined ? undefined : Math.min(1, hitRatio),
+    } : undefined,
     rate_limits: normalizeRateLimits(recordAt(value, 'rate_limits')),
   };
 }
@@ -132,7 +144,7 @@ async function main(): Promise<void> {
 
   const [contextWindow, rateLimits] = await Promise.all([
     resolveContextWindow(input.session_id, input.context_window),
-    resolveRateLimits(input.rate_limits),
+    resolveRateLimits(input.session_id, input.rate_limits),
   ]);
   const builtin: BuiltinData = {
     model: input.model,
@@ -145,6 +157,8 @@ async function main(): Promise<void> {
     session_name: input.session_name,
     agent: input.agent,
     pr: input.pr,
+    fast_mode: input.fast_mode,
+    prompt_cache: input.prompt_cache,
     rate_limits: rateLimits,
   };
 

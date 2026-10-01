@@ -14,7 +14,7 @@ import { dirname, join, resolve } from 'node:path';
 const PRIVATE_DIR_MODE = 0o700;
 const PRIVATE_FILE_MODE = 0o600;
 const LOCK_RETRY_MS = 5;
-// Leave headroom inside Claude Code's 10s hook budget while tolerating a burst
+// Leave headroom inside this plugin's configured 10s hook budget while tolerating a burst
 // of many statusline processes contending on the shared account/session caches.
 const LOCK_TIMEOUT_MS = 5_000;
 const STALE_LOCK_MS = 60_000;

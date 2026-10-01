@@ -109,3 +109,24 @@ test('shouldRefine: past the 5s window allows refresh', () => {
 test('shouldRefine: a future timestamp does not suppress refinement indefinitely', () => {
   assert.equal(shouldRefine(new Date(Date.now() + 86_400_000).toISOString()), true);
 });
+
+test('readTranscriptTail: oversized final JSONL record keeps latest semantic text', async () => {
+  const line = JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: '가'.repeat(6000) + 'LATEST_FOCUS' }] } });
+  const text = await withTmpFile(line + '\n', readTranscriptTail);
+  assert.ok(text.includes('LATEST_FOCUS'));
+  assert.ok(!text.includes('\uFFFD'));
+  assert.ok(Buffer.byteLength(text) <= TAIL_BYTES);
+});
+
+test('readTranscriptTail: large tool payload does not evict recent dialogue', async () => {
+  const content = [
+    { type: 'user', message: { content: 'Fix the launcher selection' } },
+    { type: 'assistant', message: { content: [{ type: 'tool_use', input: { payload: 'x'.repeat(60_000) } }] } },
+  ].map(JSON.stringify).join('\n') + '\n';
+  assert.match(await withTmpFile(content, readTranscriptTail), /Fix the launcher selection/);
+});
+
+test('readTranscriptTail: tool-only JSONL uses the caller prompt fallback', async () => {
+  const line = JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', content: 'payload'.repeat(9000) }] } });
+  assert.equal(await withTmpFile(line + '\n', readTranscriptTail), '');
+});

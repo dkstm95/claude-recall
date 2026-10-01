@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import { readdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
 import { open } from 'node:fs/promises';
+import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -37,7 +38,7 @@ const SYSTEM_PROMPT = [
     '- Describe what the session is currently trying to accomplish, not historical noise.',
     '- Prefer concrete verbs over vague nouns.',
 ].join('\n');
-const STDERR_TAIL_CHARS = 500;
+const ERROR_TAIL_CHARS = 500;
 // Caps protect against a rogue `claude -p` streaming unbounded output across
 // the timeout window. stderr keeps its tail (where error messages usually land).
 // stdout keeps its head (Haiku's focus label is the first ~60 chars).
@@ -52,31 +53,62 @@ export function shouldRefine(lastRefinedAt) {
     // until wall time caught up.
     return !Number.isFinite(elapsed) || elapsed < 0 || elapsed >= DEBOUNCE_MS;
 }
+function utf8Tail(text, maxBytes) {
+    const buf = Buffer.from(text, 'utf8');
+    let start = Math.max(0, buf.length - maxBytes);
+    while (start < buf.length && (buf[start] & 0xc0) === 0x80)
+        start += 1;
+    return buf.subarray(start).toString('utf8');
+}
+// Read at most 1 MiB to recover complete JSONL records, then bound the text
+// sent to the model. Tool payloads cannot crowd out all recent dialogue.
 export async function readTranscriptTail(path) {
     const fd = await open(path, 'r');
     try {
-        const stats = await fd.stat();
-        const start = Math.max(0, stats.size - TRANSCRIPT_TAIL_BYTES);
-        const length = stats.size - start;
-        if (length <= 0)
-            return '';
-        const buf = Buffer.alloc(length);
-        const { bytesRead } = await fd.read(buf, 0, length, start);
-        const text = buf.subarray(0, bytesRead).toString('utf-8');
-        // Drop a possibly-truncated first line only when we actually seeked past byte 0.
-        const nl = text.indexOf('\n');
-        return nl >= 0 && start > 0 ? text.slice(nl + 1) : text;
+        const { size } = await fd.stat();
+        const start = Math.max(0, size - 1_048_576);
+        const buf = Buffer.alloc(size - start);
+        const { bytesRead } = await fd.read(buf, 0, buf.length, start);
+        const decoded = buf.subarray(0, bytesRead).toString('utf-8');
+        const firstNewline = decoded.indexOf('\n');
+        const text = start > 0 ? (firstNewline >= 0 ? decoded.slice(firstNewline + 1) : '') : decoded;
+        const records = [];
+        let jsonRecords = 0;
+        for (const line of text.split('\n')) {
+            if (!line.trim())
+                continue;
+            try {
+                const record = JSON.parse(line);
+                if (record && typeof record === 'object')
+                    jsonRecords += 1;
+                const message = record?.message;
+                if (record?.type !== 'user' && record?.type !== 'assistant')
+                    continue;
+                const content = message?.content;
+                const pieces = typeof content === 'string' ? [content]
+                    : Array.isArray(content) ? content.filter((part) => part?.type === 'text' && typeof part.text === 'string').map((part) => part.text) : [];
+                if (pieces.length)
+                    records.push(`${record.type}: ${utf8Tail(pieces.join('\n'), 6_000)}`);
+            }
+            catch { /* Legacy plain-text transcripts are handled below. */ }
+        }
+        if (jsonRecords)
+            return utf8Tail(records.join('\n'), TRANSCRIPT_TAIL_BYTES);
+        // Preserve compatibility with plain-text input without cutting UTF-8 bytes.
+        const tail = utf8Tail(text, TRANSCRIPT_TAIL_BYTES);
+        const nl = tail.indexOf('\n');
+        return text.length > tail.length && nl >= 0 && tail.slice(nl + 1).trim() ? tail.slice(nl + 1) : tail;
     }
     finally {
         await fd.close();
     }
 }
-export function classifyError(exitCode, stderr) {
+export function classifyError(exitCode, diagnostic) {
     if (exitCode === null)
         return 'unknown';
-    if (/rate.?limit|429|too many requests/i.test(stderr))
+    if (/rate.?limit|429|too many requests/i.test(diagnostic))
         return 'rate_limit';
-    if (/auth|401|403|unauthori[sz]ed|credential/i.test(stderr))
+    if (/auth|401|403|unauthori[sz]ed|credential|not logged in|login required/i.test(diagnostic))
         return 'auth';
     return 'unknown';
 }
@@ -85,11 +117,26 @@ export function classifySpawnError(code) {
         ? 'setup_required'
         : 'unknown';
 }
-function stderrTail(stderr) {
-    const trimmed = stderr.trim();
+function diagnosticTail(diagnostic) {
+    const trimmed = diagnostic.trim();
     if (!trimmed)
         return undefined;
-    return trimmed.length > STDERR_TAIL_CHARS ? trimmed.slice(-STDERR_TAIL_CHARS) : trimmed;
+    return trimmed.length > ERROR_TAIL_CHARS ? trimmed.slice(-ERROR_TAIL_CHARS) : trimmed;
+}
+export function refinementArgs() {
+    return [
+        '-p',
+        '--model=haiku',
+        '--output-format=text',
+        '--tools', '',
+        '--setting-sources', '',
+        '--settings', JSON.stringify({ disableAllHooks: true }),
+        '--strict-mcp-config',
+        '--mcp-config', '{"mcpServers":{}}',
+        '--disable-slash-commands',
+        '--no-session-persistence',
+        '--system-prompt', SYSTEM_PROMPT,
+    ];
 }
 export async function spawnRefinement(transcript, currentFocus, options = {}) {
     if (!transcript.trim()) {
@@ -125,19 +172,7 @@ export async function spawnRefinement(transcript, currentFocus, options = {}) {
         childCwd = undefined;
     }
     return new Promise((resolve) => {
-        const args = [
-            '-p',
-            '--model=haiku',
-            '--output-format=text',
-            '--tools', '',
-            '--setting-sources', '',
-            '--settings', JSON.stringify({ disableAllHooks: true }),
-            '--strict-mcp-config',
-            '--mcp-config', '{}',
-            '--disable-slash-commands',
-            '--no-session-persistence',
-            '--system-prompt', SYSTEM_PROMPT,
-        ];
+        const args = refinementArgs();
         const child = spawn(claudeExecutable, args, {
             shell: false,
             detached: process.platform !== 'win32',
@@ -155,7 +190,7 @@ export async function spawnRefinement(transcript, currentFocus, options = {}) {
             durationMs: Date.now() - startedAt,
             transcriptBytes,
             stdoutBytes: Buffer.byteLength(stdout, 'utf-8'),
-            stderrTail: stderrTail(stderr),
+            stderrTail: diagnosticTail([stderr.trim(), stdout.trim()].filter(Boolean).join('\n')),
         });
         const signalChild = (signal) => {
             try {
@@ -204,7 +239,7 @@ export async function spawnRefinement(transcript, currentFocus, options = {}) {
             if (settled)
                 return;
             if (exitCode !== 0) {
-                finish(errorResult(classifyError(exitCode, stderr)));
+                finish(errorResult(classifyError(exitCode, `${stderr}\n${stdout}`)));
                 return;
             }
             const cleanedFocus = sanitizeTerminalText(stdout
@@ -222,83 +257,114 @@ export async function spawnRefinement(transcript, currentFocus, options = {}) {
 export async function triggerFocusRefinement(sessionId, transcriptPath, preferredTranscript, options = {}) {
     if (isRefiningSubprocess())
         return;
-    const attemptId = randomUUID();
-    const attemptStartedAt = new Date().toISOString();
-    const claim = await updateState(sessionId, (current) => {
-        if (!current || !shouldStartRefinement(current)) {
-            return { value: null };
-        }
-        const previousRefinedAt = current.lastRefinedAt;
-        current.lastRefinedAt = attemptStartedAt;
-        current.refinementAttemptId = attemptId;
-        return {
-            state: current,
-            value: {
-                currentFocus: current.focus,
-                lastUserPrompt: current.lastUserPrompt,
-                previousRefinedAt,
-            },
-        };
-    });
-    if (!claim)
-        return;
-    // Prefer the JSONL transcript tail; fall back to the persisted last user prompt
-    // when the file is missing or empty (typical on the first prompt, where Claude
-    // Code's transcript flush hasn't completed by the time UserPromptSubmit fires).
-    let transcript = preferredTranscript?.trim() ? `Compaction summary:\n${preferredTranscript}` : '';
-    if (!transcript && transcriptPath) {
-        try {
-            transcript = await readTranscriptTail(transcriptPath);
-        }
-        catch {
-            /* fall through to fallback */
-        }
+    if (options.milestone || preferredTranscript?.trim()) {
+        await updateState(sessionId, (current) => {
+            if (!current)
+                return { value: undefined };
+            current.pendingRefinement = {
+                transcriptPath: transcriptPath ?? current.pendingRefinement?.transcriptPath,
+                summary: preferredTranscript?.trim() ? preferredTranscript.slice(0, PREFERRED_TRANSCRIPT_MAX_CHARS) : current.pendingRefinement?.summary,
+            };
+            return { state: current, value: undefined };
+        });
     }
-    if (!transcript.trim() && claim.lastUserPrompt.trim()) {
-        transcript = `User: ${claim.lastUserPrompt}`;
-    }
-    const result = await spawnRefinement(transcript, claim.currentFocus, options);
-    await updateState(sessionId, (fresh) => {
-        // A stale worker must never overwrite a newer claim or its result.
-        if (!fresh || fresh.refinementAttemptId !== attemptId)
-            return { value: undefined };
-        if (result.status === 'skip') {
-            fresh.lastRefinedAt = claim.previousRefinedAt;
+    let routineRequest = !options.milestone && !preferredTranscript?.trim();
+    while (true) {
+        const attemptId = randomUUID();
+        const attemptStartedAt = new Date().toISOString();
+        const decision = await updateState(sessionId, (current) => {
+            if (!current)
+                return { value: { kind: 'stop' } };
+            if (!shouldStartRefinement(current)) {
+                const leaseAge = current.lastRefinedAt ? Date.now() - Date.parse(current.lastRefinedAt) : Infinity;
+                const active = current.refinementAttemptId && leaseAge >= 0 && leaseAge < REFINEMENT_LEASE_MS;
+                if (!current.pendingRefinement)
+                    return { value: { kind: 'stop' } };
+                if (active)
+                    return { value: { kind: 'wait', ms: Math.min(1_000, REFINEMENT_LEASE_MS - leaseAge) } };
+                return { value: { kind: 'wait', ms: Math.max(1, DEBOUNCE_MS - leaseAge) } };
+            }
+            if (!routineRequest && !current.pendingRefinement)
+                return { value: { kind: 'stop' } };
+            const pending = current.pendingRefinement;
+            current.pendingRefinement = undefined;
+            const previousRefinedAt = current.lastRefinedAt;
+            current.lastRefinedAt = attemptStartedAt;
+            current.refinementAttemptId = attemptId;
+            return {
+                state: current,
+                value: { kind: 'run', currentFocus: current.focus, lastUserPrompt: current.lastUserPrompt,
+                    previousRefinedAt, transcriptPath: pending?.transcriptPath ?? transcriptPath, summary: pending?.summary },
+            };
+        });
+        if (decision.kind === 'stop')
+            return;
+        if (decision.kind === 'wait') {
+            await delay(decision.ms);
+            continue;
+        }
+        const claim = decision;
+        routineRequest = false;
+        transcriptPath = claim.transcriptPath;
+        preferredTranscript = claim.summary;
+        // Prefer the JSONL transcript tail; fall back to the persisted last user prompt
+        // when the file is missing or empty (typical on the first prompt, where Claude
+        // Code's transcript flush hasn't completed by the time UserPromptSubmit fires).
+        let transcript = preferredTranscript?.trim() ? `Compaction summary:\n${preferredTranscript}` : '';
+        if (!transcript && transcriptPath) {
+            try {
+                transcript = await readTranscriptTail(transcriptPath);
+            }
+            catch {
+                /* fall through to fallback */
+            }
+        }
+        if (!transcript.trim() && claim.lastUserPrompt.trim()) {
+            transcript = `User: ${claim.lastUserPrompt}`;
+        }
+        const result = await spawnRefinement(transcript, claim.currentFocus, options);
+        await updateState(sessionId, (fresh) => {
+            // A stale worker must never overwrite a newer claim or its result.
+            if (!fresh || fresh.refinementAttemptId !== attemptId)
+                return { value: undefined };
+            if (result.status === 'skip') {
+                fresh.lastRefinedAt = claim.previousRefinedAt;
+                fresh.refinementAttemptId = null;
+                return { state: fresh, value: undefined };
+            }
+            const now = new Date().toISOString();
+            if (result.status === 'ok') {
+                fresh.focus = result.focus;
+                fresh.refinementError = null;
+                fresh.lastRefinement = {
+                    at: now,
+                    status: 'ok',
+                    durationMs: result.durationMs,
+                    transcriptBytes: result.transcriptBytes,
+                };
+            }
+            else {
+                fresh.refinementError = {
+                    code: result.code,
+                    at: now,
+                    durationMs: result.durationMs,
+                    stderrTail: result.stderrTail,
+                };
+                fresh.lastRefinement = {
+                    at: now,
+                    status: 'error',
+                    code: result.code,
+                    durationMs: result.durationMs,
+                    transcriptBytes: result.transcriptBytes,
+                    stdoutBytes: result.stdoutBytes,
+                    stderrTail: result.stderrTail,
+                };
+            }
+            fresh.lastRefinedAt = now;
             fresh.refinementAttemptId = null;
             return { state: fresh, value: undefined };
-        }
-        const now = new Date().toISOString();
-        if (result.status === 'ok') {
-            fresh.focus = result.focus;
-            fresh.refinementError = null;
-            fresh.lastRefinement = {
-                at: now,
-                status: 'ok',
-                durationMs: result.durationMs,
-                transcriptBytes: result.transcriptBytes,
-            };
-        }
-        else {
-            fresh.refinementError = {
-                code: result.code,
-                at: now,
-                durationMs: result.durationMs,
-                stderrTail: result.stderrTail,
-            };
-            fresh.lastRefinement = {
-                at: now,
-                status: 'error',
-                code: result.code,
-                durationMs: result.durationMs,
-                transcriptBytes: result.transcriptBytes,
-                stdoutBytes: result.stdoutBytes,
-                stderrTail: result.stderrTail,
-            };
-        }
-        fresh.lastRefinedAt = now;
-        fresh.refinementAttemptId = null;
-        return { state: fresh, value: undefined };
-    });
+        });
+    }
 }
 function shouldStartRefinement(state) {
     if (state.refinementAttemptId && state.lastRefinedAt) {
@@ -311,8 +377,8 @@ function shouldStartRefinement(state) {
 /**
  * Launch the refinement as a fully detached worker process.
  * The parent hook returns immediately; the worker outlives it and writes state when done.
- * Required because Claude Code's 10s UserPromptSubmit hook timeout would otherwise SIGHUP
- * the `claude -p` child before Haiku responds (typically 1-5s but up to 30s).
+ * Outlives this plugin's 10s hook budget and Claude's separate SessionEnd
+ * budget; the detached worker owns the 45s refinement timeout.
  */
 function writeWorkerInput(text) {
     if (!text?.trim())
@@ -341,7 +407,7 @@ function writeWorkerInput(text) {
     });
     return path;
 }
-export function launchRefinementWorker(sessionId, transcriptPath, preferredTranscript) {
+export function launchRefinementWorker(sessionId, transcriptPath, preferredTranscript, milestone = false) {
     if (isRefiningSubprocess())
         return;
     if (!sessionId || (!transcriptPath && !preferredTranscript?.trim()))
@@ -363,7 +429,7 @@ export function launchRefinementWorker(sessionId, transcriptPath, preferredTrans
         catch { /* worker may already have removed it */ }
     };
     try {
-        const child = spawn(process.execPath, [workerPath, sessionId, transcriptPath ?? '', inputPath ?? ''], {
+        const child = spawn(process.execPath, [workerPath, sessionId, transcriptPath ?? '', inputPath ?? '', milestone ? 'milestone' : ''], {
             detached: true,
             stdio: 'ignore',
         });

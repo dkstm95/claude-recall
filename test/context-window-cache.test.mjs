@@ -1,3 +1,4 @@
+import { isolateProcess } from './helpers/environment.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, readFileSync, statSync } from 'node:fs';
@@ -7,8 +8,7 @@ import { join } from 'node:path';
 // Redirect HOME before importing so the cache module writes to a temp dir
 // instead of the real ~/.claude/claude-recall/context-windows.json.
 const tmpHome = mkdtempSync(join(tmpdir(), 'claude-recall-ctx-cache-test-'));
-process.env['HOME'] = tmpHome;
-process.env['USERPROFILE'] = tmpHome;
+isolateProcess(tmpHome);
 process.on('exit', () => {
   try { rmSync(tmpHome, { recursive: true, force: true }); } catch {}
 });

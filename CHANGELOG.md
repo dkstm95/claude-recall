@@ -1,5 +1,37 @@
 # Changelog
 
+## 6.5.0
+
+### Fixed
+
+- Correct the empty MCP configuration to `{"mcpServers":{}}`. Current native Claude rejected `{}` before a refinement could reach Haiku.
+- Read a bounded JSONL region and extract recent dialogue before truncation, retaining long final messages while excluding large tool payloads. The model receives at most 12KB of extracted transcript text.
+- Persist and coalesce PostCompact/SessionEnd requests during an active refinement or debounce. The latest compaction summary survives; waiting workers can recover a claim after an expired lease. Routine prompt triggers remain single-flight and debounced.
+- Classify failed-run stdout together with stderr, including login and rate-limit errors. The legacy `stderrTail` diagnostic key now stores the bounded combined error tail.
+- Route statusline to the plugin root recorded by the session's actual hooks. This preserves loaded versions across background updates and respects inline development overrides and `/cd`; first-render fallbacks use an explicit development root or the current project's registry entries. Mutating hooks record the root in their existing transaction to avoid a second lock acquisition during prompt bursts.
+- Isolate quota caches by session and ignore the legacy shared cache. New sessions no longer inherit another session's subscription usage; expired windows and old cache files are discarded.
+- Respect explicit `line3: []` during legacy context-slot migration. Bound output at extreme terminal widths and render branches before their first commit.
+- Isolate test storage and plugin environment variables, including inherited `CLAUDE_CONFIG_DIR`. Make setup assertions and test-file discovery portable to Windows.
+
+### Added
+
+- Optional `review` and `fast_mode` Line 1 slots; `pr` distinguishes GitLab MR numbers.
+- Optional `spend_limit` and `prompt_cache` Line 3 slots. Spend percentages retain values over 100%; cache reports warm/cold state and session hit ratio. Defaults remain unchanged.
+- `npm run check:claude` validates real CLI refinement options with `--init-only` and both plugin manifests without a model request.
+- Compatibility CI for Node 20, 22, 24, and current Node on Linux/macOS/Windows, plus native Claude 2.1.286 and latest on Linux.
+- Reproducible SVG previews generated from the actual formatter with `npm run preview`.
+
+### Changed
+
+- Require native Claude Code **2.1.286+**, checked during setup. Hooks use the shell-free `command` + `args` form for literal cross-platform plugin paths.
+- Label the missing-runtime fallback `age …`: creation age includes closed-session time, unlike Claude's accumulated `cost.total_duration_ms`.
+- Clarify worktree field scope, hook versus SessionEnd budgets, cache scope, supported metadata, and settings reload behavior in both READMEs and contributor documentation. Remove the unsupported fixed per-session cost estimate.
+
+### Migration
+
+- Run `/reload-plugins`, then `/claude-recall:setup` once to replace the copied launcher. Statusline settings reload automatically; restart only if an existing session still retains the old launcher.
+- Rate-limit bars in a new session wait for its own live data. A resumed session may reuse its unexpired session cache; after changing accounts, start a new session because a session ID is not an account ID.
+
 ## 6.4.3
 
 ### Security

@@ -2,9 +2,8 @@ import {
   applyGitStatus,
   createEmptySessionState,
   getGitStatus,
-  updateState,
 } from '../state.js';
-import { getString, runHook, type HookInput } from './common.js';
+import { getString, runHook, updateHookState as updateState, type HookInput } from './common.js';
 
 async function handleCwdChanged(input: HookInput): Promise<void> {
   const sessionId = getString(input, 'session_id');

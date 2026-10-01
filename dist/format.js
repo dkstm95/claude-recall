@@ -1,4 +1,4 @@
-import { getThemeColors } from './config.js';
+import { DEFAULT_CONFIG, getThemeColors } from './config.js';
 import { normalizeEpochSeconds, normalizeNonNegativeNumber, normalizePercentage } from './metrics.js';
 import { graphemes, graphemeWidth, sanitizeTerminalText, stripTerminalSequences, terminalTextWidth, } from './terminal-text.js';
 export function displayWidth(str) {
@@ -91,14 +91,6 @@ const MIN_PROMPT_COLS = 30;
 // the grid is a soft alignment guide, not a hard constraint.
 const CELL_MIN_WIDTH = 10;
 const DEFAULT_JOINER = { text: '  ', width: 2 };
-const DEFAULT_FORMAT_CONFIG = {
-    line1: ['focus', 'branch', 'model'],
-    line2: ['turn', 'prompt', 'elapsed'],
-    line3: ['context', 'rate_limits', 'seven_day', 'cost'],
-    gitStatus: { enabled: true, showDirty: true, showAheadBehind: true },
-    theme: 'default',
-    separator: '│',
-};
 export const FOCUS_PLACEHOLDER = '(no focus yet)';
 export const PROMPT_PLACEHOLDER = '(awaiting first prompt)';
 export function makeJoiner(separator, tc) {
@@ -134,11 +126,11 @@ function basenameOf(p) {
     return parts.length > 0 ? parts[parts.length - 1] : p;
 }
 function worktreeName(builtin) {
-    const modern = builtin?.worktree?.name ?? builtin?.worktree?.path;
-    if (typeof modern === 'string' && modern)
-        return basenameOf(modern);
-    const legacy = builtin?.workspace?.git_worktree;
-    return typeof legacy === 'string' && legacy ? basenameOf(legacy) : undefined;
+    const worktree = builtin?.worktree?.name ?? builtin?.worktree?.path;
+    if (typeof worktree === 'string' && worktree)
+        return basenameOf(worktree);
+    const linkedWorktree = builtin?.workspace?.git_worktree;
+    return typeof linkedWorktree === 'string' && linkedWorktree ? basenameOf(linkedWorktree) : undefined;
 }
 const ERROR_LABELS = {
     timeout: '\u26A0 AI timeout',
@@ -182,9 +174,9 @@ function formatSevenDayReset(resetsAtEpochSec) {
     const d = new Date(resetsAtEpochSec * 1000);
     return `(~${d.getMonth() + 1}/${d.getDate()} ${formatHM(d)})`;
 }
-function formatUsageSegment(label, pct, tc, resetText, th = DEFAULT_THRESHOLDS) {
+function formatUsageSegment(label, pct, tc, resetText, th = DEFAULT_THRESHOLDS, allowOverage = false) {
     const bar = renderBar(pct, 10, tc, th);
-    const normalizedPct = normalizePercentage(pct) ?? 0;
+    const normalizedPct = (allowOverage ? normalizeNonNegativeNumber : normalizePercentage)(pct) ?? 0;
     const pctText = `${Math.round(normalizedPct)}%`;
     const labelColored = tc.dim(label);
     const pctColored = normalizedPct >= th.red ? tc.red(pctText) : normalizedPct >= th.yellow ? tc.yellow(pctText) : tc.green(pctText);
@@ -217,6 +209,23 @@ function buildLine3Segments(l3, builtin, ctxPct, tc, compactLevel) {
             : undefined;
         segs.push(formatUsageSegment('7d', sevenDayPct, tc, resetText));
     }
+    const spend = builtin?.rate_limits?.spend_limit;
+    const spendPct = normalizeNonNegativeNumber(spend?.used_percentage);
+    if (l3.includes('spend_limit') && spendPct !== undefined) {
+        const resetsAt = normalizeEpochSeconds(spend?.resets_at);
+        segs.push(formatUsageSegment('spend', spendPct, tc, compactLevel < 1 && resetsAt !== undefined ? formatSevenDayReset(resetsAt) : undefined, DEFAULT_THRESHOLDS, true));
+    }
+    const cache = builtin?.prompt_cache;
+    if (l3.includes('prompt_cache') && cache) {
+        const ratio = normalizeNonNegativeNumber(cache.hit_ratio);
+        const parts = ['cache'];
+        if (typeof cache.warm === 'boolean')
+            parts.push(cache.warm ? 'warm' : 'cold');
+        if (ratio !== undefined)
+            parts.push(`${Math.round(Math.min(1, ratio) * 100)}%`);
+        if (parts.length > 1)
+            segs.push(makeSegment(tc.dim(parts.join(' '))));
+    }
     const cost = normalizeNonNegativeNumber(builtin?.cost?.total_cost_usd);
     if (l3.includes('cost') && cost != null) {
         const s = tc.dim(cost < 0.01 ? '$0.00' : `$${cost.toFixed(2)}`);
@@ -241,9 +250,13 @@ function renderLine3(l3, builtin, ctxPct, tc, budget, joiner) {
         }
     }
     // Even fully compacted (L2) exceeds the budget: drop segments right-to-left.
-    // progressiveJoin keeps at least one, so ctx always survives when present.
+    // Keep the highest-priority metric, shrinking its bar if none fits.
     const compacted = progressiveJoin(segs, budget, 0, joiner).text;
-    return compacted || segs[0].text;
+    if (compacted)
+        return compacted;
+    // At extreme widths remove the bar itself, retaining the first metric.
+    const textOnly = stripAnsi(segs[0].text).replace(/[█░]+\s*/, '');
+    return tc.dim(truncate(textOnly, budget));
 }
 function makeSegment(text) {
     return { text, width: visibleWidth(text) };
@@ -285,7 +298,7 @@ function prDisplay(pr) {
     if (!pr || typeof pr !== 'object')
         return undefined;
     if (typeof pr.number === 'number' && Number.isFinite(pr.number))
-        return `PR #${Math.trunc(pr.number)}`;
+        return `${pr.kind === 'mr' ? 'MR' : 'PR'} #${Math.trunc(pr.number)}`;
     return typeof pr.title === 'string' && pr.title ? `PR ${truncate(pr.title, 24)}` : undefined;
 }
 function buildLine1RightSegments(ctx) {
@@ -311,6 +324,12 @@ function buildLine1RightSegments(ctx) {
             const prText = prDisplay(ctx.builtin?.pr);
             if (prText)
                 text = ctx.tc.branch(prText);
+        }
+        else if (slot === 'review' && typeof ctx.builtin?.pr?.review_state === 'string') {
+            text = ctx.tc.dim('review ' + truncate(ctx.builtin.pr.review_state, 20));
+        }
+        else if (slot === 'fast_mode' && ctx.builtin?.fast_mode === true) {
+            text = ctx.tc.model('fast');
         }
         else if (slot === 'branch' && ctx.cfg.gitStatus.enabled && ctx.state.gitStatus?.branch) {
             text = ctx.tc.branch(truncate(renderGitText(ctx.state.gitStatus, ctx.cfg.gitStatus), 48));
@@ -374,7 +393,7 @@ function renderLine2(ctx) {
         line2Right.push(makeRightSegment(ctx.tc.dim(ctx.elapsed), ctx.gridOn));
     }
     const hasTurn = l2.includes('turn');
-    const turnRaw = `#${Number.isSafeInteger(ctx.state.promptCount) ? Math.max(0, ctx.state.promptCount) : 0}  `;
+    const turnRaw = truncate(`#${Number.isSafeInteger(ctx.state.promptCount) ? Math.max(0, ctx.state.promptCount) : 0}  `, Math.max(0, ctx.termWidth - ctx.prefixWidth));
     const turnLabel = hasTurn ? ctx.tc.dim(turnRaw) : '';
     const turnWidth = hasTurn ? displayWidth(turnRaw) : 0;
     const hasPrompt = l2.includes('prompt');
@@ -391,20 +410,20 @@ function renderLine2(ctx) {
 }
 export function formatStatusline(state, termWidth, builtin, config) {
     const safeTermWidth = validWidth(termWidth) ? termWidth : WIDTH_FALLBACK;
-    const cfg = config ?? DEFAULT_FORMAT_CONFIG;
+    const cfg = config ?? DEFAULT_CONFIG;
     const tc = getThemeColors(cfg.theme);
     const separator = sanitizeSeparator(cfg.separator);
     const joiner = makeJoiner(separator, tc);
     const gridOn = separator !== '';
-    // Fallback uses sessionStartedAt (not lastActivityAt) to match stdin's
-    // "wall-clock since session started" semantic.
+    // Claude accumulates active runtime across resumes. Creation age includes
+    // downtime, so the fallback has an explicit label rather than implying parity.
     const durationMs = normalizeNonNegativeNumber(builtin?.cost?.total_duration_ms);
     const elapsed = durationMs != null
         ? formatElapsedMs(durationMs)
-        : formatElapsed(state.sessionStartedAt);
-    const prefixWidth = 3;
+        : `age ${formatElapsed(state.sessionStartedAt)}`;
+    const prefixWidth = Math.min(3, safeTermWidth);
     const accent = sessionColor(typeof state.cwd === 'string' ? state.cwd : '', typeof state.branch === 'string' ? state.branch : '', tc.accents);
-    const prefix = ' ' + accent('\u258D') + ' ';
+    const prefix = safeTermWidth < 3 ? accent('▍') + ' '.repeat(safeTermWidth - 1) : ' ' + accent('\u258D') + ' ';
     const ctxPct = builtin?.context_window?.used_percentage;
     const renderCtx = {
         state,

@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-6.4.3-blue?style=flat-square" alt="version">
+  <img src="https://img.shields.io/badge/version-6.5.0-blue?style=flat-square" alt="version">
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="license">
   <img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen?style=flat-square&logo=node.js&logoColor=white" alt="node">
   <img src="https://img.shields.io/badge/Claude_Code-Plugin-blueviolet?style=flat-square" alt="Claude Code Plugin">
@@ -47,8 +47,10 @@ Plus: rich git status (dirty + ahead/behind vs `origin/<default>`), rate-limit b
 
 ## Install
 
+Requires **Node.js 20+** and **native Claude Code 2.1.286+**. Setup checks the Claude version before changing settings.
+
 > [!IMPORTANT]
-> **Background LLM calls.** claude-recall automatically refines each session's focus by calling Claude Haiku in the background (roughly $0.01 per long session). This is the core of the plugin — there is no opt-out toggle. If you prefer zero background LLM calls, **do not install this plugin**.
+> **Background LLM calls.** claude-recall automatically refines each session's focus by calling Claude Haiku in the background. This is the core of the plugin — there is no opt-out toggle. If you prefer zero background LLM calls, **do not install this plugin**.
 
 ```bash
 # 1. Add marketplace
@@ -65,13 +67,13 @@ Plus: rich git status (dirty + ahead/behind vs `origin/<default>`), rate-limit b
 ```
 
 > [!IMPORTANT]
-> **Restart Claude Code** after `/claude-recall:setup` to activate the statusline and new hooks.
+> Statusline settings reload automatically after `/claude-recall:setup`. Use `/reload-plugins` for updated hooks; restart only if an older session still uses the previous launcher.
 
 > [!TIP]
 > Setup never searches PATH automatically. The official native launcher (`~/.local/bin/claude`, or `%USERPROFILE%\.local\bin\claude.exe` on Windows) is detected directly. For Homebrew or another package manager, confirm its stable absolute launcher and pass it explicitly, for example `/claude-recall:setup /opt/homebrew/bin/claude`.
 
 > [!NOTE]
-> **Upgrading from 6.4.2 or earlier:** run `/reload-plugins`, then `/claude-recall:setup`, and restart Claude Code once. Setup now pins a verified, stable absolute Claude Code launcher in the private recall directory; background refinement intentionally has no runtime PATH fallback. The update also moves installed runtime files into a lightweight plugin-only bundle. Ordinary updates after this migration do not require setup again unless a release explicitly says otherwise.
+> **Upgrading to 6.5.0:** run `/reload-plugins`, then `/claude-recall:setup` once to replace the installed launcher. Hooks record the actual loaded plugin root per session, including `--plugin-dir` overrides and `/cd` changes. Until a hook records it, the launcher uses the explicit development root or current-project registry fallback.
 
 ## Usage
 
@@ -102,9 +104,9 @@ Create `~/.claude/claude-recall/config.json`. If `CLAUDE_CONFIG_DIR` is set, rep
 }
 ```
 
-- **line1** — Choose from: `focus`, `branch`, `model`, `worktree`, `session`, `agent`, `pr`. Right-side priority follows this order; lower-priority entries drop first as width shrinks.
+- **line1** — Choose from: `focus`, `branch`, `model`, `worktree`, `session`, `agent`, `pr`, `review`, `fast_mode`. Right-side priority follows this order; lower-priority entries drop first as width shrinks.
 - **line2** — Choose from: `turn`, `prompt`, `elapsed`
-- **line3** — Choose from: `context`, `rate_limits`, `seven_day`, `cost`. Set `line3: []` to force a 2-line statusline.
+- **line3** — Choose from: `context`, `rate_limits`, `seven_day`, `spend_limit`, `prompt_cache`, `cost`. Set `line3: []` to force a 2-line statusline.
 - **gitStatus** — Toggle dirty flag and ahead/behind independently.
 - **separator** *(v6.3.0+)* — Character drawn between right-zone segments on Line 1 and between all segments on Line 3. Default `"│"` (U+2502, dim). Right-zone segments also left-pad to a 10-col cell, so `│` positions stay stable across renders. Set to `""` to disable both the separator and the padding (flat 2-space joiner, pre-v6.3.0 look). Any single printable grapheme works — `"┊"` dotted, `"|"` ASCII, etc.
 - **theme** — `default` (cyan/bold, dark terminals), `light` (blue/dark-orange, white terminals), `minimal` (subdued, monochrome — severity via reverse-video), `vivid` (bright/high contrast)
@@ -124,22 +126,26 @@ Create `~/.claude/claude-recall/config.json`. If `CLAUDE_CONFIG_DIR` is set, rep
 | **model** | Line 1, right | Active Claude model, enriched with model version from `model.id`, effort level, and thinking state when present | Claude Code built-in |
 | **turn** | Line 2, left | Current prompt number (`#12`) | claude-recall |
 | **last prompt** | Line 2, left | The last prompt you typed | claude-recall |
-| **elapsed** | Line 2, right | Wall-clock time since session start | claude-recall |
+| **elapsed** | Line 2, right | Claude's accumulated runtime across resumes, excluding time closed; `age …` explicitly marks creation-age fallback when runtime is absent | Claude Code / claude-recall |
 | **ctx bar** | Line 3 | Context window usage — `ctx ████░░░░░░ 45%` — green (<70%), yellow (70-89%), red (≥90%) | Claude Code built-in |
 | **5h rate limit bar** | Line 3 | 5-hour usage + reset time — `5h ████░░░░░░ 45% (~16:59)` | Claude Code built-in |
 | **7d rate limit bar** | Line 3 | 7-day usage + reset date/time — `7d ██░░░░░░░░ 20% (~4/25 13:59)` | Claude Code built-in |
 | **cost** | Line 3, right | Cumulative session cost | Claude Code built-in |
-| **worktree** *(opt-in)* | Line 1, right | `⎇ <name>` from Claude Code's `worktree.name` / `worktree.path` fields when inside a linked git worktree | Claude Code built-in |
+| **worktree** *(opt-in)* | Line 1, right | `⎇ <name>` from `worktree.name` / `worktree.path` in a Claude worktree session, otherwise `workspace.git_worktree` in a linked git worktree | Claude Code built-in |
 | **session** *(opt-in)* | Line 1, right | Session display name from Claude Code's `session_name` field | Claude Code built-in |
 | **agent** *(opt-in)* | Line 1, right | Active agent name from Claude Code's `agent.name` field | Claude Code built-in |
-| **pr** *(opt-in)* | Line 1, right | Active PR number/title from Claude Code's `pr` field | Claude Code built-in |
+| **pr** *(opt-in)* | Line 1, right | Active `PR #…` or GitLab `MR #…` from `pr.number` and `pr.kind` | Claude Code built-in |
+| **review** *(opt-in)* | Line 1 | Review state from `pr.review_state` | Claude Code built-in |
+| **fast_mode** *(opt-in)* | Line 1 | `fast` while fast mode is enabled | Claude Code built-in |
+| **spend_limit** *(opt-in)* | Line 3 | Gateway spend usage and reset; percentage may exceed 100%, bar saturates at 100% | Claude Code built-in |
+| **prompt_cache** *(opt-in)* | Line 3 | Cache warm/cold state and session hit percentage, for example `cache warm 83%` | Claude Code built-in |
 | **refinement error** | Line 1, left | Red `⚠ AI <reason>` label replaces focus when a background refinement fails | claude-recall |
 
 Notes:
-- Line 3 renders when any of `ctx` / `rate_limits` / `seven_day` / `cost` has data. API-key-only users with no rate-limits still get the `ctx` bar once the context window starts filling; the line is hidden only until there's something to show.
-- **`5h` / `7d` bars require Claude.ai Pro/Max.** Claude Code omits the `rate_limits` stdin field for Claude API key users, so the two rate-limit bars never populate on API-key setups (no error — just absent). The `ctx` and `$cost` segments still render normally.
-- **First-entry cache.** Claude Code omits `rate_limits` and `context_window` from stdin until the first API call, so claude-recall caches the last-seen values under the Claude config directory (`~/.claude/claude-recall/` by default) and restores them on first render — the bars show up immediately instead of waiting for the first prompt. See CHANGELOG v6.1.4 / v6.1.5 for details.
-- On narrow terminals, Line 3 drops `cost` first, then `7d`, then `5h`, keeping `ctx` visible the longest — context exhaustion is the most urgent signal.
+- New slots are opt-in and hidden when their input is absent. The default layout is unchanged. `line3: []` wins over legacy `line2` context migration.
+- `5h` / `7d` require Claude.ai subscription quota data. A Claude apps gateway may instead supply `spend_limit`. Ordinary API-key sessions do not inherit another session's subscription bars.
+- **Session caches.** Context and rate-limit caches are scoped to the session. A new session waits for live quota data; a resumed session can restore its own unexpired values. Legacy shared `rate-limits.json` is ignored. Session scope is not account identity: after changing authentication, start a new session rather than resuming one whose quota belongs to the previous account.
+- On narrow terminals, reset text disappears first, then segments drop in reverse priority: `cost`, `prompt_cache`, `spend_limit`, `7d`, `5h`. `ctx` survives longest, switches to text-only at extreme widths, and is truncated only when even that cannot fit.
 - Line 1 no longer renders command-style context hints. Context pressure remains visible through the `ctx` bar on Line 3 when enabled.
 - Ahead/behind counts reflect your last `git fetch`. Run `git fetch` periodically to keep the `↓N` indicator honest.
 
@@ -154,7 +160,7 @@ Triggers (OR):
 - **PostCompact** — after compaction, use Claude Code's compact summary when available.
 - **SessionEnd** — final snapshot before the session closes.
 
-Each trigger claims one refinement lease and spawns the setup-pinned Claude Code launcher with `-p --model=haiku`, using the compact summary when available or otherwise the last 12KB of the transcript. The subprocess:
+Each trigger claims one refinement lease and spawns the setup-pinned Claude Code launcher with `-p --model=haiku`, using the compact summary when available. Otherwise it scans up to the last 1 MiB of JSONL, extracts recent user/assistant text, and sends at most 12KB of that text. Long tool payloads do not crowd out all dialogue. The subprocess:
 - Uses only the verified absolute Claude Code launcher pinned by `/claude-recall:setup`; it never resolves `claude` from runtime PATH
 - Snapshots the pinned launcher's current real target, verifies that captured target with `--version`, and spawns the same realpath; valid symlink-based updates apply on the next call while broken or concurrently swapped retargets fail closed
 - Receives bounded transcript content over stdin, never in process arguments
@@ -162,6 +168,10 @@ Each trigger claims one refinement lease and spawns the setup-pinned Claude Code
 - Carries `CLAUDE_RECALL_REFINING=1` in env as an additional recursion guard
 - Emits only the focus text in the transcript's language
 - Has a 45-second timeout, 5-second debounce, and a per-session attempt token so stale workers cannot overwrite newer results
+- Coalesces pending PostCompact/SessionEnd milestones while a call is active; the latest compaction summary survives and is processed after the current call and debounce
+- Classifies failed-run stdout as well as stderr for authentication and rate-limit diagnostics
+
+The plugin configures a 10-second timeout for each hook; this is not Claude's global default. SessionEnd has a separate overall budget (1.5 seconds by default). The detached worker lets refinement outlive hook/session teardown. See the [official hooks reference](https://code.claude.com/docs/en/hooks).
 
 On failure, Line 1's focus is replaced by a red label (`⚠ AI timeout`, `⚠ AI rate limited`, `⚠ AI auth failed`, `⚠ AI setup required`, or `⚠ AI refinement failed`) until the next successful refinement clears it. `setup required` means the private executable pin is absent or no longer executable; rerun `/claude-recall:setup`.
 
@@ -174,7 +184,7 @@ On failure, Line 1's focus is replaced by a red label (`⚠ AI timeout`, `⚠ AI
 /plugin uninstall claude-recall@claude-recall
 
 # 2. Remove statusline from ~/.claude/settings.json
-#    Delete the "statusLine" key, then restart Claude Code
+#    Delete the "statusLine" key; settings reload automatically
 
 # 3. (Optional) Remove session data
 rm -rf ~/.claude/claude-recall/
@@ -191,13 +201,20 @@ cd claude-recall
 npm install
 npm run build
 npm test
+npm run check:claude # real CLI/manifest validation; no model request
+npm run preview      # regenerate both SVGs from the actual formatter
 ```
+
+CI covers Node 20, 22, 24, and current Node on macOS/Linux/Windows, plus native Claude 2.1.286 and latest on Linux. POSIX fake-executable tests are explicitly skipped on Windows. `check:claude` accepts an optional absolute executable path.
 
 Local testing:
 
 ```bash
 claude --plugin-dir /path/to/claude-recall
+# In that session, run /claude-recall:setup once.
 ```
+
+Schema and compatibility references: [statusline](https://code.claude.com/docs/en/statusline), [plugin loading](https://code.claude.com/docs/en/plugins/loading), [CLI](https://code.claude.com/docs/en/cli-reference).
 
 </details>
 

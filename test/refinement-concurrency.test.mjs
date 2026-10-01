@@ -1,3 +1,4 @@
+import { isolateProcess } from './helpers/environment.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs';
@@ -29,20 +30,19 @@ process.stdin.on('end', () => {
 `);
   chmodSync(fakeClaude, 0o755);
 
-  delete process.env.CLAUDE_CONFIG_DIR;
-  process.env.HOME = tmpHome;
-  process.env.USERPROFILE = tmpHome;
+  isolateProcess(tmpHome);
   process.env.FAKE_CLAUDE_LOG = logPath;
   process.env.PATH = `${binDir}${delimiter}${oldPath ?? ''}`;
 
   try {
     const { createEmptySessionState, readState, writeState } = await import('../dist/state.js');
     const { triggerFocusRefinement } = await import('../dist/refine.js');
+    writeFileSync(join(tmpHome, 'transcript.jsonl'), 'PRIVATE_SUMMARY');
     writeState('race-session', createEmptySessionState('race-session', process.cwd()));
 
     await Promise.all([
-      triggerFocusRefinement('race-session', undefined, 'FIRST_PRIVATE_SUMMARY', { claudeExecutable: fakeClaude }),
-      triggerFocusRefinement('race-session', undefined, 'SECOND_PRIVATE_SUMMARY', { claudeExecutable: fakeClaude }),
+      triggerFocusRefinement('race-session', join(tmpHome, 'transcript.jsonl'), undefined, { claudeExecutable: fakeClaude }),
+      triggerFocusRefinement('race-session', join(tmpHome, 'transcript.jsonl'), undefined, { claudeExecutable: fakeClaude }),
     ]);
 
     const invocations = readFileSync(logPath, 'utf-8').trim().split('\n').map(JSON.parse);
@@ -60,7 +60,7 @@ process.stdin.on('end', () => {
     assert.ok(invocations[0].args.includes('--strict-mcp-config'));
     assert.deepEqual(
       invocations[0].args.slice(invocations[0].args.indexOf('--mcp-config'), invocations[0].args.indexOf('--mcp-config') + 2),
-      ['--mcp-config', '{}'],
+      ['--mcp-config', '{"mcpServers":{}}'],
     );
     assert.equal(realpathSync(invocations[0].cwd), realpathSync(join(tmpHome, '.claude', 'claude-recall')));
     const state = readState('race-session');

@@ -3,6 +3,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { join } from 'node:path';
 import { createHash } from 'node:crypto';
+import { cleanupRateLimitsCache } from './rate-limits-cache.js';
 import { cleanupContextCache } from './context-window-cache.js';
 import { ensurePrivateDir, readJsonFile, withFileLock, writeJsonFileAtomic, } from './json-file.js';
 import { getRecallDir } from './paths.js';
@@ -61,6 +62,8 @@ export function readState(sessionId) {
     return {
         sessionId: stringValue('sessionId', sessionId),
         focus: stringValue('focus'),
+        activePluginRoot: typeof parsed['activePluginRoot'] === 'string' ? parsed['activePluginRoot'] : undefined,
+        pendingRefinement: parsePendingRefinement(parsed['pendingRefinement']),
         branch: stringValue('branch'),
         gitStatus,
         cwd: stringValue('cwd'),
@@ -76,6 +79,13 @@ export function readState(sessionId) {
 }
 function isRecord(value) {
     return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+function parsePendingRefinement(value) {
+    if (!isRecord(value))
+        return undefined;
+    const transcriptPath = typeof value['transcriptPath'] === 'string' ? value['transcriptPath'] : undefined;
+    const summary = typeof value['summary'] === 'string' ? value['summary'].slice(0, 48_000) : undefined;
+    return transcriptPath || summary ? { transcriptPath, summary } : undefined;
 }
 function finiteNumber(value) {
     return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
@@ -167,7 +177,7 @@ export function applyGitStatus(state, gitStatus, options = {}) {
 export async function getGitStatus(cwd, fallback) {
     try {
         const [branchR, dirtyR, defaultR] = await Promise.all([
-            runGit(cwd, ['rev-parse', '--abbrev-ref', 'HEAD']).catch(() => null),
+            runGit(cwd, ['symbolic-ref', '--short', 'HEAD']).catch(() => runGit(cwd, ['rev-parse', '--abbrev-ref', 'HEAD']).catch(() => null)),
             runGit(cwd, ['--no-optional-locks', 'status', '--porcelain']).catch(() => null),
             runGit(cwd, ['symbolic-ref', '--short', 'refs/remotes/origin/HEAD']).catch(() => null),
         ]);
@@ -217,6 +227,7 @@ export async function getGitStatus(cwd, fallback) {
 }
 const CLEANUP_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 export async function cleanupOldSessions() {
+    await cleanupRateLimitsCache();
     const dir = getStateDir();
     const now = Date.now();
     let files;

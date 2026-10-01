@@ -1,5 +1,19 @@
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { readState, updateState } from '../state.js';
 import { readStdin } from '../stdin.js';
 import { isRefiningSubprocess } from '../refine.js';
+const ACTIVE_PLUGIN_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+// Record the loaded root in the hook's existing transaction, not a second
+// competing write after every prompt in a burst of parallel hook processes.
+export function updateHookState(sessionId, updater) {
+    return updateState(sessionId, (current) => {
+        const update = updater(current);
+        if (update.state)
+            update.state.activePluginRoot = ACTIVE_PLUGIN_ROOT;
+        return update;
+    });
+}
 export function writeHookResponse() {
     process.stdout.write('{}\n');
 }
@@ -24,8 +38,19 @@ export async function runHook(label, handler) {
     try {
         if (!isRefiningSubprocess()) {
             const input = await readHookInput();
-            if (input)
+            if (input) {
                 await handler(input);
+                const sessionId = getString(input, 'session_id');
+                if (sessionId && readState(sessionId)?.activePluginRoot !== ACTIVE_PLUGIN_ROOT)
+                    await updateState(sessionId, (state) => {
+                        if (!state)
+                            return { value: undefined };
+                        if (state.activePluginRoot === ACTIVE_PLUGIN_ROOT)
+                            return { value: undefined };
+                        state.activePluginRoot = ACTIVE_PLUGIN_ROOT;
+                        return { state, value: undefined };
+                    });
+            }
         }
     }
     catch (err) {

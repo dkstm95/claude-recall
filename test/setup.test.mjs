@@ -32,8 +32,14 @@ test('configureInstallation pins Claude and preserves unrelated settings', async
     assert.equal(settings.theme, 'dark');
     assert.deepEqual(settings.env, { KEEP_ME: 'yes' });
     assert.equal(settings.statusLine.type, 'command');
-    assert.ok(settings.statusLine.command.startsWith('node '));
-    assert.ok(settings.statusLine.command.includes('statusline-launcher.mjs'));
+    if (process.platform === 'win32') {
+      assert.ok(settings.statusLine.command.startsWith('powershell.exe '));
+      const script = Buffer.from(settings.statusLine.command.split(' ').at(-1), 'base64').toString('utf16le');
+      assert.ok(script.includes('statusline-launcher.mjs'));
+    } else {
+      assert.ok(settings.statusLine.command.startsWith('node '));
+      assert.ok(settings.statusLine.command.includes('statusline-launcher.mjs'));
+    }
     assert.equal(settings.statusLine.padding, 1);
     assert.equal(settings.statusLine.refreshInterval, 30);
     assert.equal(runtime.claudeExecutable, resolve(process.execPath));
@@ -133,4 +139,11 @@ test('setup CLI executes when its argv path contains a symlinked directory', (t)
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('setup requires the documented Claude compatibility baseline', async () => {
+  const { assertSupportedClaudeVersion } = await import('../dist/setup.js');
+  assert.throws(() => assertSupportedClaudeVersion('2.1.285'), /2\.1\.286 or later/);
+  assert.throws(() => assertSupportedClaudeVersion('invalid'), /required/);
+  for (const version of ['2.1.286', '2.1.300', '2.2.0', '3.0.0']) assert.doesNotThrow(() => assertSupportedClaudeVersion(version));
 });

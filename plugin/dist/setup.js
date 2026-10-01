@@ -5,6 +5,22 @@ import { fileURLToPath } from 'node:url';
 import { defaultPluginRoot, discoverClaudeExecutables, readClaudeRuntimeConfig, writeClaudeRuntimeConfig, } from './claude-runtime.js';
 import { ensurePrivateDir, writeJsonFileAtomic, writePrivateFileAtomic } from './json-file.js';
 import { getClaudeConfigDir, getRecallDir } from './paths.js';
+export const MIN_CLAUDE_VERSION = '2.1.286';
+export function assertSupportedClaudeVersion(version) {
+    const actual = version.match(/^(\d+)\.(\d+)\.(\d+)/)?.slice(1).map(Number);
+    const minimum = MIN_CLAUDE_VERSION.split('.').map(Number);
+    if (actual) {
+        for (let i = 0; i < minimum.length; i++) {
+            if (actual[i] > minimum[i])
+                return;
+            if (actual[i] < minimum[i])
+                break;
+            if (i === minimum.length - 1)
+                return;
+        }
+    }
+    throw new Error(`Claude Code ${MIN_CLAUDE_VERSION} or later is required (found ${version}). Update Claude Code, then rerun setup.`);
+}
 const REQUIRED_PLUGIN_FILES = [
     'hooks/hooks.json',
     'dist/statusline.js',
@@ -157,6 +173,7 @@ export async function runSetup(options = {}) {
     const pluginRoot = resolve(options.pluginRoot ?? defaultPluginRoot());
     validatePluginRoot(pluginRoot);
     const executable = await chooseClaudeExecutable(options, pluginRoot);
+    assertSupportedClaudeVersion(executable.version);
     return configureInstallation(pluginRoot, executable);
 }
 async function main() {
@@ -168,7 +185,7 @@ async function main() {
             `Runtime pin: ${join(result.configDir, 'claude-recall', 'runtime.json')}`,
             `Statusline launcher: ${result.launcherPath}`,
             `Settings: ${result.settingsPath}`,
-            'Restart Claude Code to activate the updated launcher and hooks.',
+            'Statusline settings reload automatically. Run /reload-plugins to refresh updated hooks; restart only if an older session still uses the previous launcher.',
         ].join('\n') + '\n');
     }
     catch (error) {

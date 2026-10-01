@@ -1,3 +1,4 @@
+import { isolateProcess } from './helpers/environment.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
@@ -5,9 +6,7 @@ import { tmpdir } from 'node:os';
 import { delimiter, dirname, join, relative } from 'node:path';
 
 const tmpHome = mkdtempSync(join(tmpdir(), 'claude-recall-state-test-'));
-delete process.env.CLAUDE_CONFIG_DIR;
-process.env.HOME = tmpHome;
-process.env.USERPROFILE = tmpHome;
+isolateProcess(tmpHome);
 
 const {
   getGitStatus,
@@ -60,7 +59,7 @@ test('getGitStatus: partial git failures preserve same-branch fallback fields', 
   writeFileSync(fakeGit, `#!/usr/bin/env node
 const args = process.argv.slice(2);
 if (args[0] === 'rev-parse' && args.includes('--abbrev-ref')) process.stdout.write('feature\\n');
-else if (args[0] === 'symbolic-ref') process.stdout.write('origin/main\\n');
+else if (args[0] === 'symbolic-ref') process.stdout.write(args.at(-1) === 'HEAD' ? 'feature\\n' : 'origin/main\\n');
 else process.exitCode = 2;
 `);
   chmodSync(fakeGit, 0o755);
@@ -74,4 +73,13 @@ else process.exitCode = 2;
     process.env.PATH = oldPath;
     rmSync(binDir, { recursive: true, force: true });
   }
+});
+
+test('getGitStatus: reports the branch before the first commit', async () => {
+  const { execFileSync } = await import('node:child_process');
+  const dir = mkdtempSync(join(tmpdir(), 'recall-unborn-'));
+  try {
+    execFileSync('git', ['init', '--initial-branch=brand-new', dir], { stdio: 'ignore' });
+    assert.equal((await getGitStatus(dir)).branch, 'brand-new');
+  } finally { rmSync(dir, { recursive: true, force: true }); }
 });

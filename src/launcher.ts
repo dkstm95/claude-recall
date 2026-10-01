@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { homedir } from 'node:os';
@@ -96,18 +97,11 @@ function projectPathsFromInput(raw: string): string[] {
     const workspace = input['workspace'];
     if (workspace && typeof workspace === 'object' && !Array.isArray(workspace)) {
       const fields = workspace as Record<string, unknown>;
-      // project_dir is the immutable launch root and therefore the scope that
-      // Claude used to activate project/local plugins. A later /cd must not
-      // activate a different project's registry entry in the launcher.
-      if (typeof fields['project_dir'] === 'string' && fields['project_dir']) {
-        return [fields['project_dir']];
-      }
-      const fallback = new Set<string>([process.cwd()]);
-      if (typeof input['cwd'] === 'string' && input['cwd']) fallback.add(input['cwd']);
-      if (typeof fields['current_dir'] === 'string' && fields['current_dir']) {
-        fallback.add(fields['current_dir']);
-      }
-      return [...fallback];
+      // Without a hook-recorded scope, use the current /cd destination.
+      if (typeof fields['current_dir'] === 'string' && fields['current_dir']) return [fields['current_dir']];
+      if (typeof input['cwd'] === 'string' && input['cwd']) return [input['cwd']];
+      if (typeof fields['project_dir'] === 'string' && fields['project_dir']) return [fields['project_dir']];
+      return [process.cwd()];
     }
     return typeof input['cwd'] === 'string' && input['cwd']
       ? [input['cwd']]
@@ -116,9 +110,38 @@ function projectPathsFromInput(raw: string): string[] {
   return [process.cwd()];
 }
 
+function activeStatusline(raw: string): { known: boolean; path?: string } {
+  try {
+    const id = JSON.parse(raw)?.session_id;
+    if (typeof id !== 'string' || !id) return { known: false };
+    const stem = /^[A-Za-z0-9][A-Za-z0-9._-]{0,199}$/.test(id)
+      ? id : `session-${createHash('sha256').update(id).digest('hex')}`;
+    const state = JSON.parse(readFileSync(join(configDir(), 'claude-recall', 'sessions', `${stem}.json`), 'utf8'));
+    if (typeof state.activePluginRoot === 'string') {
+      return { known: true, path: isAbsolute(state.activePluginRoot) ? statuslineAt(state.activePluginRoot) : undefined };
+    }
+  } catch { /* first render can precede SessionStart */ }
+  return { known: false };
+}
+
+function developmentStatusline(root: string | undefined): string | undefined {
+  if (!root) return undefined;
+  try {
+    const registry = JSON.parse(readFileSync(join(pluginsDir(), 'installed_plugins.json'), 'utf8')) as InstalledPluginsFile;
+    // A setup root absent from the registry is an explicit local development
+    // installation. Recorded hooks take precedence, including managed plugins.
+    const installed = Object.values(registry.plugins ?? {}).flat();
+    if (installed.some((entry) => entry.installPath && resolve(entry.installPath) === resolve(root))) return undefined;
+    if (pathContains(pluginsDir(), root)) return undefined;
+  } catch { /* no registry: explicit setup root remains usable */ }
+  return statuslineAt(root);
+}
+
 async function main(): Promise<void> {
   const raw = await readInput();
-  const statusline = installedStatusline(projectPathsFromInput(raw)) ?? statuslineAt(process.argv[2]);
+  const active = activeStatusline(raw);
+  const statusline = active.known ? active.path
+    : developmentStatusline(process.argv[2]) ?? installedStatusline(projectPathsFromInput(raw)) ?? statuslineAt(process.argv[2]);
   if (!statusline) return;
 
   try {

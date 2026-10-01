@@ -1,5 +1,5 @@
-import { applyGitStatus, cleanupOldSessions, createEmptySessionState, getGitStatus, readState, updateState, } from '../state.js';
-import { getString, runHook } from './common.js';
+import { applyGitStatus, cleanupOldSessions, createEmptySessionState, getGitStatus, readState, } from '../state.js';
+import { getString, runHook, updateHookState as updateState } from './common.js';
 async function handleSessionStart(input) {
     const sessionId = getString(input, 'session_id');
     if (!sessionId)

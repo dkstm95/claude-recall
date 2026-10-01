@@ -308,3 +308,40 @@ test('formatStatusline: L3 always renders at least ctx when budget is tiny', () 
   const clean3 = stripAnsi(lines[2]);
   assert.ok(clean3.includes('ctx'), `ctx must always render when present, got "${clean3}"`);
 });
+
+test('all rendered lines fit even extreme terminal widths and large turn counters', () => {
+  const state = emptyState();
+  state.promptCount = Number.MAX_SAFE_INTEGER;
+  state.focus = '한글 👩‍💻 '.repeat(12);
+  state.lastUserPrompt = 'very long prompt '.repeat(15);
+  const builtin = { context_window: { used_percentage: 100 }, model: { display_name: 'Opus' } };
+  for (let width = 1; width <= 40; width++) {
+    for (const line of formatStatusline(state, width, builtin, BASE_CFG).split('\n')) {
+      assert.ok(displayWidth(stripAnsi(line)) <= width, `width=${width}: ${JSON.stringify(stripAnsi(line))}`);
+    }
+  }
+  assert.match(stripAnsi(formatStatusline(state, 20, builtin, BASE_CFG)), /ctx 100%/);
+});
+
+test('elapsed fallback explicitly labels creation age instead of active runtime', () => {
+  const state = emptyState();
+  state.sessionStartedAt = new Date(Date.now() - 86_400_000).toISOString();
+  assert.match(stripAnsi(formatStatusline(state, 120, undefined, BASE_CFG)), /age 1d 0h/);
+  const live = stripAnsi(formatStatusline(state, 120, { cost: { total_duration_ms: 60_000 } }, BASE_CFG));
+  assert.match(live, /1m/);
+  assert.doesNotMatch(live, /age/);
+});
+
+test('opt-in metadata supports GitLab MR, reviews, fast mode, cache and spend overage', () => {
+  const config = { ...BASE_CFG, line1: ['pr', 'review', 'fast_mode'], line3: ['spend_limit', 'prompt_cache'] };
+  const builtin = {
+    pr: { number: 42, kind: 'mr', review_state: 'approved' },
+    fast_mode: true,
+    prompt_cache: { warm: true, hit_ratio: 0.83 },
+    rate_limits: { spend_limit: { used_percentage: 145 } },
+  };
+  const output = stripAnsi(formatStatusline(emptyState(), 120, builtin, config));
+  for (const text of ['MR #42', 'review approved', 'fast', '145%', 'cache warm 83%']) assert.ok(output.includes(text), output);
+  const absent = stripAnsi(formatStatusline(emptyState(), 120, undefined, config));
+  assert.doesNotMatch(absent, /MR|review|fast|spend|cache/);
+});

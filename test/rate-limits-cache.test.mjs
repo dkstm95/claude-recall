@@ -1,19 +1,19 @@
+import { isolateProcess } from './helpers/environment.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, readFileSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-// The cache module writes to ~/.claude/claude-recall/rate-limits.json. Redirect
-// HOME before import so tests don't touch the user's real cache.
+// Isolate every Claude storage override before importing cache modules.
 const tmpHome = mkdtempSync(join(tmpdir(), 'claude-recall-cache-test-'));
-process.env['HOME'] = tmpHome;
-process.env['USERPROFILE'] = tmpHome;
+isolateProcess(tmpHome);
 process.on('exit', () => {
   try { rmSync(tmpHome, { recursive: true, force: true }); } catch {}
 });
 
 const {
+  rateLimitsCachePath,
   readRateLimitsCache,
   writeRateLimitsCache,
   mergeRateLimits,
@@ -21,8 +21,8 @@ const {
   resolveRateLimits,
 } = await import('../dist/rate-limits-cache.js');
 
-const cacheDir = join(tmpHome, '.claude', 'claude-recall');
-const cachePath = join(cacheDir, 'rate-limits.json');
+const cacheDir = join(tmpHome, '.claude', 'claude-recall', 'rate-limits');
+const cachePath = rateLimitsCachePath('test-session');
 mkdirSync(cacheDir, { recursive: true });
 
 function cleanupCache() {
@@ -93,7 +93,7 @@ test('readRateLimitsCache: drops windows whose resets_at has passed', () => {
     }),
     'utf-8',
   );
-  const out = readRateLimitsCache();
+  const out = readRateLimitsCache('test-session');
   assert.equal(out.five_hour, undefined, 'stale 5h window must be dropped');
   assert.equal(out.seven_day.used_percentage, 20);
   cleanupCache();
@@ -110,13 +110,13 @@ test('readRateLimitsCache: returns null when entirely stale', () => {
     }),
     'utf-8',
   );
-  assert.equal(readRateLimitsCache(), null);
+  assert.equal(readRateLimitsCache('test-session'), null);
   cleanupCache();
 });
 
 test('readRateLimitsCache: returns null when file missing', () => {
   cleanupCache();
-  assert.equal(readRateLimitsCache(), null);
+  assert.equal(readRateLimitsCache('test-session'), null);
 });
 
 test('writeRateLimitsCache then readRateLimitsCache round-trips', () => {
@@ -126,8 +126,8 @@ test('writeRateLimitsCache then readRateLimitsCache round-trips', () => {
     five_hour: { used_percentage: 33, resets_at: nowSec + 3600 },
     seven_day: { used_percentage: 44, resets_at: nowSec + 86400 },
   };
-  writeRateLimitsCache(data);
-  const out = readRateLimitsCache();
+  writeRateLimitsCache('test-session', data);
+  const out = readRateLimitsCache('test-session');
   assert.deepEqual(out, data);
   cleanupCache();
 });
@@ -144,7 +144,7 @@ test('resolveRateLimits: persists new live data to the cache', async () => {
   cleanupCache();
   const nowSec = Math.floor(Date.now() / 1000);
   const live = { five_hour: { used_percentage: 25, resets_at: nowSec + 3600 } };
-  const out = await resolveRateLimits(live);
+  const out = await resolveRateLimits('test-session', live);
   assert.equal(out.five_hour.used_percentage, 25);
   const onDisk = JSON.parse(readFileSync(cachePath, 'utf-8'));
   assert.equal(onDisk.five_hour.used_percentage, 25);
@@ -155,12 +155,12 @@ test('resolveRateLimits: skips write when live matches cache (no-op guard)', asy
   cleanupCache();
   const nowSec = Math.floor(Date.now() / 1000);
   const data = { five_hour: { used_percentage: 40, resets_at: nowSec + 3600 } };
-  writeRateLimitsCache(data);
+  writeRateLimitsCache('test-session', data);
   const mtimeBefore = statSync(cachePath).mtimeMs;
   // Sleep briefly so mtime granularity would reflect any rewrite.
   const spin = Date.now() + 20;
   while (Date.now() < spin) { /* busy-wait 20ms */ }
-  await resolveRateLimits(data);
+  await resolveRateLimits('test-session', data);
   const mtimeAfter = statSync(cachePath).mtimeMs;
   assert.equal(mtimeAfter, mtimeBefore, 'cache file must not be rewritten when content is unchanged');
   cleanupCache();
@@ -169,8 +169,8 @@ test('resolveRateLimits: skips write when live matches cache (no-op guard)', asy
 test('resolveRateLimits: writes when live brings a different percentage than cache', async () => {
   cleanupCache();
   const nowSec = Math.floor(Date.now() / 1000);
-  writeRateLimitsCache({ five_hour: { used_percentage: 30, resets_at: nowSec + 3600 } });
-  const out = await resolveRateLimits({ five_hour: { used_percentage: 55, resets_at: nowSec + 3600 } });
+  writeRateLimitsCache('test-session', { five_hour: { used_percentage: 30, resets_at: nowSec + 3600 } });
+  const out = await resolveRateLimits('test-session', { five_hour: { used_percentage: 55, resets_at: nowSec + 3600 } });
   assert.equal(out.five_hour.used_percentage, 55);
   const onDisk = JSON.parse(readFileSync(cachePath, 'utf-8'));
   assert.equal(onDisk.five_hour.used_percentage, 55);
@@ -181,11 +181,53 @@ test('resolveRateLimits: concurrent partial windows do not lose one another', as
   cleanupCache();
   const nowSec = Math.floor(Date.now() / 1000);
   await Promise.all([
-    resolveRateLimits({ five_hour: { used_percentage: 25, resets_at: nowSec + 3600 } }),
-    resolveRateLimits({ seven_day: { used_percentage: 50, resets_at: nowSec + 86400 } }),
+    resolveRateLimits('test-session', { five_hour: { used_percentage: 25, resets_at: nowSec + 3600 } }),
+    resolveRateLimits('test-session', { seven_day: { used_percentage: 50, resets_at: nowSec + 86400 } }),
   ]);
-  const cached = readRateLimitsCache();
+  const cached = readRateLimitsCache('test-session');
   assert.equal(cached.five_hour.used_percentage, 25);
   assert.equal(cached.seven_day.used_percentage, 50);
   cleanupCache();
+});
+
+test('resolveRateLimits: sessions never inherit another session or legacy account cache', async () => {
+  const data = { five_hour: { used_percentage: 87, resets_at: Date.now() / 1000 + 3600 } };
+  writeFileSync(join(tmpHome, '.claude', 'claude-recall', 'rate-limits.json'), JSON.stringify(data));
+  await resolveRateLimits('account-a-session', data);
+  assert.equal(await resolveRateLimits('account-b-session', undefined), undefined);
+  assert.equal((await resolveRateLimits('account-a-session', undefined)).five_hour.used_percentage, 87);
+});
+
+test('spend limits preserve overage while subscription percentages stay bounded', async () => {
+  const expires = Math.floor(Date.now() / 1000) + 3600;
+  const result = await resolveRateLimits('spend-session', {
+    five_hour: { used_percentage: 145, resets_at: expires },
+    spend_limit: { used_percentage: 145, resets_at: expires },
+  });
+  assert.equal(result.five_hour.used_percentage, 100);
+  assert.equal(result.spend_limit.used_percentage, 145);
+  assert.equal(readRateLimitsCache('spend-session').spend_limit.used_percentage, 145);
+  assert.equal((await resolveRateLimits('spend-session', undefined)).spend_limit.used_percentage, 145);
+});
+
+test('cleanup rechecks age under the write lock and preserves a concurrent refresh', async () => {
+  const { utimesSync } = await import('node:fs');
+  const { withFileLock } = await import('../dist/json-file.js');
+  const { cleanupRateLimitsCache } = await import('../dist/rate-limits-cache.js');
+  const session = 'cleanup-race';
+  const data = { five_hour: { used_percentage: 20, resets_at: Date.now() / 1000 + 3600 } };
+  writeRateLimitsCache(session, data);
+  const path = rateLimitsCachePath(session);
+  const old = new Date(Date.now() - 8 * 86_400_000);
+  utimesSync(path, old, old);
+  let cleaning;
+  await withFileLock(path, () => {
+    cleaning = cleanupRateLimitsCache();
+    writeRateLimitsCache(session, { ...data, seven_day: { used_percentage: 5, resets_at: Date.now() / 1000 + 86400 } });
+  });
+  await cleaning;
+  assert.equal(readRateLimitsCache(session).seven_day.used_percentage, 5);
+  utimesSync(path, old, old);
+  await cleanupRateLimitsCache();
+  assert.equal(existsSync(path), false);
 });

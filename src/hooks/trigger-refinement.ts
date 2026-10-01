@@ -7,7 +7,7 @@ async function handleTriggerRefinement(input: HookInput): Promise<void> {
   const compactSummary = getString(input, 'compact_summary');
 
   if (sessionId && (transcriptPath || compactSummary)) {
-    launchRefinementWorker(sessionId, transcriptPath, compactSummary);
+    launchRefinementWorker(sessionId, transcriptPath, compactSummary, getString(input, 'hook_event_name') !== 'PreCompact');
   }
 }
 

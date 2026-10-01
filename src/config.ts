@@ -20,7 +20,7 @@ export interface StatuslineConfig {
   separator: string;
 }
 
-const DEFAULT_CONFIG: StatuslineConfig = {
+export const DEFAULT_CONFIG: StatuslineConfig = {
   line1: ['focus', 'branch', 'model'],
   line2: ['turn', 'prompt', 'elapsed'],
   line3: ['context', 'rate_limits', 'seven_day', 'cost'],
@@ -29,9 +29,9 @@ const DEFAULT_CONFIG: StatuslineConfig = {
   separator: '│',
 };
 
-const VALID_LINE1 = ['focus', 'branch', 'model', 'worktree', 'session', 'agent', 'pr'];
+const VALID_LINE1 = ['focus', 'branch', 'model', 'worktree', 'session', 'agent', 'pr', 'review', 'fast_mode'];
 const VALID_LINE2 = ['turn', 'prompt', 'elapsed'];
-const VALID_LINE3 = ['context', 'rate_limits', 'seven_day', 'cost'];
+const VALID_LINE3 = ['context', 'rate_limits', 'seven_day', 'spend_limit', 'prompt_cache', 'cost'];
 
 type ColorFn = (s: string) => string;
 
@@ -170,7 +170,7 @@ export function readConfig(): StatuslineConfig {
     const line3 = sanitizeLine(parsed['line3'], VALID_LINE3, DEFAULT_CONFIG.line3);
     // Legacy: 'context' moved from L2 to L3 in v6.1.0 — migrate if user had it in L2.
     const rawL2 = parsed['line2'];
-    if (Array.isArray(rawL2) && rawL2.includes('context') && !line3.includes('context')) {
+    if (parsed['line3'] === undefined && Array.isArray(rawL2) && rawL2.includes('context') && !line3.includes('context')) {
       line3.unshift('context');
     }
     const rawSep = parsed['separator'];

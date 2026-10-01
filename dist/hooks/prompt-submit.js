@@ -1,6 +1,6 @@
-import { applyGitStatus, createEmptySessionState, getGitStatus, readState, updateState, } from '../state.js';
+import { applyGitStatus, createEmptySessionState, getGitStatus, readState, } from '../state.js';
 import { launchRefinementWorker } from '../refine.js';
-import { getString, runHook } from './common.js';
+import { getString, runHook, updateHookState as updateState } from './common.js';
 function isPowerOfTwo(n) {
     return n > 0 && (n & (n - 1)) === 0;
 }

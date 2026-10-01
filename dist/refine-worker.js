@@ -23,7 +23,7 @@ async function main() {
     if (!sessionId || (!transcriptPath && !preferredTranscriptPath))
         process.exit(0);
     const preferredTranscript = await readPreferredTranscript(preferredTranscriptPath);
-    await triggerFocusRefinement(sessionId, transcriptPath || undefined, preferredTranscript);
+    await triggerFocusRefinement(sessionId, transcriptPath || undefined, preferredTranscript, { milestone: process.argv[5] === 'milestone' });
 }
 main().catch((err) => {
     process.stderr.write(`[claude-recall refine-worker] ${err instanceof Error ? err.message : String(err)}\n`);

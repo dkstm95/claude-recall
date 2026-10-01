@@ -1,13 +1,15 @@
 {
   "name": "claude-recall",
-  "version": "6.4.3",
+  "version": "6.5.0",
   "description": "Session awareness statusline for Claude Code",
   "type": "module",
   "scripts": {
     "build": "tsc && npm run sync:plugin",
     "sync:plugin": "node scripts/sync-plugin.mjs",
     "check:dist": "node scripts/check-dist.mjs",
-    "test": "npm run check:dist && node --test test/*.test.mjs"
+    "test": "npm run check:dist && node scripts/test.mjs",
+    "check:claude": "node scripts/check-claude.mjs",
+    "preview": "node scripts/render-previews.mjs"
   },
   "devDependencies": {
     "typescript": "^5.5.0",

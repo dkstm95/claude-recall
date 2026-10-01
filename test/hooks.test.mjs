@@ -1,3 +1,4 @@
+import { isolatedEnv } from './helpers/environment.mjs';
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
@@ -8,16 +9,6 @@ import { delimiter, join } from 'node:path';
 const ROOT = process.cwd();
 const REFINING_ENV_VAR = 'CLAUDE_RECALL_REFINING';
 
-function isolatedEnv(tmpHome, extraEnv = {}) {
-  const env = {
-    ...process.env,
-    HOME: tmpHome,
-    USERPROFILE: tmpHome,
-    ...extraEnv,
-  };
-  if (!Object.hasOwn(extraEnv, 'CLAUDE_CONFIG_DIR')) delete env.CLAUDE_CONFIG_DIR;
-  return env;
-}
 
 function runHook(relativePath, stdin, extraEnv = {}) {
   const tmpHome = mkdtempSync(join(tmpdir(), 'claude-recall-hook-test-'));
@@ -271,6 +262,7 @@ test('cwd-changed hook: persists current cwd from new_cwd', async () => {
     const state = JSON.parse(readFileSync(statePath, 'utf-8'));
     assert.equal(state.cwd, ROOT);
     assert.equal(state.sessionId, 'cwd-session');
+    assert.equal(state.activePluginRoot, ROOT);
     assert.equal(typeof state.lastActivityAt, 'string');
   } finally {
     rmSync(result.tmpHome, { recursive: true, force: true });
@@ -304,11 +296,7 @@ test('cwd-changed hook: clears stale git status when new cwd is not a git repo',
   }));
 
   const child = spawn(process.execPath, [join(ROOT, 'dist/hooks/cwd-changed.js')], {
-    env: {
-      ...process.env,
-      HOME: tmpHome,
-      USERPROFILE: tmpHome,
-    },
+    env: isolatedEnv(tmpHome),
     stdio: ['pipe', 'pipe', 'pipe'],
   });
 
