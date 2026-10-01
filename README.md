@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-6.5.0-blue?style=flat-square" alt="version">
+  <img src="https://img.shields.io/badge/version-6.5.1-blue?style=flat-square" alt="version">
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="license">
   <img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen?style=flat-square&logo=node.js&logoColor=white" alt="node">
   <img src="https://img.shields.io/badge/Claude_Code-Plugin-blueviolet?style=flat-square" alt="Claude Code Plugin">
@@ -73,7 +73,7 @@ Requires **Node.js 20+** and **native Claude Code 2.1.286+**. Setup checks the C
 > Setup never searches PATH automatically. The official native launcher (`~/.local/bin/claude`, or `%USERPROFILE%\.local\bin\claude.exe` on Windows) is detected directly. For Homebrew or another package manager, confirm its stable absolute launcher and pass it explicitly, for example `/claude-recall:setup /opt/homebrew/bin/claude`.
 
 > [!NOTE]
-> **Upgrading to 6.5.0:** run `/reload-plugins`, then `/claude-recall:setup` once to replace the installed launcher. Hooks record the actual loaded plugin root per session, including `--plugin-dir` overrides and `/cd` changes. Until a hook records it, the launcher uses the explicit development root or current-project registry fallback.
+> **Upgrading to 6.5.1:** run `/reload-plugins`, then `/claude-recall:setup` once to replace the installed launcher. Hooks record the actual loaded plugin root per session, including `--plugin-dir` overrides and `/cd` changes. Until a hook records it, the launcher uses the explicit development root or current-project registry fallback.
 
 ## Usage
 
@@ -204,6 +204,8 @@ npm test
 npm run check:claude # real CLI/manifest validation; no model request
 npm run preview      # regenerate both SVGs from the actual formatter
 ```
+
+Atomic state writes retry transient Windows file-sharing errors for up to one second without deleting the existing file.
 
 CI covers Node 20, 22, 24, and current Node on macOS/Linux/Windows, plus native Claude 2.1.286 and latest on Linux. POSIX fake-executable tests are explicitly skipped on Windows. `check:claude` accepts an optional absolute executable path.
 

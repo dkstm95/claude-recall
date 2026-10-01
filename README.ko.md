@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-6.5.0-blue?style=flat-square" alt="version">
+  <img src="https://img.shields.io/badge/version-6.5.1-blue?style=flat-square" alt="version">
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="license">
   <img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen?style=flat-square&logo=node.js&logoColor=white" alt="node">
   <img src="https://img.shields.io/badge/Claude_Code-Plugin-blueviolet?style=flat-square" alt="Claude Code Plugin">
@@ -73,7 +73,7 @@ claude-recall은 모든 세션에 대해 두 가지 질문을 한눈에 답합�
 > setup은 PATH를 자동 탐색하지 않습니다. 공식 native launcher(`~/.local/bin/claude`, Windows는 `%USERPROFILE%\.local\bin\claude.exe`)는 직접 감지합니다. Homebrew 등 다른 패키지 관리자를 쓴다면 stable launcher의 절대 경로를 확인한 뒤 명시적으로 전달하세요. 예: `/claude-recall:setup /opt/homebrew/bin/claude`.
 
 > [!NOTE]
-> **6.5.0으로 업그레이드:** `/reload-plugins` 다음 `/claude-recall:setup`을 한 번 실행해 설치된 launcher를 교체하세요. 훅은 세션별로 실제 로드된 플러그인 경로를 기록하므로 `--plugin-dir` 우선순위와 `/cd` 이동을 반영합니다. 첫 훅 실행 전에는 명시적인 개발 경로나 현재 프로젝트의 설치 레지스트리를 사용합니다.
+> **6.5.1으로 업그레이드:** `/reload-plugins` 다음 `/claude-recall:setup`을 한 번 실행해 설치된 launcher를 교체하세요. 훅은 세션별로 실제 로드된 플러그인 경로를 기록하므로 `--plugin-dir` 우선순위와 `/cd` 이동을 반영합니다. 첫 훅 실행 전에는 명시적인 개발 경로나 현재 프로젝트의 설치 레지스트리를 사용합니다.
 
 ## 사용법
 
@@ -203,6 +203,8 @@ npm test
 npm run check:claude # 실제 CLI/manifest 검증, 모델 호출 없음
 npm run preview      # 실제 formatter로 SVG 두 개 재생성
 ```
+
+상태 파일을 원자적으로 교체할 때 Windows의 일시적인 파일 공유 오류를 최대 1초 동안 재시도하며, 기존 파일을 먼저 삭제하지 않습니다.
 
 CI는 macOS/Linux/Windows에서 Node 20·22·24·현재 버전, Linux에서 native Claude 2.1.286·최신 버전을 검사합니다. POSIX 가짜 실행 파일 테스트는 Windows에서 명시적으로 건너뜁니다. `check:claude`에는 실행 파일의 절대 경로를 선택 인자로 전달할 수 있습니다.
 

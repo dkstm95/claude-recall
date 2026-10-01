@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, utimesSync, writeFileSync } from 'node:fs';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -9,6 +9,59 @@ import { pathToFileURL } from 'node:url';
 
 const ROOT = process.cwd();
 const { withFileLock } = await import('../dist/json-file.js');
+
+for (const scenario of ['transient', 'permanent', 'ticket']) {
+  test(`atomic replacement: Windows ${scenario} sharing error`, () => {
+    const dir = mkdtempSync(join(tmpdir(), 'recall-rename-'));
+    const moduleUrl = pathToFileURL(join(ROOT, 'dist', 'json-file.js')).href;
+    const script = `
+      import fs from 'node:fs';
+      import assert from 'node:assert/strict';
+      import { join } from 'node:path';
+      import { syncBuiltinESMExports } from 'node:module';
+      Object.defineProperty(process, 'platform', { value: 'win32' });
+      const scenario = process.argv[2];
+      const target = join(process.argv[1], 'state.json');
+      fs.writeFileSync(target, 'original');
+      const originalRename = fs.renameSync;
+      let calls = 0;
+      fs.renameSync = (source, destination) => {
+        calls++;
+        if (scenario === 'transient' && calls <= 2 || scenario === 'permanent'
+          || scenario === 'ticket' && calls === 2) {
+          if (scenario !== 'ticket') assert.equal(fs.readFileSync(target, 'utf8'), 'original');
+          const err = new Error('injected sharing violation');
+          err.code = scenario === 'ticket' ? 'EIO' : 'EPERM';
+          throw err;
+        }
+        return originalRename(source, destination);
+      };
+      syncBuiltinESMExports();
+      const { writeJsonFileAtomic, withFileLock } = await import(${JSON.stringify(moduleUrl)});
+      const started = Date.now();
+      if (scenario === 'transient') {
+        writeJsonFileAtomic(target, { ok: true });
+        assert.equal(calls, 3);
+        assert.deepEqual(JSON.parse(fs.readFileSync(target, 'utf8')), { ok: true });
+      } else if (scenario === 'permanent') {
+        assert.throws(() => writeJsonFileAtomic(target, {}), { code: 'EPERM' });
+        assert.ok(calls > 1);
+        assert.ok(Date.now() - started < 3000);
+        assert.equal(fs.readFileSync(target, 'utf8'), 'original');
+      } else {
+        await assert.rejects(withFileLock(target, () => assert.fail('must not enter')), { code: 'EIO' });
+        assert.deepEqual(fs.readdirSync(join(process.argv[1], '.locks')), []);
+      }
+      assert.ok(!fs.readdirSync(process.argv[1]).some(name => name.includes('.tmp.')));
+    `;
+    try {
+      const result = spawnSync(process.execPath, ['--input-type=module', '-e', script, dir, scenario], {
+        encoding: 'utf8', timeout: 10_000,
+      });
+      assert.equal(result.status, 0, result.stderr || result.error?.message);
+    } finally { rmSync(dir, { recursive: true, force: true }); }
+  });
+}
 
 function claimPath(target, token) {
   const key = createHash('sha256').update(target).digest('hex');

@@ -1,5 +1,13 @@
 # Changelog
 
+## 6.5.1
+
+### Fixed
+
+- Retry transient Windows file-sharing errors during atomic JSON replacement for up to one second, retaining the original file until replacement succeeds.
+- Remove a lock claim even when publishing its ticket fails, so a live process cannot leave other writers blocked.
+- Release validation includes Linux, macOS, and Windows compatibility CI; text checkouts and TypeScript output use consistent LF line endings.
+
 ## 6.5.0
 
 ### Fixed

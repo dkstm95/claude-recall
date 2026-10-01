@@ -1,6 +1,6 @@
 # claude-recall
 
-Claude Code plugin (v6.5.0) that provides a session awareness statusline.
+Claude Code plugin (v6.5.1) that provides a session awareness statusline.
 Tracks a Haiku-refined focus label, activity, git status, and prompt count for every parallel Claude Code session.
 
 - **Author**: seungilahn

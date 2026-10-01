@@ -8,6 +8,27 @@ const LOCK_RETRY_MS = 5;
 // of many statusline processes contending on the shared account/session caches.
 const LOCK_TIMEOUT_MS = 5_000;
 const STALE_LOCK_MS = 60_000;
+const RENAME_RETRY_MS = 10;
+const RENAME_TIMEOUT_MS = 1_000;
+const renameWait = new Int32Array(new SharedArrayBuffer(4));
+function replaceFile(source, target) {
+    const deadline = Date.now() + RENAME_TIMEOUT_MS;
+    while (true) {
+        try {
+            renameSync(source, target);
+            return;
+        }
+        catch (err) {
+            // Windows may temporarily deny replacement while another process reads
+            // the destination. Preserve atomic replacement: never unlink it first.
+            if (process.platform !== 'win32'
+                || !(isErrno(err, 'EPERM') || isErrno(err, 'EACCES') || isErrno(err, 'EBUSY'))
+                || Date.now() >= deadline)
+                throw err;
+            Atomics.wait(renameWait, 0, 0, RENAME_RETRY_MS);
+        }
+    }
+}
 export function ensurePrivateDir(path) {
     mkdirSync(path, { recursive: true, mode: PRIVATE_DIR_MODE });
     try {
@@ -40,7 +61,7 @@ export function writePrivateFileAtomic(path, data) {
             chmodSync(tmp, PRIVATE_FILE_MODE);
         }
         catch { /* best effort */ }
-        renameSync(tmp, path);
+        replaceFile(tmp, path);
     }
     catch (err) {
         try {
@@ -150,11 +171,11 @@ export async function withFileLock(targetPath, action, options = {}) {
     // Lamport's bakery algorithm avoids a shared lock filename entirely. Every
     // contender owns a generation-unique claim, so dead-owner cleanup cannot
     // delete a newer owner's lock (the stale-breaker ABA/TOCTOU failure mode).
-    writeJsonFileAtomic(claimPath, { ...baseClaim, choosing: true, ticket: null });
-    const initial = liveClaims(lockDir, targetKey, token);
-    const ticket = initial.claims.reduce((max, claim) => Math.max(max, claim.ticket ?? 0), 0) + 1;
-    writeJsonFileAtomic(claimPath, { ...baseClaim, choosing: false, ticket });
     try {
+        writeJsonFileAtomic(claimPath, { ...baseClaim, choosing: true, ticket: null });
+        const initial = liveClaims(lockDir, targetKey, token);
+        const ticket = initial.claims.reduce((max, claim) => Math.max(max, claim.ticket ?? 0), 0) + 1;
+        writeJsonFileAtomic(claimPath, { ...baseClaim, choosing: false, ticket });
         while (true) {
             const { claims, invalid } = liveClaims(lockDir, targetKey, token);
             const blocked = invalid || claims.some((claim) => (claim.choosing
