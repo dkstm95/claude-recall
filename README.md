@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-6.5.2-blue?style=flat-square" alt="version">
+  <img src="https://img.shields.io/badge/version-6.5.3-blue?style=flat-square" alt="version">
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="license">
   <img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen?style=flat-square&logo=node.js&logoColor=white" alt="node">
   <img src="https://img.shields.io/badge/Claude_Code-Plugin-blueviolet?style=flat-square" alt="Claude Code Plugin">
@@ -87,7 +87,7 @@ Requires **Node.js 20+** and **native Claude Code 2.1.286+**. Setup checks the C
 > Setup never searches PATH automatically. The official native launcher (`~/.local/bin/claude`, or `%USERPROFILE%\.local\bin\claude.exe` on Windows) is detected directly. For Homebrew or another package manager, confirm its stable absolute launcher and pass it explicitly, for example `/claude-recall:setup /opt/homebrew/bin/claude`.
 
 > [!NOTE]
-> **Upgrading to 6.5.2:** run `/reload-plugins`, then `/claude-recall:setup` once to replace the installed launcher. Hooks record the actual loaded plugin root per session, including `--plugin-dir` overrides and `/cd` changes. Until a hook records it, the launcher uses the explicit development root or current-project registry fallback.
+> **Upgrading to 6.5.3:** run `/reload-plugins`, then `/claude-recall:setup` once to replace the installed launcher. Hooks record the actual loaded plugin root per session, including `--plugin-dir` overrides and `/cd` changes. Until a hook records it, the launcher uses the explicit development root or current-project registry fallback.
 
 ## Usage
 
@@ -114,6 +114,7 @@ Create `~/.claude/claude-recall/config.json`. If `CLAUDE_CONFIG_DIR` is set, rep
     "showAheadBehind": true
   },
   "theme": "default",
+  "widthReserve": 6,
   "separator": "│"
 }
 ```
@@ -123,6 +124,7 @@ Create `~/.claude/claude-recall/config.json`. If `CLAUDE_CONFIG_DIR` is set, rep
 - **line3** — Choose from: `context`, `rate_limits`, `seven_day`, `spend_limit`, `prompt_cache`, `cost`. Set `line3: []` to force a 2-line statusline.
 - **gitStatus** — Toggle dirty flag and ahead/behind independently.
 - **separator** *(v6.3.0+)* — Character drawn between right-zone segments on Line 1 and between all segments on Line 3. Default `"│"` (U+2502, dim). Right-zone segments also left-pad to a 10-col cell, so `│` positions stay stable across renders. Set to `""` to disable both the separator and the padding (flat 2-space joiner, pre-v6.3.0 look). Any single printable grapheme works — `"┊"` dotted, `"|"` ASCII, etc.
+- **widthReserve** — Columns reserved from the full terminal width. Default `6` accounts for four columns of Claude UI padding plus two from setup’s `statusLine.padding: 1`. A 128-column terminal gets 122 columns of output. If you customize `statusLine.padding`, use `4 + 2 × padding`; increase the reserve for additional side panels.
 - **theme** — `default` (pastel cyan/purple/gold, dark terminals), `light` (deep teal/purple/amber, light terminals), `minimal` (subdued, monochrome — severity via reverse-video), `vivid` (bright/high contrast)
   - `default` and `light` emit fixed 24-bit RGB foreground colors matching the README on truecolor terminals. Light colors are darker for readability on bright backgrounds. Use `minimal` or `vivid` for 16-color terminals.
   - If your light terminal is not detected, set `"theme": "light"` in the configuration above. GitHub appearance and terminal theme are independent.
@@ -158,6 +160,7 @@ Create `~/.claude/claude-recall/config.json`. If `CLAUDE_CONFIG_DIR` is set, rep
 | **refinement error** | Line 1, left | Red `⚠ AI <reason>` label replaces focus when a background refinement fails | claude-recall |
 
 Notes:
+- Internal task notifications, teammate messages, and command output do not increment turns or replace the last prompt. If older state contains an internal notification, the display recovers the most recent human prompt from the transcript. Historical turn counts are not guessed or rewritten.
 - New slots are opt-in and hidden when their input is absent. The default layout is unchanged. `line3: []` wins over legacy `line2` context migration.
 - `5h` / `7d` require Claude.ai subscription quota data. A Claude apps gateway may instead supply `spend_limit`. Ordinary API-key sessions do not inherit another session's subscription bars.
 - **Session caches.** Context and rate-limit caches are scoped to the session. A new session waits for live quota data; a resumed session can restore its own unexpired values. Legacy shared `rate-limits.json` is ignored. Session scope is not account identity: after changing authentication, start a new session rather than resuming one whose quota belongs to the previous account.
@@ -190,6 +193,8 @@ Each trigger claims one refinement lease and spawns the setup-pinned Claude Code
 The plugin configures a 10-second timeout for each hook; this is not Claude's global default. SessionEnd has a separate overall budget (1.5 seconds by default). The detached worker lets refinement outlive hook/session teardown. See the [official hooks reference](https://code.claude.com/docs/en/hooks).
 
 On failure, Line 1's focus is replaced by a red label (`⚠ AI timeout`, `⚠ AI rate limited`, `⚠ AI auth failed`, `⚠ AI setup required`, or `⚠ AI refinement failed`) until the next successful refinement clears it. `setup required` means the private executable pin is absent or no longer executable; rerun `/claude-recall:setup`.
+
+Updating Claude Code does not update installed plugins. If an old refinement error persists, run `/plugin marketplace update claude-recall`, `/plugin update claude-recall@claude-recall`, `/reload-plugins`, and `/claude-recall:setup`. A failed refinement is retried on the next real user prompt as well as normal milestones.
 
 </details>
 

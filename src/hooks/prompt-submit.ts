@@ -5,6 +5,7 @@ import {
   readState,
 } from '../state.js';
 import { launchRefinementWorker } from '../refine.js';
+import { isUserPrompt, userPromptPreview } from '../prompt-text.js';
 import { getString, runHook, updateHookState as updateState, type HookInput } from './common.js';
 
 function isPowerOfTwo(n: number): boolean {
@@ -20,7 +21,7 @@ async function handlePromptSubmit(input: HookInput): Promise<void> {
   const transcriptPath = getString(input, 'transcript_path');
 
   const now = new Date().toISOString();
-  if (prompt.startsWith('/')) {
+  if (!isUserPrompt(prompt) || input['isMeta'] === true || input['is_meta'] === true) {
     await updateState(sessionId, (current) => {
       const state = current ?? createEmptySessionState(sessionId, cwd);
       state.cwd = cwd;
@@ -38,7 +39,7 @@ async function handlePromptSubmit(input: HookInput): Promise<void> {
     const state = current ?? createEmptySessionState(sessionId, cwd);
     state.cwd = cwd;
     state.promptCount++;
-    state.lastUserPrompt = prompt.slice(0, 200).replace(/[\n\t\r]/g, ' ');
+    state.lastUserPrompt = userPromptPreview(prompt);
     state.lastActivityAt = now;
     applyGitStatus(state, gitStatus, { useFallback });
     return { state, value: state.promptCount };
@@ -47,7 +48,7 @@ async function handlePromptSubmit(input: HookInput): Promise<void> {
   // Focus refinement at power-of-2 turns (1, 2, 4, 8, 16, 32, ...).
   // Launched as a detached worker so it survives this hook's 10s timeout.
   // First-prompt transcript-flush race is handled inside triggerFocusRefinement.
-  if (transcriptPath && isPowerOfTwo(promptCount)) {
+  if (transcriptPath && (isPowerOfTwo(promptCount) || snapshot?.refinementError)) {
     launchRefinementWorker(sessionId, transcriptPath);
   }
 

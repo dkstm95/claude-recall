@@ -27,3 +27,10 @@ test('new metadata remains opt-in and accepts supported slots', () => {
   assert.deepEqual(readConfig().line1, ['review', 'fast_mode']);
   assert.deepEqual(readConfig().line3, ['spend_limit', 'prompt_cache']);
 });
+
+test('widthReserve accepts explicit margins and rejects malformed values', () => {
+  for (const [value, expected] of [[0, 0], [10, 10], [-1, 6], [1.5, 6], ['8', 6], [null, 6], [1001, 6]]) {
+    writeFileSync(join(dir, 'config.json'), JSON.stringify({ widthReserve: value }));
+    assert.equal(readConfig().widthReserve, expected);
+  }
+});

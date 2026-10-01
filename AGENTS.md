@@ -1,6 +1,6 @@
 # claude-recall
 
-Claude Code plugin (v6.5.2) that provides a session awareness statusline.
+Claude Code plugin (v6.5.3) that provides a session awareness statusline.
 Tracks a Haiku-refined focus label, activity, git status, and prompt count for every parallel Claude Code session.
 
 - **Author**: seungilahn
@@ -45,6 +45,7 @@ src/                      # TypeScript source
   launcher.ts             #   Cross-platform installed-plugin registry launcher
   claude-runtime.ts       #   Private absolute Claude executable pin + setup-time discovery
   setup.ts                #   Deterministic setup helper (runtime pin, launcher, settings merge)
+  prompt-text.ts          #   Human-prompt filtering and bounded transcript recovery
   stdin.ts                #   Async stdin reader utility
   refine.ts               #   Haiku subprocess wrapper: spawnRefinement + triggerFocusRefinement + launchRefinementWorker (detached) + 5s debounce
   refine-worker.ts        #   Detached worker entry — runs `triggerFocusRefinement` outside the 10s hook window
@@ -142,6 +143,8 @@ Line 3 (opt-out):  ▍ ctx ████░░░░░░ 45% │ 5h ███�
 
 Width precedence: `stdout.columns` → `stderr.columns` → `$COLUMNS` → `120` fallback (see `getTerminalWidth()` in `src/format.ts`). Claude Code pipes stdout/stderr for statusline commands, so stream `.columns` values are usually unavailable. Since Claude Code 2.1.153, statusline commands receive `COLUMNS` and `LINES` environment variables, making `$COLUMNS` the normal width source on current versions. Older Claude Code versions and non-Claude invocations still fall back to `120`, which keeps Line 3's full L0 render (~91 cols) visible.
 
+The statusline entry reserves `widthReserve` columns (default 6: four UI columns plus two setup padding columns) before formatting. Layout budgets below are usable content columns, not the whole terminal width.
+
 **Line 1** — When configured, `focus` renders on the left (truncated with `…` to min 15 cols). Right-side segments follow config order left-to-right = high-to-low priority, and `progressiveJoin` drops the rightmost segments first. Default `['focus', 'branch', 'model']` means `model` drops before `branch`.
 
 **Line 2** — `#turn` always renders. `last_prompt` truncates with `…` to min 30 cols. Right-side (`elapsed`) drops first if the prompt cannot meet its minimum.
@@ -164,7 +167,7 @@ Effect at the 120-col fallback with all four segments populated: L0 (~91 cols) f
 - **Graceful degradation**: Hooks always output `{}` even on error; statusline exits silently on missing data
 - **Unicode-aware**: `Intl.Segmenter` preserves grapheme clusters; terminal widths cover combining marks, Hangul Jamo, emoji, ZWJ sequences, and East Asian wide characters.
 - **Terminal-safe external text**: prompt/focus/git/metadata values have terminal and bidi controls stripped before theming and truncation.
-- **Slash command filtering**: prompt-submit.ts ignores prompts starting with `/`
+- **Prompt filtering**: ignore slash commands, internal task/teammate notifications, command output, and meta records; recover a human prompt for legacy notification state
 - **Lazy cleanup**: Sessions idle for >7 days (by `lastActivityAt`) are cleaned on SessionStart, not continuously
 - **Stdin-first elapsed**: prefer accumulated `cost.total_duration_ms`. The fallback is explicitly labelled `age` because creation age includes downtime. Older state falls back to `lastActivityAt` for that age only.
 - **Single async git path**: `getGitStatus()` is async (`execFile`, `Promise.all` across the 3 independent calls, `--no-optional-locks` on `git status`, 1s per-call timeout). Called from both the statusline (every render — mid-turn `git checkout` visible immediately) and hooks (persist to `state.gitStatus` as a backup for when the live call fails). `refreshGitStatus(state, cwd)` is the single mutation helper used by SessionStart, UserPromptSubmit, CwdChanged, and statusline render-time refresh. Measured p95 ~21ms on this repo.

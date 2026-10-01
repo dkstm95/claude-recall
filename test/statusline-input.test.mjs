@@ -5,14 +5,15 @@ import { spawn } from 'node:child_process';
 import { existsSync, mkdirSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { displayWidth } from '../dist/format.js';
 
 const ROOT = process.cwd();
 
-function runStatusline(input, home, configDir) {
+function runStatusline(input, home, configDir, columns = 80) {
   const child = spawn(process.execPath, [join(ROOT, 'dist/statusline.js')], {
     env: isolatedEnv(home, {
       CLAUDE_CONFIG_DIR: configDir,
-      COLUMNS: '80',
+      COLUMNS: String(columns),
       NO_COLOR: '1',
     }),
     stdio: ['pipe', 'pipe', 'pipe'],
@@ -52,6 +53,47 @@ test('statusline input: malformed optional fields degrade without blanking valid
   } finally {
     rmSync(home, { recursive: true, force: true });
   }
+});
+
+test('statusline entry repairs legacy task-notification text and reserves actual UI width', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'recall-responsive-'));
+  const configDir = join(home, 'config');
+  const sessionDir = join(configDir, 'claude-recall', 'sessions');
+  mkdirSync(sessionDir, { recursive: true });
+  const transcript = join(home, 'transcript.jsonl');
+  const human = '모바일 내비게이션 수정 👩‍💻';
+  const records = [
+    { type: 'user', message: { content: human } },
+    { type: 'user', isMeta: true, message: { content: 'injected context' } },
+    { type: 'user', message: { content: [{ type: 'text', text: '<task-notification>done</task-notification>' }] } },
+  ];
+  writeFileSync(transcript, records.map((r) => JSON.stringify(r)).join('\n') + '\n');
+  writeFileSync(join(sessionDir, 'responsive.json'), JSON.stringify({
+    sessionId: 'responsive', focus: '모바일 UI 수정', lastUserPrompt: '<task-notification> internal task output',
+    promptCount: 27, branch: 'redesign/blotter', cwd: '',
+  }));
+  try {
+    for (const columns of [40, 60, 80, 100, 120, 128, 160, 200]) {
+      const result = await runStatusline({
+        session_id: 'responsive', transcript_path: transcript,
+        model: { display_name: 'Opus 5.5' }, effort: { level: 'medium' }, thinking: { enabled: true },
+        cost: { total_duration_ms: 3_600_000, total_cost_usd: 65.55 },
+        context_window: { used_percentage: 76 },
+        rate_limits: { five_hour: { used_percentage: 46 }, seven_day: { used_percentage: 19 } },
+      }, home, configDir, columns);
+      assert.equal(result.code, 0);
+      assert.equal(result.stderr, '');
+      assert.doesNotMatch(result.stdout, /task-notification|injected context/);
+      assert.match(result.stdout, /모바일/);
+      for (const line of result.stdout.trimEnd().split('\n')) {
+        assert.ok(displayWidth(line) + 6 <= columns, `${columns}: ${line}`);
+      }
+      if (columns === 128) {
+        assert.match(result.stdout.split('\n')[0], /Opus 5\.5 · medium · thinking$/);
+        assert.match(result.stdout.split('\n')[1], /1h 0m$/);
+      }
+    }
+  } finally { rmSync(home, { recursive: true, force: true }); }
 });
 
 test('statusline input: new optional fields survive normalization and session caches stay separate', async () => {

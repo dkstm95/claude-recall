@@ -1,6 +1,7 @@
 import { readStdin } from './stdin.js';
 import { readState, createEmptySessionState, refreshGitStatus } from './state.js';
-import { formatStatusline, getTerminalWidth } from './format.js';
+import { formatStatusline, getTerminalWidth, getContentWidth } from './format.js';
+import { isUserPrompt, readLatestUserPrompt, userPromptPreview } from './prompt-text.js';
 import { readConfig } from './config.js';
 import { resolveRateLimits } from './rate-limits-cache.js';
 import { resolveContextWindow } from './context-window-cache.js';
@@ -68,6 +69,7 @@ function normalizeInput(value) {
     const prNumber = normalizeNonNegativeNumber(prRaw?.['number']);
     return {
         session_id: sessionId,
+        transcript_path: stringAt(value, 'transcript_path'),
         cwd: stringAt(value, 'cwd'),
         model: stringFields(modelRaw, ['display_name', 'id']),
         cost: costUsd !== undefined || durationMs !== undefined
@@ -112,6 +114,10 @@ async function main() {
     // SessionStart hook may not have flushed state yet on first statusline render.
     const cwd = input.cwd ?? input.workspace?.current_dir ?? input.workspace?.project_dir ?? '';
     const state = readState(input.session_id) ?? createEmptySessionState(input.session_id, cwd);
+    if (state.lastUserPrompt && !isUserPrompt(state.lastUserPrompt)) {
+        state.lastUserPrompt = await readLatestUserPrompt(input.transcript_path);
+    }
+    state.lastUserPrompt = userPromptPreview(state.lastUserPrompt);
     const cwdChanged = Boolean(cwd && state.cwd && state.cwd !== cwd);
     if (cwd)
         state.cwd = cwd;
@@ -139,7 +145,7 @@ async function main() {
         rate_limits: rateLimits,
     };
     const config = readConfig();
-    const output = formatStatusline(state, getTerminalWidth(), builtin, config);
+    const output = formatStatusline(state, getContentWidth(getTerminalWidth(), config.widthReserve), builtin, config);
     process.stdout.write(output + '\n');
 }
 main().catch(() => process.exit(0));

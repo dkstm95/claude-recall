@@ -1,5 +1,18 @@
 # Changelog
 
+## 6.5.3
+
+### Fixed
+
+- Exclude internal task/teammate notifications, command output, and meta records from prompt tracking and refinement input. Remove Claude paste markers while retaining their text. Recover a visible human prompt from the bounded transcript tail when older state contains an internal notification. Historical counts are left intact.
+- Reserve six columns for Claude UI and setup padding before formatting, preventing right-edge clipping of the model and elapsed time. `widthReserve` supports customized padding.
+- Retry failed focus refinement on the next real prompt rather than waiting for a power-of-two turn. Document that CLI and plugin updates are separate.
+
+### Tests
+
+- Exercise every width from 7 to 240 columns in dark/light themes, plus the statusline executable at 40/60/80/100/120/128/160/200 columns with Korean text, emoji, model effort and thinking.
+- Add regression coverage for internal notifications, legacy prompt recovery, and bounded transcript filtering. Regenerate README previews using the usable content width.
+
 ## 6.5.2
 
 ### Changed

@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-6.5.2-blue?style=flat-square" alt="version">
+  <img src="https://img.shields.io/badge/version-6.5.3-blue?style=flat-square" alt="version">
   <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="license">
   <img src="https://img.shields.io/badge/node-%3E%3D20-brightgreen?style=flat-square&logo=node.js&logoColor=white" alt="node">
   <img src="https://img.shields.io/badge/Claude_Code-Plugin-blueviolet?style=flat-square" alt="Claude Code Plugin">
@@ -87,7 +87,7 @@ claude-recall은 모든 세션에 대해 두 가지 질문을 한눈에 답합�
 > setup은 PATH를 자동 탐색하지 않습니다. 공식 native launcher(`~/.local/bin/claude`, Windows는 `%USERPROFILE%\.local\bin\claude.exe`)는 직접 감지합니다. Homebrew 등 다른 패키지 관리자를 쓴다면 stable launcher의 절대 경로를 확인한 뒤 명시적으로 전달하세요. 예: `/claude-recall:setup /opt/homebrew/bin/claude`.
 
 > [!NOTE]
-> **6.5.2으로 업그레이드:** `/reload-plugins` 다음 `/claude-recall:setup`을 한 번 실행해 설치된 launcher를 교체하세요. 훅은 세션별로 실제 로드된 플러그인 경로를 기록하므로 `--plugin-dir` 우선순위와 `/cd` 이동을 반영합니다. 첫 훅 실행 전에는 명시적인 개발 경로나 현재 프로젝트의 설치 레지스트리를 사용합니다.
+> **6.5.3으로 업그레이드:** `/reload-plugins` 다음 `/claude-recall:setup`을 한 번 실행해 설치된 launcher를 교체하세요. 훅은 세션별로 실제 로드된 플러그인 경로를 기록하므로 `--plugin-dir` 우선순위와 `/cd` 이동을 반영합니다. 첫 훅 실행 전에는 명시적인 개발 경로나 현재 프로젝트의 설치 레지스트리를 사용합니다.
 
 ## 사용법
 
@@ -114,6 +114,7 @@ claude-recall은 모든 세션에 대해 두 가지 질문을 한눈에 답합�
     "showAheadBehind": true
   },
   "theme": "default",
+  "widthReserve": 6,
   "separator": "│"
 }
 ```
@@ -123,6 +124,7 @@ claude-recall은 모든 세션에 대해 두 가지 질문을 한눈에 답합�
 - **line3** — 선택: `context`, `rate_limits`, `seven_day`, `spend_limit`, `prompt_cache`, `cost`. `line3: []`로 설정하면 2줄로 고정됩니다.
 - **gitStatus** — dirty 플래그와 앞섬/뒤처짐을 독립 토글.
 - **separator** *(v6.3.0+)* — Line 1 우측 존(worktree/session/agent/pr/branch/model)과 Line 3 세그먼트 사이에 그려지는 구분자. 기본값 `"│"` (U+2502, 흐린 색). 우측 존 세그먼트는 10 col 셀로 좌측 패딩되어 `│` 위치가 매 렌더링마다 같은 열에 떨어집니다. `""` (빈 문자열)로 설정하면 구분자와 셀 패딩이 모두 꺼지고 기존 2-스페이스 조이너로 돌아갑니다 (v6.3.0 이전 모습). `"┊"` (점선), `"|"` (ASCII) 등 출력 가능한 단일 grapheme을 사용할 수 있습니다.
+- **widthReserve** — 터미널 전체 폭에서 제외할 열 수. 기본 `6`은 Claude UI 좌우 여백 4열과 setup의 `statusLine.padding: 1` 양쪽 2열을 포함합니다. 예: 128열 터미널 → 122열 출력. `statusLine.padding`을 직접 바꾸면 `4 + 2 × padding`에 맞추세요. 별도 사이드 패널 등으로 더 좁아졌다면 값을 늘릴 수 있습니다.
 - **theme** — `default` (파스텔 시안·보라·골드, 다크 터미널), `light` (딥 틸·보라·앰버, 밝은 터미널), `minimal` (차분한 단색 — 위험도는 reverse-video로 구분), `vivid` (밝은/고대비)
   - `default`와 `light`는 24-bit RGB 색상을 직접 출력해 truecolor 터미널에서 README와 같은 전경색을 사용합니다. 라이트는 밝은 배경에서 읽기 쉽게 더 짙은 색을 사용합니다. 16색 터미널에서는 `minimal` 또는 `vivid`를 사용하세요.
   - 밝은 터미널에서 자동 선택이 되지 않으면 위 설정의 `"theme"`을 `"light"`로 지정하세요. GitHub의 화면 모드와 터미널 테마는 별개입니다.
@@ -158,6 +160,7 @@ claude-recall은 모든 세션에 대해 두 가지 질문을 한눈에 답합�
 | **refinement error** | 1줄, 왼쪽 | 백그라운드 갱신 실패 시 빨간 `⚠ AI <원인>`이 focus를 대체 | claude-recall |
 
 참고:
+- 내부 `<task-notification>`·teammate 알림·명령 출력은 사용자 턴으로 세지 않고 마지막 프롬프트도 덮어쓰지 않습니다. 구버전이 저장한 내부 알림은 대화 기록에서 최근 실제 프롬프트를 찾아 대신 표시합니다. 과거에 잘못 누적된 턴 수는 추정해서 변경하지 않습니다.
 - 새 슬롯은 기본적으로 꺼져 있으며 입력값이 없으면 표시하지 않습니다. 기본 레이아웃은 유지합니다. `line3: []`는 이전 `line2`의 context 마이그레이션보다 우선합니다.
 - `5h` / `7d`는 Claude.ai 구독 사용량이 필요합니다. Claude apps gateway는 `spend_limit`을 제공할 수 있습니다. 일반 API 키 세션에는 다른 세션의 구독 바가 나타나지 않습니다.
 - **세션별 캐시.** 컨텍스트와 rate-limit 캐시는 세션 단위입니다. 새 세션은 실제 사용량 입력을 기다리고, 재개한 세션은 자신의 유효한 캐시만 복원합니다. 이전 공유 `rate-limits.json`은 읽지 않습니다. 세션 ID는 계정 ID가 아니므로 인증을 바꿨다면 이전 계정의 세션을 재개하지 말고 새 세션을 시작하세요.
@@ -190,6 +193,8 @@ claude-recall은 모든 세션에 대해 두 가지 질문을 한눈에 답합�
 각 훅의 10초 제한은 이 플러그인의 설정이며 Claude 전체의 기본값이 아닙니다. SessionEnd에는 별도의 전체 예산(기본 1.5초)이 있습니다. detached worker는 훅·세션 종료 이후에도 갱신을 마칠 수 있게 합니다. [공식 훅 문서](https://code.claude.com/docs/en/hooks) 참고.
 
 실패 시 Line 1의 focus가 빨간 라벨로 대체됩니다 (`⚠ AI timeout`, `⚠ AI rate limited`, `⚠ AI auth failed`, `⚠ AI setup required`, `⚠ AI refinement failed`). 다음 성공 시 자동 해소됩니다. `setup required`는 private executable pin이 없거나 더 이상 실행할 수 없다는 뜻이므로 `/claude-recall:setup`을 다시 실행하세요.
+
+CLI 업데이트와 플러그인 업데이트는 별개입니다. 구버전 오류가 남아 있다면 `/plugin marketplace update claude-recall`, `/plugin update claude-recall@claude-recall`, `/reload-plugins`, `/claude-recall:setup` 순서로 갱신하세요. 실패했던 focus 갱신은 다음 실제 사용자 프롬프트에서도 재시도합니다.
 
 </details>
 

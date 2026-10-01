@@ -1,6 +1,6 @@
 {
   "name": "claude-recall",
-  "version": "6.5.2",
+  "version": "6.5.3",
   "description": "Session awareness statusline for Claude Code",
   "type": "module",
   "scripts": {

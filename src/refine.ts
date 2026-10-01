@@ -1,6 +1,5 @@
 import { spawn } from 'node:child_process';
 import { readdirSync, statSync, unlinkSync, writeFileSync } from 'node:fs';
-import { open } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
@@ -10,6 +9,7 @@ import { resolveVerifiedPinnedClaudeExecutable } from './claude-runtime.js';
 import { getRecallDir } from './paths.js';
 import { updateState, type RefinementError, type SessionState } from './state.js';
 import { graphemes, sanitizeTerminalText } from './terminal-text.js';
+import { isUserPrompt, readTranscriptRegion, userTextFromRecord } from './prompt-text.js';
 
 // Budget: claude CLI carries a ~9s fixed startup overhead on systems with many
 // MCP servers, so 45s leaves Haiku ~36s of headroom — covers observed p99 on
@@ -81,38 +81,28 @@ function utf8Tail(text: string, maxBytes: number): string {
 // Read at most 1 MiB to recover complete JSONL records, then bound the text
 // sent to the model. Tool payloads cannot crowd out all recent dialogue.
 export async function readTranscriptTail(path: string): Promise<string> {
-  const fd = await open(path, 'r');
-  try {
-    const { size } = await fd.stat();
-    const start = Math.max(0, size - 1_048_576);
-    const buf = Buffer.alloc(size - start);
-    const { bytesRead } = await fd.read(buf, 0, buf.length, start);
-    const decoded = buf.subarray(0, bytesRead).toString('utf-8');
-    const firstNewline = decoded.indexOf('\n');
-    const text = start > 0 ? (firstNewline >= 0 ? decoded.slice(firstNewline + 1) : '') : decoded;
-    const records: string[] = [];
-    let jsonRecords = 0;
-    for (const line of text.split('\n')) {
-      if (!line.trim()) continue;
-      try {
-        const record = JSON.parse(line);
-        if (record && typeof record === 'object') jsonRecords += 1;
-        const message = record?.message;
-        if (record?.type !== 'user' && record?.type !== 'assistant') continue;
-        const content = message?.content;
-        const pieces = typeof content === 'string' ? [content]
-          : Array.isArray(content) ? content.filter((part) => part?.type === 'text' && typeof part.text === 'string').map((part) => part.text) : [];
-        if (pieces.length) records.push(`${record.type}: ${utf8Tail(pieces.join('\n'), 6_000)}`);
-      } catch { /* Legacy plain-text transcripts are handled below. */ }
-    }
-    if (jsonRecords) return utf8Tail(records.join('\n'), TRANSCRIPT_TAIL_BYTES);
-    // Preserve compatibility with plain-text input without cutting UTF-8 bytes.
-    const tail = utf8Tail(text, TRANSCRIPT_TAIL_BYTES);
-    const nl = tail.indexOf('\n');
-    return text.length > tail.length && nl >= 0 && tail.slice(nl + 1).trim() ? tail.slice(nl + 1) : tail;
-  } finally {
-    await fd.close();
+  const text = await readTranscriptRegion(path);
+  const records: string[] = [];
+  let jsonRecords = 0;
+  for (const line of text.split('\n')) {
+    if (!line.trim()) continue;
+    try {
+      const record = JSON.parse(line);
+      if (record && typeof record === 'object') jsonRecords += 1;
+      const message = record?.message;
+      if (record?.type !== 'user' && record?.type !== 'assistant') continue;
+      if (record.type === 'user' && userTextFromRecord(record) === undefined) continue;
+      const content = message?.content;
+      const pieces = typeof content === 'string' ? [content]
+        : Array.isArray(content) ? content.filter((part) => part?.type === 'text' && typeof part.text === 'string').map((part) => part.text) : [];
+      if (pieces.length) records.push(`${record.type}: ${utf8Tail(pieces.join('\n'), 6_000)}`);
+    } catch { /* Legacy plain-text transcripts are handled below. */ }
   }
+  if (jsonRecords) return utf8Tail(records.join('\n'), TRANSCRIPT_TAIL_BYTES);
+  // Preserve compatibility with plain-text input without cutting UTF-8 bytes.
+  const tail = utf8Tail(text, TRANSCRIPT_TAIL_BYTES);
+  const nl = tail.indexOf('\n');
+  return text.length > tail.length && nl >= 0 && tail.slice(nl + 1).trim() ? tail.slice(nl + 1) : tail;
 }
 
 export function classifyError(exitCode: number | null, diagnostic: string): RefinementError['code'] {
@@ -340,7 +330,7 @@ export async function triggerFocusRefinement(
         /* fall through to fallback */
       }
     }
-    if (!transcript.trim() && claim.lastUserPrompt.trim()) {
+    if (!transcript.trim() && isUserPrompt(claim.lastUserPrompt)) {
       transcript = `User: ${claim.lastUserPrompt}`;
     }
 

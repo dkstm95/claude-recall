@@ -102,6 +102,14 @@ export function getTerminalWidth(): number {
   return WIDTH_FALLBACK;
 }
 
+// COLUMNS is the whole terminal, not the statusline's inner layout box.
+// Reserve Claude's built-in horizontal padding and configured status padding.
+export function getContentWidth(columns: number, reserve = DEFAULT_CONFIG.widthReserve): number {
+  const width = validWidth(columns) ? columns : WIDTH_FALLBACK;
+  const margin = Number.isSafeInteger(reserve) && reserve >= 0 ? reserve : DEFAULT_CONFIG.widthReserve;
+  return Math.max(1, width - margin);
+}
+
 function sessionColor(cwd: string, branch: string, accents: ((s: string) => string)[]): (s: string) => string {
   const key = `${cwd}:${branch}`;
   let hash = 0;

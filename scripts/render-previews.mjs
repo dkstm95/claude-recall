@@ -1,5 +1,5 @@
 import { writeFileSync } from 'node:fs';
-import { formatStatusline, stripAnsi, displayWidth } from '../dist/format.js';
+import { formatStatusline, stripAnsi, displayWidth, getContentWidth } from '../dist/format.js';
 import { DEFAULT_CONFIG } from '../dist/config.js';
 import { createEmptySessionState } from '../dist/state.js';
 import { lineSvg, escapeXml as escape } from './ansi-svg.mjs';
@@ -26,12 +26,13 @@ function panel(example, width, x, y, title, theme) {
     context_window: { used_percentage: example.ctx },
     rate_limits: { five_hour: { used_percentage: 52, resets_at: new Date(2026, 9, 1, 17, 0).getTime() / 1000 },
       seven_day: { used_percentage: 19, resets_at: new Date(2026, 9, 5, 9, 0).getTime() / 1000 } } };
-  const lines = formatStatusline(state, width, builtin, { ...DEFAULT_CONFIG, theme }).split('\n');
-  for (const line of lines) if (displayWidth(stripAnsi(line)) > width) throw new Error('Preview exceeds terminal width');
+  const contentWidth = getContentWidth(width);
+  const lines = formatStatusline(state, contentWidth, builtin, { ...DEFAULT_CONFIG, theme }).split('\n');
+  for (const line of lines) if (displayWidth(stripAnsi(line)) > contentWidth) throw new Error('Preview exceeds terminal width');
   const px = width * cell + 32;
   return `<g transform="translate(${x},${y})"><rect width="${px}" height="155" rx="8" fill="${surface.panel}" stroke="${surface.border}"/>
 <path d="M0 32 H${px}" stroke="${surface.border}"/>
-<text x="16" y="21" fill="${surface.dim}">${escape(title)} · ${width} columns</text>
+<text x="16" y="21" fill="${surface.dim}">${escape(title)} · ${width} columns · ${contentWidth} usable</text>
 <text x="16" y="57" fill="${surface.text}">❯ ${escape(example.prompt)}</text>
 ${lines.map((line, i) => lineSvg(line, 89 + i * 22, surface.text)).join('\n')}</g>`;
 }

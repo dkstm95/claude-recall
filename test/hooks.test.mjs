@@ -132,6 +132,29 @@ test('prompt-submit hook: concurrent writers preserve every prompt increment', a
   }
 });
 
+test('prompt-submit hook: internal notifications never replace the last human prompt or increment turns', async () => {
+  const home = mkdtempSync(join(tmpdir(), 'recall-notification-hook-'));
+  try {
+    const input = { session_id: 'human-session', cwd: home, prompt: 'Fix the mobile navigation' };
+    await runHookInHome('dist/hooks/prompt-submit.js', JSON.stringify(input), home);
+    for (const notification of [
+      { prompt: '<task-notification>\n<task-id>task-123</task-id>\n</task-notification>' },
+      { prompt: '  <teammate-message teammate_id="worker">done</teammate-message>' },
+      { prompt: '<local-command-stdout>done</local-command-stdout>' },
+      { prompt: 'generated context', isMeta: true },
+      { prompt: '   /compact' },
+      { prompt: '' },
+    ]) {
+      const result = await runHookInHome('dist/hooks/prompt-submit.js', JSON.stringify({ ...input, ...notification }), home);
+      assert.equal(result.stdout, '{}\n');
+      assert.equal(result.stderr, '');
+    }
+    const state = JSON.parse(readFileSync(join(home, '.claude/claude-recall/sessions/human-session.json'), 'utf8'));
+    assert.equal(state.promptCount, 1);
+    assert.equal(state.lastUserPrompt, input.prompt);
+  } finally { rmSync(home, { recursive: true, force: true }); }
+});
+
 test('prompt-submit hook: unsafe session ids stay inside the private state directory', async () => {
   const result = await runHookWithHome(
     'dist/hooks/prompt-submit.js',

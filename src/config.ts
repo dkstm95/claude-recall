@@ -18,6 +18,7 @@ export interface StatuslineConfig {
   gitStatus: GitStatusConfig;
   theme: Theme;
   separator: string;
+  widthReserve: number;
 }
 
 export const DEFAULT_CONFIG: StatuslineConfig = {
@@ -27,6 +28,8 @@ export const DEFAULT_CONFIG: StatuslineConfig = {
   gitStatus: { enabled: true, showDirty: true, showAheadBehind: true },
   theme: 'default',
   separator: '│',
+  // Claude UI padding (2 columns per side) + setup's statusLine.padding=1.
+  widthReserve: 6,
 };
 
 const VALID_LINE1 = ['focus', 'branch', 'model', 'worktree', 'session', 'agent', 'pr', 'review', 'fast_mode'];
@@ -197,6 +200,9 @@ export function readConfig(): StatuslineConfig {
       gitStatus: sanitizeGitStatus(parsed['gitStatus']),
       theme: isTheme(requested) ? requested : fallbackTheme,
       separator,
+      widthReserve: typeof parsed['widthReserve'] === 'number' && Number.isSafeInteger(parsed['widthReserve'])
+        && parsed['widthReserve'] >= 0 && parsed['widthReserve'] <= 1_000
+        ? parsed['widthReserve'] : DEFAULT_CONFIG.widthReserve,
     };
   } catch {
     return {

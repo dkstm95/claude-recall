@@ -7,6 +7,7 @@ import {
   stripAnsi,
   FOCUS_PLACEHOLDER,
   PROMPT_PLACEHOLDER,
+  getContentWidth,
 } from '../dist/format.js';
 import { createEmptySessionState } from '../dist/state.js';
 
@@ -321,6 +322,24 @@ test('all rendered lines fit even extreme terminal widths and large turn counter
     }
   }
   assert.match(stripAnsi(formatStatusline(state, 20, builtin, BASE_CFG)), /ctx 100%/);
+});
+
+test('responsive layout includes Claude UI margins at every width from 7 to 240', () => {
+  const state = emptyState();
+  state.focus = '한글 👩‍💻 반응형 상태 표시줄 작업';
+  state.lastUserPrompt = '화면 크기에 맞춰 표시하고 오른쪽 모델과 시간을 보존해줘 '.repeat(5);
+  state.branch = 'redesign/blotter';
+  state.promptCount = 27;
+  const builtin = { ...L3_FULL_BUILTIN, model: { display_name: 'Opus 5.5' },
+    effort: { level: 'medium' }, thinking: { enabled: true }, cost: { total_duration_ms: 3_600_000, total_cost_usd: 65.55 } };
+  for (const theme of ['default', 'light']) {
+    for (let columns = 7; columns <= 240; columns++) {
+      const available = getContentWidth(columns);
+      for (const line of formatStatusline(state, available, builtin, { ...BASE_CFG, theme }).split('\n')) {
+        assert.ok(displayWidth(stripAnsi(line)) + 6 <= columns, `${theme} columns=${columns}`);
+      }
+    }
+  }
 });
 
 test('elapsed fallback explicitly labels creation age instead of active runtime', () => {
