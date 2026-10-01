@@ -12,6 +12,7 @@
 - Isolate quota caches by session and ignore the legacy shared cache. New sessions no longer inherit another session's subscription usage; expired windows and old cache files are discarded.
 - Respect explicit `line3: []` during legacy context-slot migration. Bound output at extreme terminal widths and render branches before their first commit.
 - Isolate test storage and plugin environment variables, including inherited `CLAUDE_CONFIG_DIR`. Make setup assertions and test-file discovery portable to Windows.
+- Keep checked-out text and TypeScript output on LF line endings so Windows artifact checks compare the same bytes as Linux and macOS.
 
 ### Added
 
